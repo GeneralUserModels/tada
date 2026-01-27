@@ -3,14 +3,21 @@
 import argparse
 import signal
 import sys
+import time
 import threading
 from datetime import datetime
+from pathlib import Path
 from queue import Queue, Empty
 
 from transformers import AutoTokenizer
 
 from powernap.napsack import OnlineRecorder, Labeler
 from powernap.longnap.trainer import LongNAP
+
+try:
+    import wandb
+except ImportError:
+    wandb = None
 
 
 def make_sample(buffer, past_len, future_len, processor):
@@ -56,8 +63,13 @@ def make_sample(buffer, past_len, future_len, processor):
 
 
 def label_loop(recorder, labeler, trainer, label_queue):
+    label_count = 0
+
     for agg in recorder.iter_aggregations():
+        t0 = time.time()
         labeled = labeler.label(agg)
+        latency = time.time() - t0
+        label_count += 1
 
         ts = datetime.strptime(labeled["start_time"], "%Y-%m-%d_%H-%M-%S-%f")
         trainer.retriever.add(
@@ -68,11 +80,27 @@ def label_loop(recorder, labeler, trainer, label_queue):
 
         label_queue.put(labeled)
 
+        if wandb and wandb.run is not None:
+            log = {
+                "pipeline/labels_total": label_count,
+                "pipeline/label_latency_s": latency,
+                "pipeline/label_text": wandb.Html(f"<pre>{labeled['text']}</pre>"),
+            }
+
+            # log screenshot + caption every 10 labels
+            if label_count % 10 == 1 and labeled.get("img") and Path(labeled["img"]).exists():
+                log["pipeline/label_image"] = wandb.Image(
+                    labeled["img"], caption=labeled["text"][:200],
+                )
+
+            wandb.log(log)
+
 
 def batch_iter(recorder, label_queue, past_len, future_len, batch_size, processor):
     min_required = past_len + future_len
     buffer = []
     batch = []
+    batches_yielded = 0
 
     while recorder.running or not label_queue.empty():
         try:
@@ -87,12 +115,20 @@ def batch_iter(recorder, label_queue, past_len, future_len, batch_size, processo
             batch.append(sample)
 
             if len(batch) >= batch_size:
+                batches_yielded += 1
+
+                if wandb and wandb.run is not None:
+                    wandb.log({
+                        "pipeline/buffer_size": len(buffer),
+                        "pipeline/batches_yielded": batches_yielded,
+                    })
+
                 yield batch
                 batch = []
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Online record → label → train pipeline")
+    parser = argparse.ArgumentParser(description="Online record -> label -> train pipeline")
 
     # recorder
     parser.add_argument("--fps", type=int, default=30)
@@ -135,7 +171,7 @@ def main():
     # stage 2: labeler
     labeler = Labeler(model=args.label_model, log_dir=recorder.session_dir)
 
-    # stage 3: trainer
+    # stage 3: trainer (initializes wandb if --log-to-wandb)
     trainer = LongNAP(
         model=args.model,
         reward_llm=args.reward_llm,
