@@ -6,10 +6,10 @@ Online record → label → train pipeline for user action prediction.
 
 ```bash
 # install pack (recording backend) first
-cd ../pack && pip install -e .
+cd ../pack && uv pip install -e .
 
 # install powernap
-cd ../powernap && pip install -e ".[wandb]"
+cd ../powernap && uv pip install -e ".[wandb]"
 ```
 
 ## Environment
@@ -41,15 +41,15 @@ export GEMINI_API_KEY=...   # for litellm labeling & reward model
 ### Run
 
 ```bash
-python run_online.py
+uv run run_online.py
 ```
 
 With options:
 
 ```bash
-python run_online.py \
+uv run run_online.py \
   --model Qwen/Qwen3-VL-30B-A3B-Instruct \
-  --label-model gemini/gemini-2.0-flash \
+  --label-model gemini/gemini-3-flash-preview \
   --reward-llm gemini/gemini-3-flash-preview \
   --past-len 8 --future-len 4 --batch-size 2 \
   --log-dir ./logs --log-to-wandb --wandb-project longnap-online
