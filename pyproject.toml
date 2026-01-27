@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "powernap"
+version = "0.1.0"
+description = "PowerNap training and retrieval utilities."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "accelerate",
+    "datasets",
+    "litellm",
+    "numpy",
+    "pandas",
+    "peft",
+    "pillow",
+    "rich",
+    "tinker",
+    "torch",
+    "transformers",
+    "trl",
+]
+
+[project.optional-dependencies]
+wandb = ["wandb"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
