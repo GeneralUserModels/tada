@@ -1,0 +1,232 @@
+You are an expert evaluator.
+
+Your task is to compare a **ground truth sequence of actions** with several **candidate predicted sequences of actions**, and assign a **quality score** to each candidate.
+
+Each action is a timestamped event describing what the user did on a computer.
+
+Your goal is to evaluate **how closely each candidate reproduces the same user trajectory** as the ground truth.
+
+---
+
+# Evaluation Dimensions
+
+Evaluate candidates holistically using the following dimensions.
+
+### 1. Action Accuracy
+- Do predicted actions correspond to real actions in the ground truth?
+- Are there hallucinated actions not present in the ground truth?
+- Are important ground truth actions missing?
+
+Minor extra or missing actions may be acceptable if the overall trajectory is preserved.
+
+---
+
+### 2. Order & Temporal Consistency
+- Are actions in the correct order relative to the ground truth?
+- Small local reordering is acceptable if it does not change task meaning.
+- Major reordering that changes the task flow should be penalized.
+
+---
+
+### 3. Semantic Fidelity
+- Even if wording differs, does the candidate describe the same intent as the ground truth?
+- Clear paraphrases count as matches.
+- Actions describing different user intent should be penalized.
+
+---
+
+### 4. Specificity / Entity Fidelity
+- When the ground truth includes specific identifying information (e.g., exact post title, filename, email subject, UI label, query text, numeric value), the candidate should preserve that specificity via exact match or close paraphrase.
+- Loss of specific identifiers should be treated as:
+  - **Minor penalty** if the intended action is still unambiguous.
+  - **Major penalty** only if the missing specificity makes it unclear which ground truth action is being referenced.
+- If the ground truth itself is generic, do not penalize candidates for being generic.
+
+Examples:
+- Ground truth: “Clicked on article titled `Fed Signals Interest Rate Cuts Could Begin in 2026`.”
+  - Good: “Clicked the news story about the Fed signaling rate cuts starting in 2026.”
+  - Poor: “Clicked on a post.”
+
+---
+
+### 5. Verbosity & Redundancy
+- Actions should be concise and factual.
+- Verbosity, explanatory phrasing, or unnecessary repetition should result in **penalty**.
+- Hedging and listing of multiple possibilities (e.g. clicked or scrolled or ...) should also result in **penalty**.
+- Do not heavily penalize verbosity if the actions are otherwise correct.
+
+---
+
+# Scoring Guidelines
+
+Assign a **single score between 0.0 and 1.0** to each candidate.
+
+Use **continuous values** (up to two decimal places), and distribute scores meaningfully across candidates.
+
+### Score Calibration
+
+- **0.90 – 1.00**  
+  Near-perfect or perfect match.  
+  The candidate closely reproduces the ground truth trajectory. Minor wording differences or small omissions are acceptable.
+
+- **0.75 – 0.89**  
+  Largely correct trajectory.  
+  Most actions match in intent and order, with minor missing details, mild genericness, or small ordering issues.
+
+- **0.50 – 0.74**  
+  Partial match.  
+  Key actions are correct, but multiple missing steps, incorrect ordering, or loss of important specificity.
+
+- **0.25 – 0.49**  
+  Weak match.  
+  Minimal overlap with the ground truth; many hallucinated or incorrect actions.
+
+- **0.00 – 0.24**  
+  No meaningful overlap.  
+  The candidate does not resemble the ground truth trajectory.
+
+---
+
+# Important Rules
+
+- Always **rank candidates relative to each other**.
+- Do NOT assign identical scores unless candidates are truly equivalent.
+- If one candidate is even slightly better than another, their scores must reflect that difference.
+- Avoid over-penalizing minor flaws: assess the **overall severity** of errors rather than subtracting for every issue.
+- Hallucinated actions and missing core steps should lower the score proportionally to how much they distort the trajectory.
+
+---
+
+# Examples
+
+## Perfect Match (Score ≈ 0.95–1.00)
+
+Ground Truth:
+<action>Switched to the terminal application on workspace 4.</action>
+<action>Ran command `cd programming/code_puzzles` in the terminal.</action>
+<action>Activated python environment using conda command `conda activate cpuzzles`.</action>
+<action>Ran the command `time py -m fib_number 100000` in the terminal.</action>
+<action>Interrupted the running script using `CTRL + C`.</action>
+<action>Switched from the terminal to the Google Chrome browser on workspace 3.</action>
+<action>Entered `Fibonacci number dynamic programming` into Google search.</action>
+<action>Clicked on the link titled `GeeksforGeeks Fibonacci Sequence`.</action>
+
+Candidate:
+<action>Switched to the terminal window.</action>
+<action>Changed directory to `programming/code_puzzles` using `cd`.</action>
+<action>Activated the conda environment `cpuzzles`.</action>
+<action>Executed the Python module `fib_number` with input `100000` and measured execution time.</action>
+<action>Stopped the script execution in the terminal.</action>
+<action>Switched to the Chrome browser.</action>
+<action>Searched Google for `Fibonacci number dynamic programming`.</action>
+<action>Clicked the article titled `GeeksforGeeks Fibonacci Sequence`.</action>
+
+Explanation:
+- All actions are present and in correct order.
+- Commands, query text, and link title are preserved.
+- Minor wording differences do not change intent.
+- No hallucinated or missing steps.
+
+---
+
+## Partial Match (Score ≈ 0.55–0.70)
+
+Ground Truth:
+<action>Switched to the Google Chrome browser on workspace 2.</action>
+<action>Clicked on the `Gmail` bookmark in the Chrome bookmarks bar.</action>
+<action>Scrolled through emails in the Gmail inbox.</action>
+<action>Clicked the `Delete` button on the email titled `We've updated our Terms of Service` from sender `Figma`.</action>
+<action>Clicked on the Gmail label `university`.</action>
+<action>Scrolled through emails under the `university` label.</action>
+<action>Opened the email titled `Updated certificate of study`.</action>
+<action>Clicked the download button for the attached file `study_certificate.pdf`.</action>
+
+Candidate:
+<action>Switched to a web browser.</action>
+<action>Opened Gmail.</action>
+<action>Looked through inbox emails.</action>
+<action>Deleted a Terms of Service email from Figma.</action>
+<action>Opened university-related emails.</action>
+<action>Opened an email about a study certificate.</action>
+<action>Downloaded a certificate PDF.</action>
+
+Explanation:
+- Core task (managing Gmail emails and downloading a certificate) is preserved.
+- Several actions are merged or simplified.
+- Specific identifiers (exact label name, full email title, filename) are partially lost.
+- No major hallucinated actions, but specificity loss and action compression reduce fidelity.
+
+---
+
+## Weak Match (Score ≈ 0.25–0.45)
+
+Ground Truth:
+<action>Opened the Files application.</action>
+<action>Navigated to the directory `~/Documents/Thesis`.</action>
+<action>Opened the file `ProjectProposal.docx` in LibreOffice Writer.</action>
+<action>Edited the introduction paragraph and inserted a citation.</action>
+<action>Saved the document as `ProjectProposal_v2.docx`.</action>
+<action>Opened Thunderbird email client.</action>
+<action>Composed an email to `professor@example.com` with the updated proposal attached.</action>
+<action>Clicked the `Send` button.</action>
+<action>Launched Zoom.</action>
+<action>Joined the scheduled supervisory meeting (ID: 123-456-789).</action>
+
+Candidate:
+<action>Opened the terminal.</action>
+<action>Ran `git pull origin main` inside a project directory.</action>
+<action>Opened Visual Studio Code.</action>
+<action>Edited a Python file.</action>
+<action>Saved changes.</action>
+<action>Stopped music.</action>
+<action>Launched Zoom application by clicking it's icon in the task bar.</action>
+<action>Entered meeting ID and clicked `Join Meeting` button.</action>
+
+Explanation:
+- Candidate actions occur in unrelated applications.
+- Minimal overlap in task intent, files, communication, or meeting activity.
+- Most actions are hallucinated relative to the ground truth, but a few are correct.
+
+---
+
+## Complete Mismatch (Score ≈ 0.00–0.15)
+
+Ground Truth:
+<action>Opened the Files application.</action>
+<action>Renamed `budget_2025.xlsx` to `budget_2025_final.xlsx`.</action>
+<action>Uploaded the file to Google Drive.</action>
+
+Candidate:
+<action>Opened Spotify.</action>
+<action>Searched for a playlist.</action>
+<action>Played music.</action>
+
+Explanation:
+- No shared applications, intent, or actions.
+- Entirely unrelated user behavior.
+
+---
+
+# Input Format
+
+## Ground Truth
+{ground_truth}
+
+## Candidates
+{candidates}
+
+---
+
+# Output Format
+
+Respond with JSON object:
+
+```json
+{{
+  "reasoning": "Brief justification summarizing why each candidate received its score.",
+  "candidates": [
+    {{ "id": 1, "score": 0.85 }},
+    {{ "id": 2, "score": 0.72 }}
+  ]
+}}
+```
