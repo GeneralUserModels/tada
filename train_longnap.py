@@ -3,6 +3,9 @@
 Simple training script for LongNAP using Tinker.
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import argparse
 from datasets import load_dataset
 from transformers import AutoTokenizer
