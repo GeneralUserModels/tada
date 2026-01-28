@@ -16,6 +16,7 @@ dependencies = [
     "pandas",
     "peft",
     "pillow",
+    "python-dotenv",
     "rich",
     "tinker",
     "torch",
