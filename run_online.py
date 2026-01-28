@@ -229,6 +229,11 @@ def main():
     parser.add_argument("--log-dir", type=str, default="./logs")
     parser.add_argument("--log-to-wandb", action="store_true")
     parser.add_argument("--wandb-project", type=str, default="longnap-online")
+    parser.add_argument("--wandb-run-name", type=str, default="longnap-online")
+
+    # checkpointing
+    parser.add_argument("--checkpoint-every-n-steps", type=int, default=0, help="Save checkpoint every N steps (0 = disabled)")
+    parser.add_argument("--resume-from-checkpoint", type=str, default=None, help="Resume from checkpoint: 'auto' or a tinker:// path")
 
     args = parser.parse_args()
 
@@ -257,6 +262,9 @@ def main():
         log_dir=args.log_dir,
         log_to_wandb=args.log_to_wandb,
         wandb_project=args.wandb_project,
+        wandb_run_name=args.wandb_run_name,
+        checkpoint_every_n_steps=args.checkpoint_every_n_steps,
+        resume_from_checkpoint=args.resume_from_checkpoint,
     )
 
     # stage 4: predictor (shares retriever with trainer)
