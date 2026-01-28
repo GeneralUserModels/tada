@@ -1,12 +1,16 @@
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
 from openai import OpenAI
+from litellm import completion as litellm_completion
 
 from powernap.longnap.trainer_utils import build_retrieve_prompt, build_revise_prompt, build_actions_prompt
 from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams, mmr_select
+
+VERIFIER_PROMPT_PATH = Path(__file__).resolve().parents[1] / "longnap" / "verifier.txt"
 
 
 TINKER_OAI_URL = "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1"
@@ -127,3 +131,25 @@ class Predictor:
         ts = datetime.strptime(past[0]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
 
         return self.predict(prompt, ts, future_len=future_len, past_actions=past_actions_block)
+
+    def score_prediction(self, predicted_actions, ground_truth_actions, reward_llm):
+        verifier_prompt = VERIFIER_PROMPT_PATH.read_text()
+
+        candidate_block = f"- **Candidate 1**:\n{predicted_actions}\n"
+        prompt = verifier_prompt.format(
+            ground_truth=ground_truth_actions,
+            candidates=candidate_block,
+        )
+
+        response = litellm_completion(
+            model=reward_llm,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        text = response.choices[0].message.content.strip()
+        match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
+        if match:
+            text = match.group(1).strip()
+
+        parsed = json.loads(text)
+        return parsed["candidates"][0]["score"]
