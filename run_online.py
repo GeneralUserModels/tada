@@ -142,13 +142,13 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
 
         # make a prediction
         if predictor.model_path and len(inference_buffer) >= past_len:
+            buffer_pos = len(inference_buffer)
             t0 = time.time()
             result = predictor.predict_from_buffer(
                 inference_buffer, past_len, future_len, processor,
             )
             latency = time.time() - t0
             prediction_count += 1
-            buffer_pos = len(inference_buffer)
 
             pending_evals.append((result, buffer_pos, future_len))
 
