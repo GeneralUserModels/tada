@@ -1,3 +1,5 @@
+grpo_trainer.py
+
 *.parquet
 *.backup
 uv.lock
