@@ -13,7 +13,7 @@ from transformers import AutoTokenizer
 
 from powernap.napsack import OnlineRecorder, Labeler
 from powernap.longnap.trainer import LongNAP
-from powernap.inference import Predictor
+from powernap.inference import Predictor, ActionOverlay
 
 try:
     import wandb
@@ -129,18 +129,28 @@ def batch_iter(recorder, label_queue, past_len, future_len, batch_size, processo
                 batch = []
 
 
+def _build_ground_truth(records):
+    lines = [f"<action>{r['text']}</action>" for r in records]
+    return "<actions>\n" + "\n".join("    " + l for l in lines) + "\n</actions>"
+
+
 def inference_loop(predictor, inference_buffer, trainer, recorder,
-                   past_len, future_len, processor, predict_interval):
+                   past_len, future_len, processor, predict_interval,
+                   reward_llm, overlay):
     last_path = None
     prediction_count = 0
+    eval_count = 0
+    pending_evals = []  # (result, buffer_pos, future_len)
 
     while recorder.running:
+        # pick up new checkpoint
         path = getattr(trainer, "latest_sampler_path", None)
         if path and path != last_path:
             predictor.model_path = path
             last_path = path
             print(f"[inference] using checkpoint: {path}")
 
+        # make a prediction
         if predictor.model_path and len(inference_buffer) >= past_len:
             t0 = time.time()
             result = predictor.predict_from_buffer(
@@ -148,21 +158,47 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
             )
             latency = time.time() - t0
             prediction_count += 1
+            buffer_pos = len(inference_buffer)
+
+            pending_evals.append((result, buffer_pos, future_len))
 
             print(f"[inference] prediction #{prediction_count}:")
             print(f"  actions: {result['actions']}")
+
+            if overlay:
+                overlay.update(result["actions"])
 
             if wandb and wandb.run is not None:
                 wandb.log({
                     "inference/predictions_total": prediction_count,
                     "inference/latency_s": latency,
-                    "inference/prediction": wandb.Table(
-                        columns=["step", "checkpoint", "think", "revise", "actions", "latency_s"],
-                        data=[[prediction_count, result["model_path"],
-                               result["think"], result["revise"],
-                               result["actions"], round(latency, 2)]],
-                    ),
                 })
+
+        # check pending evals — score predictions whose ground truth has arrived
+        still_pending = []
+        for result, buf_pos, fl in pending_evals:
+            if len(inference_buffer) >= buf_pos + fl:
+                ground_truth = _build_ground_truth(inference_buffer[buf_pos:buf_pos + fl])
+                reward = predictor.score_prediction(result["actions"], ground_truth, reward_llm)
+                eval_count += 1
+
+                print(f"[inference] eval #{eval_count}: reward={reward:.2f}")
+
+                if wandb and wandb.run is not None:
+                    wandb.log({
+                        "inference/reward": reward,
+                        "inference/evals_total": eval_count,
+                        "inference/eval": wandb.Table(
+                            columns=["step", "checkpoint", "think", "revise",
+                                     "actions", "ground_truth", "reward"],
+                            data=[[eval_count, result["model_path"],
+                                   result["think"], result["revise"],
+                                   result["actions"], ground_truth, reward]],
+                        ),
+                    })
+            else:
+                still_pending.append((result, buf_pos, fl))
+        pending_evals = still_pending
 
         time.sleep(predict_interval)
 
@@ -193,6 +229,7 @@ def main():
     # inference
     parser.add_argument("--predict-every-n-seconds", type=int, default=10)
     parser.add_argument("--disable-inference", action="store_true")
+    parser.add_argument("--no-overlay", action="store_true")
 
     # logging
     parser.add_argument("--log-every-n-steps", type=int, default=1)
@@ -237,11 +274,18 @@ def main():
         log_dir=recorder.session_dir,
     )
 
+    # overlay (must be created on main thread for AppKit)
+    overlay = None
+    if not args.disable_inference and not args.no_overlay:
+        overlay = ActionOverlay()
+
     # wire it up
     label_queue = Queue()
     inference_buffer = []
 
     def shutdown(sig, frame):
+        if overlay:
+            overlay.close()
         recorder.stop()
         sys.exit(0)
 
@@ -261,13 +305,28 @@ def main():
         inference_thread = threading.Thread(
             target=inference_loop,
             args=(predictor, inference_buffer, trainer, recorder,
-                  args.past_len, args.future_len, tokenizer, args.predict_every_n_seconds),
+                  args.past_len, args.future_len, tokenizer,
+                  args.predict_every_n_seconds, args.reward_llm, overlay),
             daemon=True,
         )
         inference_thread.start()
 
+    # training runs on a background thread so main thread can run AppKit event loop
     data = batch_iter(recorder, label_queue, args.past_len, args.future_len, args.batch_size, tokenizer)
-    trainer.train(data)
+
+    def train_loop():
+        trainer.train(data)
+        if overlay:
+            overlay.close()
+        recorder.stop()
+
+    train_thread = threading.Thread(target=train_loop, daemon=True)
+    train_thread.start()
+
+    if overlay:
+        overlay.run()  # blocks main thread on AppKit run loop
+    else:
+        train_thread.join()
 
     recorder.stop()
 
