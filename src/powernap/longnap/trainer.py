@@ -115,13 +115,15 @@ class LongNAP():
     ):
 
         base_model = model
-        service_client = tinker.ServiceClient()
-        self.training_client = service_client.create_lora_training_client(
+        self.service_client = tinker.ServiceClient()
+        self.training_client = self.service_client.create_lora_training_client(
             base_model=base_model
         )
         self.tokenizer = self.training_client.get_tokenizer()
         self.reward_llm = reward_llm
-        self.sampling_client = self.training_client.save_weights_and_get_sampling_client(name='napsack-model')
+        save_result = self.training_client.save_weights_for_sampler(name='napsack-model').result()
+        self.latest_sampler_path = save_result.path
+        self.sampling_client = self.service_client.create_sampling_client(model_path=self.latest_sampler_path)
         self.retrieval_params = types.SamplingParams(
             max_tokens=max_completion_length,
             temperature=temperature,
@@ -680,9 +682,9 @@ class LongNAP():
             optim_result = optim_future.result()
             
             # 6) Update sampling client with new weights for next iteration
-            self.sampling_client = self.training_client.save_weights_and_get_sampling_client(
-                name=f'napsack-model-step-{step}'
-            )
+            save_result = self.training_client.save_weights_for_sampler(name=f'napsack-model-step-{step}').result()
+            self.latest_sampler_path = save_result.path
+            self.sampling_client = self.service_client.create_sampling_client(model_path=self.latest_sampler_path)
             
             # 7) Accumulate metrics
             mean_reward = np.mean(flat_scores)

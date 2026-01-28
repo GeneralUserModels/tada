@@ -13,6 +13,7 @@ from transformers import AutoTokenizer
 
 from powernap.napsack import OnlineRecorder, Labeler
 from powernap.longnap.trainer import LongNAP
+from powernap.inference import Predictor
 
 try:
     import wandb
@@ -62,7 +63,7 @@ def make_sample(buffer, past_len, future_len, processor):
     }
 
 
-def label_loop(recorder, labeler, trainer, label_queue):
+def label_loop(recorder, labeler, trainer, label_queue, inference_buffer):
     label_count = 0
 
     for agg in recorder.iter_aggregations():
@@ -79,6 +80,7 @@ def label_loop(recorder, labeler, trainer, label_queue):
         )
 
         label_queue.put(labeled)
+        inference_buffer.append(labeled)
 
         if wandb and wandb.run is not None:
             log = {
@@ -127,8 +129,46 @@ def batch_iter(recorder, label_queue, past_len, future_len, batch_size, processo
                 batch = []
 
 
+def inference_loop(predictor, inference_buffer, trainer, recorder,
+                   past_len, future_len, processor, predict_interval):
+    last_path = None
+    prediction_count = 0
+
+    while recorder.running:
+        path = getattr(trainer, "latest_sampler_path", None)
+        if path and path != last_path:
+            predictor.model_path = path
+            last_path = path
+            print(f"[inference] using checkpoint: {path}")
+
+        if predictor.model_path and len(inference_buffer) >= past_len:
+            t0 = time.time()
+            result = predictor.predict_from_buffer(
+                inference_buffer, past_len, future_len, processor,
+            )
+            latency = time.time() - t0
+            prediction_count += 1
+
+            print(f"[inference] prediction #{prediction_count}:")
+            print(f"  actions: {result['actions']}")
+
+            if wandb and wandb.run is not None:
+                wandb.log({
+                    "inference/predictions_total": prediction_count,
+                    "inference/latency_s": latency,
+                    "inference/prediction": wandb.Table(
+                        columns=["step", "checkpoint", "think", "revise", "actions", "latency_s"],
+                        data=[[prediction_count, result["model_path"],
+                               result["think"], result["revise"],
+                               result["actions"], round(latency, 2)]],
+                    ),
+                })
+
+        time.sleep(predict_interval)
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Online record -> label -> train pipeline")
+    parser = argparse.ArgumentParser(description="Online record -> label -> train -> infer pipeline")
 
     # recorder
     parser.add_argument("--fps", type=int, default=30)
@@ -149,6 +189,10 @@ def main():
     parser.add_argument("--past-len", type=int, default=8)
     parser.add_argument("--future-len", type=int, default=4)
     parser.add_argument("--batch-size", type=int, default=2)
+
+    # inference
+    parser.add_argument("--predict-every-n-seconds", type=int, default=10)
+    parser.add_argument("--disable-inference", action="store_true")
 
     # logging
     parser.add_argument("--log-every-n-steps", type=int, default=1)
@@ -185,8 +229,17 @@ def main():
         wandb_project=args.wandb_project,
     )
 
+    # stage 4: predictor (shares retriever with trainer)
+    predictor = Predictor(
+        model_path=trainer.latest_sampler_path,
+        max_tokens=args.max_completion_length,
+        retriever=trainer.retriever,
+        log_dir=recorder.session_dir,
+    )
+
     # wire it up
     label_queue = Queue()
+    inference_buffer = []
 
     def shutdown(sig, frame):
         recorder.stop()
@@ -199,10 +252,19 @@ def main():
 
     label_thread = threading.Thread(
         target=label_loop,
-        args=(recorder, labeler, trainer, label_queue),
+        args=(recorder, labeler, trainer, label_queue, inference_buffer),
         daemon=True,
     )
     label_thread.start()
+
+    if not args.disable_inference:
+        inference_thread = threading.Thread(
+            target=inference_loop,
+            args=(predictor, inference_buffer, trainer, recorder,
+                  args.past_len, args.future_len, tokenizer, args.predict_every_n_seconds),
+            daemon=True,
+        )
+        inference_thread.start()
 
     data = batch_iter(recorder, label_queue, args.past_len, args.future_len, args.batch_size, tokenizer)
     trainer.train(data)
