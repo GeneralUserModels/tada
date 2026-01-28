@@ -114,13 +114,17 @@ class LongNAP():
     ):
 
         base_model = model
+        
+        # Run name is used as prefix for all Tinker artifacts (helps avoid collisions on shared accounts)
+        self.run_name = wandb_run_name
+        
         self.service_client = tinker.ServiceClient()
         self.training_client = self.service_client.create_lora_training_client(
             base_model=base_model
         )
         self.tokenizer = self.training_client.get_tokenizer()
         self.reward_llm = reward_llm
-        save_result = self.training_client.save_weights_for_sampler(name='napsack-model').result()
+        save_result = self.training_client.save_weights_for_sampler(name=f'{self.run_name}/model').result()
         self.latest_sampler_path = save_result.path
         self.sampling_client = self.service_client.create_sampling_client(model_path=self.latest_sampler_path)
         self.retrieval_params = types.SamplingParams(
@@ -615,7 +619,7 @@ class LongNAP():
 
     def _save_checkpoint(self, step: int) -> Optional[str]:
         """
-        Save a checkpoint to Tinker (weights + optimizer state).
+        Save a checkpoint to Tinker (weights + optimizer state) and retriever state.
         
         Args:
             step: Current training step
@@ -624,17 +628,27 @@ class LongNAP():
             The tinker:// path to the saved checkpoint, or None if save failed
         """
         try:
-            checkpoint_name = f"checkpoint_step_{step:06d}"
+            checkpoint_name = f"{self.run_name}/checkpoint_step_{step:06d}"
             save_result = self.training_client.save_state(name=checkpoint_name).result()
             checkpoint_path = save_result.path
             
             logger.info(f"Saved checkpoint at step {step}: {checkpoint_path}")
+            
+            # Save retriever state
+            retriever_path = None
+            if self.log_dir:
+                retriever_dir = os.path.join(self.log_dir, "retrievers")
+                os.makedirs(retriever_dir, exist_ok=True)
+                retriever_path = os.path.join(retriever_dir, f"retriever_step_{step:06d}.json.gz")
+                self.retriever.save_checkpoint(retriever_path)
+                logger.info(f"Saved retriever at step {step}: {retriever_path}")
             
             # Record checkpoint in local file
             if self.checkpoints_file:
                 checkpoint_info = {
                     "step": step,
                     "path": checkpoint_path,
+                    "retriever_path": retriever_path,
                     "timestamp": time.time(),
                 }
                 with open(self.checkpoints_file, "a") as f:
@@ -672,7 +686,7 @@ class LongNAP():
     
     def _load_checkpoint(self, checkpoint_arg: str) -> int:
         """
-        Load a checkpoint from Tinker.
+        Load a checkpoint from Tinker and retriever state.
         
         Args:
             checkpoint_arg: Either "auto" to load latest from checkpoints.jsonl,
@@ -682,6 +696,7 @@ class LongNAP():
             The step number to resume from (0 if no checkpoint loaded)
         """
         checkpoint_path = None
+        retriever_path = None
         resume_step = 0
         
         if checkpoint_arg == "auto":
@@ -689,6 +704,7 @@ class LongNAP():
             latest = self._get_latest_checkpoint()
             if latest:
                 checkpoint_path = latest["path"]
+                retriever_path = latest.get("retriever_path")
                 resume_step = latest["step"]
                 logger.info(f"Auto-detected checkpoint at step {resume_step}: {checkpoint_path}")
             else:
@@ -701,21 +717,31 @@ class LongNAP():
             match = re.search(r"checkpoint_step_(\d+)", checkpoint_path)
             if match:
                 resume_step = int(match.group(1))
-            else:
-                # If we can't extract step, try to find it in checkpoints.jsonl
-                if self.checkpoints_file and os.path.exists(self.checkpoints_file):
-                    with open(self.checkpoints_file, "r") as f:
-                        for line in f:
-                            info = json.loads(line.strip())
-                            if info.get("path") == checkpoint_path:
-                                resume_step = info["step"]
-                                break
+            
+            # Try to find retriever path from checkpoints.jsonl
+            if self.checkpoints_file and os.path.exists(self.checkpoints_file):
+                with open(self.checkpoints_file, "r") as f:
+                    for line in f:
+                        info = json.loads(line.strip())
+                        if info.get("path") == checkpoint_path:
+                            resume_step = info["step"]
+                            retriever_path = info.get("retriever_path")
+                            break
         
         if checkpoint_path:
             try:
                 logger.info(f"Loading checkpoint from {checkpoint_path}...")
                 self.training_client.load_state(checkpoint_path).result()
                 logger.info(f"Successfully loaded checkpoint, resuming from step {resume_step + 1}")
+                
+                # Load retriever state if available
+                if retriever_path and os.path.exists(retriever_path):
+                    logger.info(f"Loading retriever from {retriever_path}...")
+                    self.retriever.load_checkpoint(retriever_path)
+                    logger.info(f"Successfully loaded retriever with {self.retriever.N} documents")
+                elif retriever_path:
+                    logger.warning(f"Retriever checkpoint not found: {retriever_path}")
+                
                 return resume_step
             except Exception as e:
                 logger.error(f"Failed to load checkpoint {checkpoint_path}: {e}")
@@ -825,7 +851,7 @@ class LongNAP():
             optim_result = optim_future.result()
             
             # 6) Update sampling client with new weights for next iteration
-            save_result = self.training_client.save_weights_for_sampler(name=f'napsack-model-step-{step}').result()
+            save_result = self.training_client.save_weights_for_sampler(name=f'{self.run_name}/model-step-{step}').result()
             self.latest_sampler_path = save_result.path
             self.sampling_client = self.service_client.create_sampling_client(model_path=self.latest_sampler_path)
             
