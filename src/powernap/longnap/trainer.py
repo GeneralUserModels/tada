@@ -102,10 +102,6 @@ class LongNAP():
         retrieval_mmr_k: int = 10,
         retrieval_mmr_alpha: float = 0.5,
         retrieval_time_decay_lambda: float = 0.5,
-        retrieval_dropout_p_empty: float = 0.0,
-        retrieval_dropout_p_corrupt: float = 0.0,
-        retrieval_dropout_p_shrink: float = 0.0,
-        retrieval_dropout_mode: str = "train",
         dedup_threshold: float = 0.8,
         log_every_n_steps: int = 10,
         log_dir: Optional[str] = None,
@@ -144,7 +140,6 @@ class LongNAP():
         self.retrieval_mmr_k = retrieval_mmr_k
         self.retrieval_mmr_alpha = retrieval_mmr_alpha
         self.retrieval_time_decay_lambda = retrieval_time_decay_lambda
-        self.retrieval_dropout_mode = retrieval_dropout_mode
 
         # Training arguments
         self.max_prompt_length = max_prompt_length
@@ -177,22 +172,12 @@ class LongNAP():
         }
 
 
-        # Multi-user vs single-user retriever setup
-        self.user_ids = None
-        self.multi_user_mode = False
-
-        
-        # Single-user mode: create a single retriever (original behavior)
+        # Retriever setup
         def dedup_fn(a, b): return jaccard_ngrams(a, b, n=3)
         self.retriever = InMemoryBM25Temporal(
             dedup_threshold=dedup_threshold,
             dedup_sim_fn=dedup_fn,
         )
-
-        # Retriever dropout settings (train-only)
-        self.retriever_dropout_p_empty = retrieval_dropout_p_empty
-        self.retriever_dropout_p_corrupt = retrieval_dropout_p_corrupt
-        self.retriever_dropout_p_shrink = retrieval_dropout_p_shrink
 
         # Logging configuration
         self.log_completions = log_completions
@@ -327,8 +312,6 @@ class LongNAP():
             else:
                 mmr_hits_lists.append([])
 
-        # Apply retriever dropout (train only): empty / corrupt / shrink / normal
-        mmr_hits_lists = self._apply_retriever_dropout(mmr_hits_lists, hits_lists, self.retrieval_dropout_mode)
         retrieved_texts = ["\n\n".join(h["text"] for h in hits) for hits in mmr_hits_lists]
 
         # unflatten the list of lists
@@ -415,7 +398,17 @@ class LongNAP():
                     actions_prompt_logprobs[i][g] + actions_logprobs[i][g])
         
         scores = self.score_completions(actions_texts, ground_truth_actions)
-        return completions, target_tokens, logprobs, scores
+        
+        # Return additional data needed for retriever updates
+        return {
+            "completions": completions,
+            "target_tokens": target_tokens,
+            "logprobs": logprobs,
+            "scores": scores,
+            "revise_texts": revise_texts,
+            "now_tss": now_tss,
+            "end_tss": end_tss,
+        }
 
     ### Action text normalization and validation helper functions
 
@@ -607,17 +600,13 @@ class LongNAP():
 
         return scores
 
-    def train(self, data, resume_from_checkpoint=None):
+    def train(self, data):
         """
         Main training loop.
         
         Args:
             data: Iterable of batches
-            resume_from_checkpoint: Optional checkpoint path to resume from
         """
-        if resume_from_checkpoint is not None:
-            self.load_checkpoint(resume_from_checkpoint)
-        
         self._metrics = {"train": defaultdict(list), "eval": defaultdict(list)}
         
         self._start_time = time.time()
@@ -628,11 +617,20 @@ class LongNAP():
             step_start_time = time.time()
             B = len(batch)
             # 1) Generate completions (Think → Retrieve → Revise → Actions)
-            completions, target_tokens, sampling_logprobs, scores = self.generate_and_score_completions(batch)
+            gen_result = self.generate_and_score_completions(batch)
+            completions = gen_result["completions"]
+            target_tokens = gen_result["target_tokens"]
+            sampling_logprobs = gen_result["logprobs"]
+            scores = gen_result["scores"]
+            revise_texts = gen_result["revise_texts"]
+            now_tss = gen_result["now_tss"]
+            end_tss = gen_result["end_tss"]
+            
             # 2) Flatten scores and compute advantages (per-group normalization like GRPO)
             flat_scores = []
             flat_advantages = []
-            for group_scores in scores:
+            winner_indices = []  # Track which completions are winners (highest score per group)
+            for group_idx, group_scores in enumerate(scores):
                 group_scores = np.array(group_scores, dtype=np.float32)
                 # Per-group advantage normalization
                 group_mean = group_scores.mean()
@@ -640,7 +638,21 @@ class LongNAP():
                 group_advantages = (group_scores - group_mean) # / group_std
                 flat_scores.extend(group_scores.tolist())
                 flat_advantages.extend(group_advantages.tolist())
+                # Track winner (highest score in group)
+                winner_in_group = int(np.argmax(group_scores))
+                winner_flat_idx = group_idx * self.num_generations + winner_in_group
+                winner_indices.append((group_idx, winner_in_group, winner_flat_idx))
             
+            # 2b) Add winning candidates to retriever
+            self._add_winners_to_retriever(
+                batch=batch,
+                scores=scores,
+                revise_texts=revise_texts,
+                now_tss=now_tss,
+                end_tss=end_tss,
+                winner_indices=winner_indices,
+                flat_scores=flat_scores,
+            )
               
             # 3) Build Datum objects for Tinker's forward_backward
             data_list = []
@@ -723,86 +735,72 @@ class LongNAP():
         if self.log_to_wandb:
             wandb.finish()
 
-    def _apply_retriever_dropout(
+    def _add_winners_to_retriever(
         self,
-        mmr_hits_lists: list[list[dict]],
-        all_hits_lists: list[list[dict]],
-        mode: str,
-    ) -> list[list[dict]]:
+        batch: List[Dict],
+        scores: List[List[float]],
+        revise_texts: List[List[str]],
+        now_tss: List[int],
+        end_tss: List[int],
+        winner_indices: List[tuple],
+        flat_scores: List[float],
+    ) -> None:
         """
-        Apply retriever dropout during training.
-
-        Four modes (mutually exclusive, sampled per-sample):
-        - empty:   no context (hits = [])
-        - corrupt: use lower-ranked hits instead of top MMR hits
-        - shrink:  reduce number of hits (keep 1 to top_m-1)
-        - normal:  keep full MMR hits unchanged
-
+        Add winning candidates (highest score per group) to the retriever.
+        
         Args:
-            mmr_hits_lists: list of hits after MMR selection (one list per sample)
-            all_hits_lists: list of all candidate hits before MMR (for corrupt mode)
-            mode: "train" or "eval"
-
-        Returns:
-            Modified mmr_hits_lists with dropout applied
+            batch: Original batch of inputs
+            scores: Scores per group [B][num_generations]
+            revise_texts: Revise outputs [B][num_generations]
+            now_tss: Current timestamps for each batch item
+            end_tss: End timestamps for each batch item
+            winner_indices: List of (group_idx, winner_in_group, flat_idx) tuples
+            flat_scores: Flattened scores for logging
         """
-        import random
-
-        # Only apply during training
-        if mode != "train":
-            return mmr_hits_lists
-
-        p_empty = self.retriever_dropout_p_empty
-        p_corrupt = self.retriever_dropout_p_corrupt
-        p_shrink = self.retriever_dropout_p_shrink
-
-        # Skip if all probabilities are 0
-        if p_empty == 0.0 and p_corrupt == 0.0 and p_shrink == 0.0:
-            return mmr_hits_lists
-
-        # Use deterministic seed per step for reproducibility
-        rng = random.Random(self._step * 1000)
-
-        result = []
-        for i, (mmr_hits, all_hits) in enumerate(zip(mmr_hits_lists, all_hits_lists)):
-            r = rng.random()
-
-            if r < p_empty:
-                # Empty: no context
-                result.append([])
-
-            elif r < p_empty + p_corrupt:
-                # Corrupt: skip top hits, take next-best from all_hits
-                # Get IDs of MMR-selected hits to exclude them
-                if mmr_hits and all_hits:
-                    mmr_texts = {h["text"] for h in mmr_hits}
-                    # Take hits that weren't selected by MMR (lower quality)
-                    remaining = [h for h in all_hits if h["text"] not in mmr_texts]
-                    # Take up to same count as original, from the remaining (worse) hits
-                    num_to_take = min(len(mmr_hits), len(remaining))
-                    if num_to_take > 0:
-                        result.append(remaining[:num_to_take])
-                    else:
-                        # No remaining hits to corrupt with, just return empty
-                        result.append([])
-                else:
-                    result.append([])
-
-            elif r < p_empty + p_corrupt + p_shrink:
-                # Shrink: reduce number of hits (keep 1 to len-1)
-                if len(mmr_hits) > 1:
-                    # Randomly pick how many to keep (at least 1, at most len-1)
-                    num_keep = rng.randint(1, len(mmr_hits) - 1)
-                    result.append(mmr_hits[:num_keep])
-                else:
-                    # Already 0 or 1 hits, can't shrink further
-                    result.append(mmr_hits)
-
+        B = len(batch)
+        
+        for group_idx, winner_in_group, winner_flat_idx in winner_indices:
+            # Get the winning revise text
+            rev_txt = revise_texts[group_idx][winner_in_group] or ""
+            
+            # Get past actions from the input (if available)
+            past_actions_txt = batch[group_idx].get("past_actions", "")
+            past_actions_txt = batch[group_idx].get("actions", past_actions_txt)  # fallback to "actions" key
+            
+            # Combine past actions + revise trace (similar to old implementation)
+            if past_actions_txt:
+                combined_text = past_actions_txt.strip() + "\n\n<revise>\n" + rev_txt.strip()
             else:
-                # Normal: keep unchanged
-                result.append(mmr_hits)
-
-        return result
+                combined_text = "<revise>\n" + rev_txt.strip()
+            
+            # Skip if empty
+            if not combined_text.strip():
+                continue
+            
+            # Get the reward/utility for this winner
+            utility = flat_scores[winner_flat_idx]
+            
+            # Get timestamps
+            now_ts = now_tss[group_idx]
+            end_ts = end_tss[group_idx]
+            
+            # Add to retriever with visible_delay=1 (visible after next timestep)
+            self.retriever.add(
+                text=combined_text,
+                event_ts=now_ts,
+                visible_after_ts=now_ts + 1,  # visible_delay=1
+                namespace="train",
+                metadata={
+                    "utility": utility,
+                    "end_ts": end_ts,
+                    "step": self._step,
+                },
+            )
+            
+            logger.debug(f"Added to retriever: utility={utility:.4f}, ts={now_ts}")
+        
+        # Log retriever size
+        logger.info(f"Retriever size: {self.retriever.N}")
 
     def log(
         self, 
