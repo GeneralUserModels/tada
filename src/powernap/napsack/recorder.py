@@ -8,22 +8,24 @@ from record.__main__ import ScreenRecorder
 
 class OnlineRecorder(ScreenRecorder):
 
+    DEFAULT_LOG_DIR = Path(__file__).resolve().parents[4] / "logs"
+
     def __init__(self, *args, queue_maxsize=0, log_dir=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.aggregation_queue = Queue(maxsize=queue_maxsize)
 
-        # override session_dir if log_dir provided
-        if log_dir:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.session_dir = Path(log_dir) / f"session_{timestamp}"
-            self.session_dir.mkdir(parents=True, exist_ok=True)
-            self.save_worker.session_dir = self.session_dir
-            self.save_worker.screenshots_dir = self.session_dir / "screenshots"
-            self.save_worker.screenshots_dir.mkdir(exist_ok=True)
-            self.save_worker.input_log = self.session_dir / "input_events.jsonl"
-            self.save_worker.screenshot_log = self.session_dir / "screenshots.jsonl"
-            self.aggregation_worker.aggregations_file = self.session_dir / "raw_aggregations.jsonl"
-            self.input_event_queue.session_dir = self.session_dir
+        # always redirect session_dir into powernap/logs (or custom log_dir)
+        base = Path(log_dir) if log_dir else self.DEFAULT_LOG_DIR
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.session_dir = base / f"session_{timestamp}"
+        self.session_dir.mkdir(parents=True, exist_ok=True)
+        self.save_worker.session_dir = self.session_dir
+        self.save_worker.screenshots_dir = self.session_dir / "screenshots"
+        self.save_worker.screenshots_dir.mkdir(exist_ok=True)
+        self.save_worker.input_log = self.session_dir / "input_events.jsonl"
+        self.save_worker.screenshot_log = self.session_dir / "screenshots.jsonl"
+        self.aggregation_worker.aggregations_file = self.session_dir / "raw_aggregations.jsonl"
+        self.input_event_queue.session_dir = self.session_dir
 
     def _on_aggregation_request(self, request):
         if not request:
