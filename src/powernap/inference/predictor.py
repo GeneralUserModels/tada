@@ -7,7 +7,10 @@ from pathlib import Path
 from openai import OpenAI
 from litellm import completion as litellm_completion
 
-from powernap.longnap.trainer_utils import build_retrieve_prompt, build_revise_prompt, build_actions_prompt
+from powernap.longnap.trainer_utils import (
+    TASK_DESCRIPTION, build_actions_block,
+    build_retrieve_prompt, build_revise_prompt, build_actions_prompt,
+)
 from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams, mmr_select
 
 VERIFIER_PROMPT_PATH = Path(__file__).resolve().parents[1] / "longnap" / "verifier.txt"
@@ -111,17 +114,11 @@ class Predictor:
     def predict_from_buffer(self, buffer, past_len, future_len, processor):
         past = buffer[-past_len:]
 
-        past_actions_list = [f"<action>{r['text']}</action>" for r in past]
-        past_actions_block = "<actions>\n" + "\n".join("    " + a for a in past_actions_list) + "\n</actions>"
-
-        task_description = (
-            "You will analyze user behavior and predict what the user will do next. "
-            "Below are the actions the user took."
-        )
+        past_actions_block = build_actions_block(past)
 
         messages = [{
             "role": "user",
-            "content": [{"type": "text", "text": task_description + "\n\n" + past_actions_block}],
+            "content": [{"type": "text", "text": TASK_DESCRIPTION + "\n\n" + past_actions_block}],
         }]
 
         prompt = processor.apply_chat_template(

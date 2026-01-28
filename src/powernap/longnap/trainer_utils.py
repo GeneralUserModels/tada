@@ -1,6 +1,27 @@
 import torch
 
 
+TASK_DESCRIPTION = (
+    "You will analyze user behavior and predict what the user will do next. "
+    "Below are the actions the user took."
+)
+
+TASK_DESCRIPTION_WITH_IMAGES = (
+    "You will analyze user behavior and predict what the user will do next. "
+    "Below are the actions the user took. "
+    "Look at the images of their device to help you predict the user's next action."
+)
+
+
+def fmt_action(text):
+    return f"<action>{text}</action>"
+
+
+def build_actions_block(records):
+    lines = [fmt_action(r["text"]) for r in records]
+    return "<actions>\n" + "\n".join("    " + a for a in lines) + "\n</actions>"
+
+
 def build_retrieve_prompt(base_ctx: str) -> str:
     head, sep, tail = base_ctx.rpartition("<|im_end|>")
     base_ctx = (head + tail).strip()

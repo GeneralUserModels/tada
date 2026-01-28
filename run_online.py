@@ -13,6 +13,7 @@ from transformers import AutoTokenizer
 
 from powernap.napsack import OnlineRecorder, Labeler
 from powernap.longnap.trainer import LongNAP
+from powernap.longnap.trainer_utils import TASK_DESCRIPTION, build_actions_block
 from powernap.inference import Predictor, ActionOverlay
 
 try:
@@ -26,27 +27,17 @@ def make_sample(buffer, past_len, future_len, processor):
     past = window[:past_len]
     future = window[past_len:]
 
-    past_actions_list = [f"<action>{r['text']}</action>" for r in past]
-    past_actions_block = "<actions>\n" + "\n".join("    " + a for a in past_actions_list) + "\n</actions>"
-
-    task_description = (
-        "You will analyze user behavior and predict what the user will do next. "
-        "Below are the actions the user took."
-    )
+    past_actions_block = build_actions_block(past)
+    future_actions = build_actions_block(future)
 
     messages = [{
         "role": "user",
-        "content": [{"type": "text", "text": task_description + "\n\n" + past_actions_block}],
+        "content": [{"type": "text", "text": TASK_DESCRIPTION + "\n\n" + past_actions_block}],
     }]
 
     prompt = processor.apply_chat_template(
         messages, add_generation_prompt=False, tokenize=False,
     )
-
-    future_actions = "<actions>\n"
-    for r in future:
-        future_actions += "    " + f"<action>{r['text']}</action>" + "\n"
-    future_actions += "</actions>"
 
     start_ts = datetime.strptime(past[0]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
     end_ts = datetime.strptime(future[-1]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
@@ -130,8 +121,7 @@ def batch_iter(recorder, label_queue, past_len, future_len, batch_size, processo
 
 
 def _build_ground_truth(records):
-    lines = [f"<action>{r['text']}</action>" for r in records]
-    return "<actions>\n" + "\n".join("    " + l for l in lines) + "\n</actions>"
+    return build_actions_block(records)
 
 
 def inference_loop(predictor, inference_buffer, trainer, recorder,
