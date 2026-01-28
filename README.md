@@ -1,6 +1,6 @@
 # PowerNap
 
-Online record → label → train pipeline for user action prediction.
+Online record → label → train → infer pipeline for user action prediction.
 
 ## Install
 
@@ -15,8 +15,9 @@ cd ../powernap && uv pip install -e ".[wandb]"
 ## Environment
 
 ```bash
-export GEMINI_API_KEY=...   # for litellm labeling & reward model
-# tinker service must be running for training
+export GEMINI_API_KEY=...      # for litellm labeling & reward model
+export TINKER_API_KEY=...      # for tinker OAI inference endpoint
+# tinker service must be running for training + inference
 ```
 
 ## Modules
@@ -29,14 +30,29 @@ export GEMINI_API_KEY=...   # for litellm labeling & reward model
   - `LongNAP` — think → retrieve → revise → actions trainer (tinker + litellm reward)
   - `NAPSack` — sliding-window dataset over labeled action sequences
 
+- **`powernap.inference`** — inference
+  - `Predictor` — think → retrieve → revise → actions prediction via tinker OAI endpoint
+  - `ActionOverlay` — macOS transparent overlay showing predicted next actions
+
 ## Online Pipeline
 
-`run_online.py` wires all three stages concurrently:
+`run_online.py` wires all four stages concurrently:
 
 ```
-[Recorder threads]  →  aggregation_queue  →  [Label thread]  →  label_queue  →  [Trainer]
-   (pynput/mss)                               (litellm)                         (tinker)
+[Recorder threads]  →  aggregation_queue  →  [Label thread]  →  label_queue  →  [Train thread]
+   (pynput/mss)                               (litellm)         │                 (tinker)
+                                                                 │
+                                                                 └→ inference_buffer → [Inference thread]
+                                                                                        (tinker OAI)
+                                                                                            │
+                                                                                        [Overlay]
+                                                                                        (AppKit)
 ```
+
+- Labels feed both training (via `label_queue`) and inference (via `inference_buffer`)
+- Inference picks up new checkpoints from the trainer automatically
+- Predictions are evaluated against ground truth labels as they arrive (delayed scoring with LLM judge)
+- macOS overlay shows predicted next actions in real time
 
 ### Run
 
@@ -52,7 +68,21 @@ uv run run_online.py \
   --label-model gemini/gemini-3-flash-preview \
   --reward-llm gemini/gemini-3-flash-preview \
   --past-len 8 --future-len 4 --batch-size 2 \
+  --predict-every-n-seconds 10 \
   --log-dir ./logs --log-to-wandb --wandb-project longnap-online
+```
+
+Use `--disable-inference` to skip the inference thread, or `--no-overlay` to run inference without the screen overlay.
+
+### Inference Only
+
+`run_inference.py` runs recording + labeling + inference without training, using a fixed checkpoint:
+
+```bash
+uv run run_inference.py \
+  --model-path "tinker://uuid:train:0/sampler_weights/000080" \
+  --tokenizer Qwen/Qwen3-VL-30B-A3B-Instruct \
+  --past-len 8 --future-len 4
 ```
 
 ### Offline Training
@@ -71,12 +101,13 @@ logs/session_YYYYMMDD_HHMMSS/
 ├── raw_aggregations.jsonl # event burst aggregations
 ├── input_events.jsonl     # raw mouse/keyboard events
 ├── screenshots.jsonl      # screenshot metadata
-└── labels.jsonl           # litellm action captions
+├── labels.jsonl           # litellm action captions
+└── predictions.jsonl      # inference predictions (think, revise, actions)
 ```
 
 ## wandb
 
-Pass `--log-to-wandb` to log both pipeline and training metrics:
+Pass `--log-to-wandb` to log pipeline, training, and inference metrics:
 
 | Metric | Description |
 |--------|-------------|
@@ -86,3 +117,8 @@ Pass `--log-to-wandb` to log both pipeline and training metrics:
 | `pipeline/buffer_size` | labeled records in buffer |
 | `pipeline/batches_yielded` | batches sent to trainer |
 | `loss`, `reward_mean`, ... | training metrics (from LongNAP) |
+| `inference/predictions_total` | cumulative predictions made |
+| `inference/latency_s` | seconds per prediction |
+| `inference/reward` | LLM judge score (0-1) for prediction vs ground truth |
+| `inference/evals_total` | cumulative evaluations completed |
+| `inference/eval` | table with think, revise, actions, ground truth, reward |
