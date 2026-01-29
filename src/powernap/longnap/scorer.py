@@ -133,8 +133,8 @@ class RewardScorer:
         full_text = "\n\n".join(block.strip() for block in assistant_blocks).strip()
 
         # Validate structure (optional - can be made stricter)
-        if len(assistant_blocks) >= 1 and not assistant_blocks[0].strip().endswith("</think>"):
-            errors.append("Missing or malformed </think> block.")
+        if len(assistant_blocks) >= 1 and not assistant_blocks[0].strip().endswith("</rationale>"):
+            errors.append("Missing or malformed </rationale> block.")
             penalty -= 0.15
 
         if len(assistant_blocks) >= 2 and not assistant_blocks[1].strip().endswith("</revise>"):
