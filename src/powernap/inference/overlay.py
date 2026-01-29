@@ -1,13 +1,24 @@
+import re
 import sys
 
 
 class ActionOverlay:
     """Must be created and run on the main thread (AppKit requirement)."""
 
+    _WIDTH = 420
+    _MAX_HEIGHT = 500
+    _MIN_HEIGHT = 80
+    _SCREEN_PADDING = 20
+    _BOTTOM_PADDING = 60
+
     def __init__(self):
-        self._text_field = None
+        self._text_view = None
+        self._scroll_view = None
         self._window = None
         self._app = None
+        self._visible = True
+        self._monitor = None
+        self._screen_frame = None
 
         if sys.platform != "darwin":
             return
@@ -19,10 +30,11 @@ class ActionOverlay:
         app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
 
         screen = AppKit.NSScreen.mainScreen()
-        screen_frame = screen.frame()
-        w, h = 400, 200
-        x = screen_frame.size.width - w - 20
-        y = screen_frame.size.height - h - 60
+        self._screen_frame = screen.frame()
+        w = self._WIDTH
+        h = self._MIN_HEIGHT
+        x = self._screen_frame.size.width - w - self._SCREEN_PADDING
+        y = self._screen_frame.size.height - self._BOTTOM_PADDING - h
 
         window = AppKit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
             Foundation.NSMakeRect(x, y, w, h),
@@ -32,32 +44,224 @@ class ActionOverlay:
         )
         window.setLevel_(AppKit.NSFloatingWindowLevel)
         window.setOpaque_(False)
-        window.setBackgroundColor_(AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(0, 0, 0, 0.75))
+        window.setBackgroundColor_(
+            AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(0, 0, 0, 0.78)
+        )
         window.setIgnoresMouseEvents_(True)
         window.setCollectionBehavior_(
-            AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces |
-            AppKit.NSWindowCollectionBehaviorStationary
+            AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces
+            | AppKit.NSWindowCollectionBehaviorStationary
         )
 
-        text_field = AppKit.NSTextField.alloc().initWithFrame_(
-            Foundation.NSMakeRect(10, 10, w - 20, h - 20)
-        )
-        text_field.setStringValue_("Waiting for predictions...")
-        text_field.setTextColor_(AppKit.NSColor.whiteColor())
-        text_field.setFont_(AppKit.NSFont.monospacedSystemFontOfSize_weight_(11, AppKit.NSFontWeightRegular))
-        text_field.setBackgroundColor_(AppKit.NSColor.clearColor())
-        text_field.setBezeled_(False)
-        text_field.setEditable_(False)
-        text_field.setSelectable_(False)
-        text_field.setLineBreakMode_(AppKit.NSLineBreakByWordWrapping)
-        text_field.cell().setWraps_(True)
+        # Rounded corners
+        window.contentView().setWantsLayer_(True)
+        window.contentView().layer().setCornerRadius_(10)
+        window.contentView().layer().setMasksToBounds_(True)
 
-        window.contentView().addSubview_(text_field)
+        # NSScrollView + NSTextView for rich text
+        scroll_view = AppKit.NSScrollView.alloc().initWithFrame_(
+            Foundation.NSMakeRect(0, 0, w, h)
+        )
+        scroll_view.setHasVerticalScroller_(False)
+        scroll_view.setHasHorizontalScroller_(False)
+        scroll_view.setAutoresizingMask_(
+            AppKit.NSViewWidthSizable | AppKit.NSViewHeightSizable
+        )
+        scroll_view.setDrawsBackground_(False)
+
+        text_view = AppKit.NSTextView.alloc().initWithFrame_(
+            Foundation.NSMakeRect(0, 0, w, h)
+        )
+        text_view.setEditable_(False)
+        text_view.setSelectable_(False)
+        text_view.setDrawsBackground_(False)
+        text_view.setTextContainerInset_(Foundation.NSMakeSize(14, 14))
+        text_view.textContainer().setLineFragmentPadding_(0)
+
+        scroll_view.setDocumentView_(text_view)
+        window.contentView().addSubview_(scroll_view)
+
+        # Initial text
+        attr_str = self._make_waiting_string()
+        text_view.textStorage().setAttributedString_(attr_str)
+
         window.orderFrontRegardless()
 
         self._window = window
-        self._text_field = text_field
+        self._scroll_view = scroll_view
+        self._text_view = text_view
         self._app = app
+
+        # Register global hotkey (Ctrl+H) to toggle overlay visibility
+        def _on_key_event(event):
+            flags = event.modifierFlags()
+            ctrl_pressed = flags & AppKit.NSEventModifierFlagControl
+            if ctrl_pressed and event.charactersIgnoringModifiers() == "h":
+                self._toggle_visibility()
+
+        self._monitor = AppKit.NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
+            AppKit.NSEventMaskKeyDown, _on_key_event
+        )
+
+    # ------------------------------------------------------------------
+    # Text parsing & formatting
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_actions(text):
+        """Extract individual action strings from <action>...</action> tags."""
+        actions = re.findall(r"<action>(.*?)</action>", text, re.DOTALL)
+        if actions:
+            return [a.strip() for a in actions if a.strip()]
+        # Fallback: strip any remaining XML-ish tags and return raw text
+        clean = re.sub(r"<[^>]+>", "", text).strip()
+        return [clean] if clean else [text.strip()]
+
+    @staticmethod
+    def _make_waiting_string():
+        """Build a styled 'waiting' message."""
+        import AppKit
+
+        font = AppKit.NSFont.systemFontOfSize_weight_(12, AppKit.NSFontWeightMedium)
+        color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+            1.0, 1.0, 1.0, 0.5
+        )
+        attrs = {
+            AppKit.NSFontAttributeName: font,
+            AppKit.NSForegroundColorAttributeName: color,
+        }
+        return AppKit.NSAttributedString.alloc().initWithString_attributes_(
+            "Waiting for predictions\u2026", attrs
+        )
+
+    @staticmethod
+    def _build_attributed_string(text):
+        """Parse action tags and build a styled NSAttributedString."""
+        import AppKit
+
+        actions = ActionOverlay._parse_actions(text)
+        result = AppKit.NSMutableAttributedString.alloc().init()
+
+        # ── Header ──
+        header_font = AppKit.NSFont.systemFontOfSize_weight_(
+            13, AppKit.NSFontWeightBold
+        )
+        header_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+            0.65, 0.85, 1.0, 1.0
+        )
+        header_attrs = {
+            AppKit.NSFontAttributeName: header_font,
+            AppKit.NSForegroundColorAttributeName: header_color,
+        }
+        header = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+            "Predicted Actions\n", header_attrs
+        )
+        result.appendAttributedString_(header)
+
+        # ── Separator ──
+        sep_font = AppKit.NSFont.systemFontOfSize_weight_(
+            6, AppKit.NSFontWeightRegular
+        )
+        sep_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+            1.0, 1.0, 1.0, 0.25
+        )
+        sep_attrs = {
+            AppKit.NSFontAttributeName: sep_font,
+            AppKit.NSForegroundColorAttributeName: sep_color,
+        }
+        separator = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+            "\u2500" * 46 + "\n\n", sep_attrs
+        )
+        result.appendAttributedString_(separator)
+
+        # ── Numbered actions ──
+        num_font = AppKit.NSFont.monospacedDigitSystemFontOfSize_weight_(
+            11.5, AppKit.NSFontWeightSemibold
+        )
+        num_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+            0.55, 0.78, 0.95, 1.0
+        )
+        body_font = AppKit.NSFont.systemFontOfSize_weight_(
+            11.5, AppKit.NSFontWeightRegular
+        )
+        body_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+            1.0, 1.0, 1.0, 0.92
+        )
+
+        num_attrs = {
+            AppKit.NSFontAttributeName: num_font,
+            AppKit.NSForegroundColorAttributeName: num_color,
+        }
+        body_attrs = {
+            AppKit.NSFontAttributeName: body_font,
+            AppKit.NSForegroundColorAttributeName: body_color,
+        }
+
+        for i, action in enumerate(actions, 1):
+            num_part = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+                f"{i}. ", num_attrs
+            )
+            result.appendAttributedString_(num_part)
+
+            tail = "\n\n" if i < len(actions) else ""
+            body_part = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+                f"{action}{tail}", body_attrs
+            )
+            result.appendAttributedString_(body_part)
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Main-thread UI updates
+    # ------------------------------------------------------------------
+
+    def _do_update(self, attr_str):
+        """Set text and auto-resize window. Must run on main thread."""
+        import AppKit
+        import Foundation
+
+        if self._text_view is None or self._window is None:
+            return
+
+        self._text_view.textStorage().setAttributedString_(attr_str)
+
+        # Ask the layout manager for the real text height
+        layout = self._text_view.layoutManager()
+        container = self._text_view.textContainer()
+        layout.ensureLayoutForTextContainer_(container)
+        used = layout.usedRectForTextContainer_(container)
+        inset = self._text_view.textContainerInset()
+        content_h = used.size.height + inset.height * 2 + 8
+
+        new_h = max(self._MIN_HEIGHT, min(self._MAX_HEIGHT, content_h))
+        w = self._WIDTH
+        x = self._screen_frame.size.width - w - self._SCREEN_PADDING
+        top_y = self._screen_frame.size.height - self._BOTTOM_PADDING
+        y = top_y - new_h
+
+        self._window.setFrame_display_(
+            Foundation.NSMakeRect(x, y, w, new_h), True
+        )
+        self._scroll_view.setFrame_(Foundation.NSMakeRect(0, 0, w, new_h))
+
+    def _toggle_visibility(self):
+        import AppKit
+
+        if self._window is None:
+            return
+        if self._visible:
+            self._window.performSelectorOnMainThread_withObject_waitUntilDone_(
+                "orderOut:", None, False
+            )
+        else:
+            self._window.performSelectorOnMainThread_withObject_waitUntilDone_(
+                "orderFrontRegardless", None, False
+            )
+        self._visible = not self._visible
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def run(self):
         """Blocks on the AppKit run loop. Call from main thread."""
@@ -65,13 +269,22 @@ class ActionOverlay:
             self._app.run()
 
     def update(self, text):
-        if self._text_field is None:
+        if self._text_view is None:
             return
-        self._text_field.performSelectorOnMainThread_withObject_waitUntilDone_(
-            "setStringValue:", text, False
-        )
+        attr_str = self._build_attributed_string(text)
+        from PyObjCTools import AppHelper
+
+        def _on_main():
+            self._do_update(attr_str)
+
+        AppHelper.callAfter(_on_main)
 
     def close(self):
+        if self._monitor:
+            import AppKit
+
+            AppKit.NSEvent.removeMonitor_(self._monitor)
+            self._monitor = None
         if self._app:
             self._app.performSelectorOnMainThread_withObject_waitUntilDone_(
                 "stop:", None, False
