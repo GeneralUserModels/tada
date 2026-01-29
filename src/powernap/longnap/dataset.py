@@ -8,7 +8,8 @@ from PIL import ImageFile
 from torch.utils.data import Dataset
 
 from tinker_cookbook import renderers
-from tinker_cookbook.renderers import Renderer, get_renderer
+from tinker_cookbook.renderers import Renderer
+from tinker_cookbook.renderers.qwen3 import Qwen3VLInstructRenderer
 from tinker_cookbook.rl.types import (
     EnvGroupBuilder,
     RLDataset,
@@ -347,16 +348,14 @@ class LongNAPDatasetBuilder(RLDatasetBuilder):
         from .scorer import create_reward_scorer
         from tinker_cookbook import model_info
         
-        # Get renderer name if not specified
-        renderer_name = self.renderer_name
-        if renderer_name is None:
-            renderer_name = model_info.get_recommended_renderer_name(self.model_name)
-        
         # Create tokenizer and renderer
         tokenizer = get_tokenizer(self.model_name)
-        
         image_processor = get_image_processor(self.model_name)
-        renderer = get_renderer(renderer_name, tokenizer, image_processor)
+        
+        # Use Qwen3VLInstructRenderer with strip_thinking_from_history=False for multi-turn RL
+        renderer = Qwen3VLInstructRenderer(
+            tokenizer, image_processor, strip_thinking_from_history=False
+        )
         
         # Create retriever
         def dedup_fn(a, b):

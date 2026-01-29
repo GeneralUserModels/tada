@@ -32,8 +32,9 @@ from transformers import AutoTokenizer
 
 from tinker_cookbook import model_info, renderers
 from tinker_cookbook.completers import TinkerTokenCompleter
-from tinker_cookbook.renderers import get_renderer
+from tinker_cookbook.renderers.qwen3 import Qwen3VLInstructRenderer
 from tinker_cookbook.rl.data_processing import assemble_training_data, compute_advantages
+from tinker_cookbook.rl.train import _remove_mask
 from tinker_cookbook.rl.rollouts import do_group_rollout
 from tinker_cookbook.rl.types import TrajectoryGroup
 from tinker_cookbook.image_processing_utils import get_image_processor
@@ -74,7 +75,6 @@ def make_sample(
     Returns a dict with 'messages' for the renderer.
     """
     from PIL import Image
-    import io
     
     window = buffer[-(past_len + future_len):]
     past = window[:past_len]
@@ -93,11 +93,7 @@ def make_sample(
                 if img_path and Path(img_path).exists():
                     try:
                         img = Image.open(img_path).convert("RGB")  # Convert to RGB for consistency
-                        # Convert PIL image to bytes for the renderer
-                        img_buffer = io.BytesIO()
-                        img.save(img_buffer, format="PNG")
-                        img_bytes = img_buffer.getvalue()
-                        image_content.append({"type": "image", "image": img_bytes})
+                        image_content.append({"type": "image", "image": img})
                     except Exception as e:
                         logger.warning(f"Failed to load image {img_path}: {e}")
         
@@ -178,14 +174,14 @@ class OnlineEnvTrainer:
         )
         self.num_imgs_per_sample = num_imgs_per_sample
         
-        # Get tokenizer and renderer - match offline trainer's approach
-        # Use get_tokenizer from tinker_cookbook (not training_client.get_tokenizer())
+        # Get tokenizer and renderer
         self.tokenizer = get_tokenizer(model_name)
-        
-        # Always create image_processor for VL models (like offline trainer does)
-        renderer_name = model_info.get_recommended_renderer_name(model_name)
         image_processor = get_image_processor(model_name)
-        self.renderer = get_renderer(renderer_name, self.tokenizer, image_processor)
+        
+        # Use Qwen3VLInstructRenderer with strip_thinking_from_history=False for multi-turn RL
+        self.renderer = Qwen3VLInstructRenderer(
+            self.tokenizer, image_processor, strip_thinking_from_history=False
+        )
         
         # Save initial weights for sampler
         save_result = self.training_client.save_weights_for_sampler(
@@ -321,10 +317,10 @@ class OnlineEnvTrainer:
             logger.warning("No training data generated")
             return {"step": self._step, "loss": 0.0}
                 
-        # Forward-backward pass
+        # Forward-backward pass (remove mask like cookbook's train_step does)
         print(f"[train] step {self._step}: forward-backward pass...")
         fwdbwd_future = self.training_client.forward_backward(
-            data_D,
+            [_remove_mask(d) for d in data_D],
             loss_fn="importance_sampling",
         )
         
@@ -374,6 +370,8 @@ class OnlineEnvTrainer:
             f"time={metrics['step_time']:.2f}s"
         )
         
+        print(f"[train] step {self._step} completed in {metrics['step_time']:.2f}s")
+
         # Checkpoint
         if self.checkpoint_every_n_steps > 0 and (self._step + 1) % self.checkpoint_every_n_steps == 0:
             self._save_checkpoint(self._step + 1)
