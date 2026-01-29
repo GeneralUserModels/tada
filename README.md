@@ -5,11 +5,18 @@ Online record → label → train → infer pipeline for user action prediction.
 ## Install
 
 ```bash
-# install pack (recording backend) first
-cd ../pack && uv pip install -e .
+cd powernap
 
-# install powernap
-cd ../powernap && uv pip install -e ".[wandb]"
+# clone and install pack into this directory
+git clone git@github.com:GeneralUserModels/pack.git
+cd pack && uv pip install -e .
+
+# clone tinker-cookbook into this directory
+git clone https://github.com/thinking-machines-lab/tinker-cookbook.git
+cd tinker-cookbook && uv pip install -e .
+
+# install (pack + tinker + tinker-cookbook are resolved automatically via uv)
+uv pip install -e ".[wandb]"
 ```
 
 ## Environment
