@@ -74,6 +74,7 @@ def make_sample(
     Returns a dict with 'messages' for the renderer.
     """
     from PIL import Image
+    import io
     
     window = buffer[-(past_len + future_len):]
     past = window[:past_len]
@@ -92,7 +93,11 @@ def make_sample(
                 if img_path and Path(img_path).exists():
                     try:
                         img = Image.open(img_path).convert("RGB")  # Convert to RGB for consistency
-                        image_content.append({"type": "image", "image": img})
+                        # Convert PIL image to bytes for the renderer
+                        img_buffer = io.BytesIO()
+                        img.save(img_buffer, format="PNG")
+                        img_bytes = img_buffer.getvalue()
+                        image_content.append({"type": "image", "image": img_bytes})
                     except Exception as e:
                         logger.warning(f"Failed to load image {img_path}: {e}")
         
