@@ -52,11 +52,11 @@ class Predictor:
             log_path.mkdir(parents=True, exist_ok=True)
             self.predictions_file = log_path / "predictions.jsonl"
 
-    def _sample(self, messages, stop):
-        """Sample from the model using chat completions."""
-        response = self.client.chat.completions.create(
-            model=self.model_path,
-            messages=messages,
+
+    def _sample(self, prompt, stop, model_path=None):
+        response = self.client.completions.create(
+            model=model_path or self.model_path,
+            prompt=prompt,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
             stop=stop,
@@ -102,6 +102,7 @@ class Predictor:
         messages.append(build_actions_user_message(future_len))
         actions_text = self._sample(messages, stop=["</actions>"])
 
+
         result = {
             "think": think_text,
             "retrieved": retrieved_text,
@@ -121,7 +122,7 @@ class Predictor:
     def add_to_retriever(self, text, event_ts, namespace="train"):
         self.retriever.add(text, event_ts=event_ts, namespace=namespace)
 
-    def predict_from_buffer(self, buffer, past_len, future_len, processor=None):
+    def predict_from_buffer(self, buffer, past_len, future_len, processor, model_path_override=None):
         """Build messages from buffer and run prediction."""
         past = buffer[-past_len:]
 
@@ -134,7 +135,8 @@ class Predictor:
 
         ts = datetime.strptime(past[0]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
 
-        return self.predict(messages, ts, future_len=future_len, past_actions=past_actions_block)
+        return self.predict(prompt, ts, future_len=future_len, past_actions=past_actions_block,
+                            model_path_override=model_path_override)
 
     def score_prediction(self, predicted_actions, ground_truth_actions, reward_llm):
         verifier_prompt = VERIFIER_PROMPT_PATH.read_text()
