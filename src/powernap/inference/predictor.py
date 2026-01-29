@@ -52,9 +52,9 @@ class Predictor:
             log_path.mkdir(parents=True, exist_ok=True)
             self.predictions_file = log_path / "predictions.jsonl"
 
-    def _sample(self, prompt, stop):
+    def _sample(self, prompt, stop, model_path=None):
         response = self.client.completions.create(
-            model=self.model_path,
+            model=model_path or self.model_path,
             prompt=prompt,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
@@ -62,10 +62,12 @@ class Predictor:
         )
         return response.choices[0].text
 
-    def predict(self, prompt, ts, future_len=4, past_actions=""):
+    def predict(self, prompt, ts, future_len=4, past_actions="", model_path_override=None):
+        model_path = model_path_override or self.model_path
+
         # 1) Think
         think_prompt = build_retrieve_prompt(prompt)
-        think_text = self._sample(think_prompt, stop=["</think>"])
+        think_text = self._sample(think_prompt, stop=["</think>"], model_path=model_path)
 
         # 2) Retrieve
         query = think_text
@@ -85,12 +87,12 @@ class Predictor:
         # 3) Revise
         think_block = think_prompt + think_text
         revise_prompt = build_revise_prompt(think_block, retrieved_text)
-        revise_text = self._sample(revise_prompt, stop=["</revise>"])
+        revise_text = self._sample(revise_prompt, stop=["</revise>"], model_path=model_path)
 
         # 4) Actions
         revise_block = revise_prompt + revise_text
         actions_prompt = build_actions_prompt(revise_block, future_len)
-        actions_text = self._sample(actions_prompt, stop=["</actions>"])
+        actions_text = self._sample(actions_prompt, stop=["</actions>"], model_path=model_path)
 
         result = {
             "think": think_text,
@@ -111,7 +113,7 @@ class Predictor:
     def add_to_retriever(self, text, event_ts, namespace="train"):
         self.retriever.add(text, event_ts=event_ts, namespace=namespace)
 
-    def predict_from_buffer(self, buffer, past_len, future_len, processor):
+    def predict_from_buffer(self, buffer, past_len, future_len, processor, model_path_override=None):
         past = buffer[-past_len:]
 
         past_actions_block = build_actions_block(past)
@@ -127,7 +129,8 @@ class Predictor:
 
         ts = datetime.strptime(past[0]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
 
-        return self.predict(prompt, ts, future_len=future_len, past_actions=past_actions_block)
+        return self.predict(prompt, ts, future_len=future_len, past_actions=past_actions_block,
+                            model_path_override=model_path_override)
 
     def score_prediction(self, predicted_actions, ground_truth_actions, reward_llm):
         verifier_prompt = VERIFIER_PROMPT_PATH.read_text()
