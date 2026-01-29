@@ -26,14 +26,14 @@ THINK_INSTRUCTION = (
     "2) Situation-based factors (constraints, incentives, risks, social norms, environment, time of day, etc.).\n\n"
     "Explain how person and situation-based factors contribute to the prediction, "
     "and how they interact to produce the likely next steps.\n\n"
-    "Output ONLY your rationale wrapped by a <think>...</think> block."
+    "Output ONLY a <rationale>...</rationale> block with your rationale."
 )
 
 REVISE_INSTRUCTION = (
     "Re-evaluate your reasoning using this context.\n\n"
     "Explain how person-based and situation-based factors contribute to the updated prediction, "
     "and how their interaction changes (or confirms) the likely next steps.\n\n"
-    "Output ONLY your revised rationale wrapped by a <revise>...</revise> block."
+    "Output ONLY a <revise>...</revise> block with your revised rationale."
 )
 
 
@@ -91,7 +91,7 @@ def build_actions_user_message(future_len: int) -> Dict[str, str]:
     """
     content = (
         f"Now, using your claims, generate exactly {future_len} next actions the user will take.\n"
-        f"Output them ONLY as <action>...</action> tags inside <actions> block, "
+        f"Output ONLY <action>...</action> tags inside a larger <actions>...</actions> block, "
         f"with each action wrapped in its own <action> tag."
     )
     return {

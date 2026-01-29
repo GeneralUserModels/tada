@@ -27,6 +27,7 @@ from .trainer_utils import (
     build_actions_user_message,
 )
 
+import copy
 
 class LongNAPEnv(Env):
     """
@@ -104,7 +105,7 @@ class LongNAPEnv(Env):
     def stop_condition(self) -> StopCondition:
         """Get stop condition based on current phase."""
         if self.phase == self.PHASE_THINK:
-            return ["</think>"]
+            return ["</rationale>"]
         elif self.phase == self.PHASE_REVISE:
             return ["</revise>"]
         else:  # PHASE_ACTIONS
@@ -121,7 +122,6 @@ class LongNAPEnv(Env):
         Properly merges the Think instruction with the base messages to preserve
         multimodal content (images) in the first user message.
         """
-        import copy
         messages = copy.deepcopy(self.base_messages)
         think_msg = build_think_user_message()
         

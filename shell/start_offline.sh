@@ -8,9 +8,10 @@ set -e
 uv run run_offline.py \
     model_name=Qwen/Qwen3-VL-30B-A3B-Instruct \
     dataset_path=./data/train-00000-of-00001.parquet \
-    past_len=8 \
-    future_len=4 \
+    past_len=16 \
+    future_len=8 \
     stride=4 \
+    num_imgs_per_sample=2 \
     batch_size=2 \
     group_size=8 \
     learning_rate=1e-5 \
