@@ -13,8 +13,6 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue, Empty
 
-import imagehash
-from PIL import Image
 from transformers import AutoTokenizer
 
 from powernap.napsack import OnlineRecorder, Labeler
@@ -66,6 +64,9 @@ def label_loop(recorder, labeler, trainer, label_queue, inference_buffer, sleepw
     skip_count = 0
     last_hash = None
     dedupe_threshold = 1
+
+    import imagehash
+    from PIL import Image
 
     for agg in recorder.iter_aggregations():
         # pack-style sanitization: skip if no screenshot
