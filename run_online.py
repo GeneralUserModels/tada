@@ -11,6 +11,9 @@ training through the tinker_cookbook Env abstraction.
 from dotenv import load_dotenv
 load_dotenv()
 
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 import argparse
 import asyncio
 import logging
@@ -34,12 +37,13 @@ from tinker_cookbook.rl.data_processing import assemble_training_data, compute_a
 from tinker_cookbook.rl.rollouts import do_group_rollout
 from tinker_cookbook.rl.types import TrajectoryGroup
 from tinker_cookbook.image_processing_utils import get_image_processor
+from tinker_cookbook.tokenizer_utils import get_tokenizer
 
 from powernap.napsack import OnlineRecorder, Labeler
 from powernap.longnap.env import LongNAPEnvGroupBuilder
 from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams
 from powernap.longnap.scorer import create_reward_scorer
-from powernap.longnap.trainer_utils import TASK_DESCRIPTION, build_actions_block
+from powernap.longnap.trainer_utils import TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block
 from powernap.inference import Predictor, ActionOverlay
 
 try:
@@ -87,19 +91,14 @@ def make_sample(
                 img_path = past[i].get("img")
                 if img_path and Path(img_path).exists():
                     try:
-                        img = Image.open(img_path)
+                        img = Image.open(img_path).convert("RGB")  # Convert to RGB for consistency
                         image_content.append({"type": "image", "image": img})
                     except Exception as e:
                         logger.warning(f"Failed to load image {img_path}: {e}")
         
         if image_content:
-            task_desc = (
-                "You will analyze user behavior and predict what the user will do next. "
-                "Below are the actions the user took. Look at the images of their device "
-                "to help you predict the user's next action."
-            )
             content = image_content + [
-                {"type": "text", "text": task_desc + "\n\n" + past_actions_block}
+                {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + past_actions_block}
             ]
         else:
             # No images loaded successfully, fall back to text-only
@@ -172,16 +171,16 @@ class OnlineEnvTrainer:
             base_model=model_name,
             rank=lora_rank,
         )
-        self.tokenizer = self.training_client.get_tokenizer()
         self.num_imgs_per_sample = num_imgs_per_sample
         
-        # Get renderer - use appropriate renderer with image processor for vision models
+        # Get tokenizer and renderer - match offline trainer's approach
+        # Use get_tokenizer from tinker_cookbook (not training_client.get_tokenizer())
+        self.tokenizer = get_tokenizer(model_name)
+        
+        # Always create image_processor for VL models (like offline trainer does)
         renderer_name = model_info.get_recommended_renderer_name(model_name)
-        if "vl" in renderer_name.lower() or (num_imgs_per_sample > 0 and "VL" in model_name):
-            image_processor = get_image_processor(model_name)
-            self.renderer = get_renderer(renderer_name, self.tokenizer, image_processor)
-        else:
-            self.renderer = get_renderer(renderer_name, self.tokenizer)
+        image_processor = get_image_processor(model_name)
+        self.renderer = get_renderer(renderer_name, self.tokenizer, image_processor)
         
         # Save initial weights for sampler
         save_result = self.training_client.save_weights_for_sampler(
@@ -272,6 +271,7 @@ class OnlineEnvTrainer:
         """
         step_start = time.time()
         metrics = {}
+        print(f"[train] step {self._step}: creating env builders for {len(batch)} samples...")
         
         # Create EnvGroupBuilders for each sample in the batch
         env_group_builders = []
@@ -296,14 +296,17 @@ class OnlineEnvTrainer:
             max_tokens=self.max_tokens,
             temperature=self.temperature,
         )
+        print(f"[train] step {self._step}: running rollouts ({self.num_generations} generations per sample)...")
         
         # Run rollouts for all groups
         trajectory_groups: List[TrajectoryGroup] = []
-        for builder in env_group_builders:
+        for i, builder in enumerate(env_group_builders):
+            print(f"[train] step {self._step}: rollout {i+1}/{len(env_group_builders)}...")
             traj_group = await do_group_rollout(builder, policy)
             trajectory_groups.append(traj_group)
         
         # Compute advantages (GRPO-style per-group normalization)
+        print(f"[train] step {self._step}: computing advantages...")
         advantages = compute_advantages(trajectory_groups)
         
         # Assemble training data
@@ -312,8 +315,9 @@ class OnlineEnvTrainer:
         if not data_D:
             logger.warning("No training data generated")
             return {"step": self._step, "loss": 0.0}
-        
+                
         # Forward-backward pass
+        print(f"[train] step {self._step}: forward-backward pass...")
         fwdbwd_future = self.training_client.forward_backward(
             data_D,
             loss_fn="importance_sampling",
@@ -325,6 +329,7 @@ class OnlineEnvTrainer:
         )
         
         # Wait for results
+        print(f"[train] step {self._step}: waiting for training to complete...")
         fwdbwd_result = fwdbwd_future.result()
         optim_result = optim_future.result()
         
@@ -385,6 +390,7 @@ def label_loop(recorder, labeler, retriever, label_queue, inference_buffer):
         labeled = labeler.label(agg)
         latency = time.time() - t0
         label_count += 1
+        print(f"[label] labeled action #{label_count}: {labeled['text'][:80]}... ({latency:.2f}s)")
 
         ts = datetime.strptime(labeled["start_time"], "%Y-%m-%d_%H-%M-%S-%f")
         retriever.add(
@@ -425,12 +431,15 @@ def batch_iter(recorder, label_queue, past_len, future_len, batch_size, num_imgs
             continue
 
         buffer.append(record)
+        print(f"[train] buffer size: {len(buffer)}/{min_required} (need {batch_size} samples to start training)")
 
         if len(buffer) >= min_required:
             sample = make_sample(buffer, past_len, future_len, num_imgs_per_sample)
             batch.append(sample)
+            print(f"[train] created sample, batch size: {len(batch)}/{batch_size}")
 
             if len(batch) >= batch_size:
+                print(f"[train] yielding batch for training (step {batches_yielded + 1})")
                 batches_yielded += 1
 
                 if wandb and wandb.run is not None:
