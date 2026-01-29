@@ -9,7 +9,7 @@ from litellm import completion as litellm_completion
 
 from powernap.longnap.trainer_utils import (
     TASK_DESCRIPTION, build_actions_block,
-    build_retrieve_prompt, build_revise_prompt, build_actions_prompt,
+    build_think_user_message, build_revise_user_message, build_actions_user_message,
 )
 from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams, mmr_select
 
@@ -52,22 +52,33 @@ class Predictor:
             log_path.mkdir(parents=True, exist_ok=True)
             self.predictions_file = log_path / "predictions.jsonl"
 
-    def _sample(self, prompt, stop):
-        response = self.client.completions.create(
+    def _sample(self, messages, stop):
+        """Sample from the model using chat completions."""
+        response = self.client.chat.completions.create(
             model=self.model_path,
-            prompt=prompt,
+            messages=messages,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
             stop=stop,
         )
-        return response.choices[0].text
+        return response.choices[0].message.content
 
-    def predict(self, prompt, ts, future_len=4, past_actions=""):
-        # 1) Think
-        think_prompt = build_retrieve_prompt(prompt)
-        think_text = self._sample(think_prompt, stop=["</think>"])
+    def predict(self, messages, ts, future_len=4, past_actions=""):
+        """
+        Run the 3-step Think → Revise → Actions flow.
+        
+        Args:
+            messages: Initial conversation messages (user context)
+            ts: Timestamp for retrieval cutoff
+            future_len: Number of actions to predict
+            past_actions: Past actions block for retrieval query
+        """
+        # 1) Think - add think instruction and sample
+        messages = messages + [build_think_user_message()]
+        think_text = self._sample(messages, stop=["</think>"])
+        messages.append({"role": "assistant", "content": think_text})
 
-        # 2) Retrieve
+        # 2) Retrieve using think output
         query = think_text
         if past_actions:
             query = query + "\n\n" + past_actions
@@ -82,15 +93,14 @@ class Predictor:
             hits = [it[2] for it in selected]
         retrieved_text = "\n\n".join(h["text"] for h in hits)
 
-        # 3) Revise
-        think_block = think_prompt + think_text
-        revise_prompt = build_revise_prompt(think_block, retrieved_text)
-        revise_text = self._sample(revise_prompt, stop=["</revise>"])
+        # 3) Revise - add revise instruction with retrieved context and sample
+        messages.append(build_revise_user_message(retrieved_text))
+        revise_text = self._sample(messages, stop=["</revise>"])
+        messages.append({"role": "assistant", "content": revise_text})
 
-        # 4) Actions
-        revise_block = revise_prompt + revise_text
-        actions_prompt = build_actions_prompt(revise_block, future_len)
-        actions_text = self._sample(actions_prompt, stop=["</actions>"])
+        # 4) Actions - add actions instruction and sample
+        messages.append(build_actions_user_message(future_len))
+        actions_text = self._sample(messages, stop=["</actions>"])
 
         result = {
             "think": think_text,
@@ -111,23 +121,20 @@ class Predictor:
     def add_to_retriever(self, text, event_ts, namespace="train"):
         self.retriever.add(text, event_ts=event_ts, namespace=namespace)
 
-    def predict_from_buffer(self, buffer, past_len, future_len, processor):
+    def predict_from_buffer(self, buffer, past_len, future_len, processor=None):
+        """Build messages from buffer and run prediction."""
         past = buffer[-past_len:]
 
         past_actions_block = build_actions_block(past)
 
         messages = [{
             "role": "user",
-            "content": [{"type": "text", "text": TASK_DESCRIPTION + "\n\n" + past_actions_block}],
+            "content": TASK_DESCRIPTION + "\n\n" + past_actions_block,
         }]
-
-        prompt = processor.apply_chat_template(
-            messages, add_generation_prompt=False, tokenize=False,
-        )
 
         ts = datetime.strptime(past[0]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
 
-        return self.predict(prompt, ts, future_len=future_len, past_actions=past_actions_block)
+        return self.predict(messages, ts, future_len=future_len, past_actions=past_actions_block)
 
     def score_prediction(self, predicted_actions, ground_truth_actions, reward_llm):
         verifier_prompt = VERIFIER_PROMPT_PATH.read_text()

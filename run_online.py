@@ -1,31 +1,76 @@
 #!/usr/bin/env python3
+"""
+Online training pipeline using the Env abstraction.
+
+Records screen → labels with LLM → trains with Env-based RL → predicts next actions.
+
+This is the Env-based equivalent of run_online.py, providing cleaner multi-turn
+training through the tinker_cookbook Env abstraction.
+"""
 
 from dotenv import load_dotenv
 load_dotenv()
 
 import argparse
+import asyncio
+import logging
 import signal
 import sys
-import time
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from queue import Queue, Empty
+from typing import Any, Dict, List, Optional
 
+import tinker
+from tinker.types import AdamParams
 from transformers import AutoTokenizer
 
+from tinker_cookbook import model_info, renderers
+from tinker_cookbook.completers import TinkerTokenCompleter
+from tinker_cookbook.renderers import get_renderer
+from tinker_cookbook.rl.data_processing import assemble_training_data, compute_advantages
+from tinker_cookbook.rl.rollouts import do_group_rollout
+from tinker_cookbook.rl.types import TrajectoryGroup
+from tinker_cookbook.image_processing_utils import get_image_processor
+
 from powernap.napsack import OnlineRecorder, Labeler
-from powernap.longnap.trainer import LongNAP
+from powernap.longnap.env import LongNAPEnvGroupBuilder
+from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams
+from powernap.longnap.scorer import create_reward_scorer
 from powernap.longnap.trainer_utils import TASK_DESCRIPTION, build_actions_block
 from powernap.inference import Predictor, ActionOverlay
 
 try:
     import wandb
+    WANDB_AVAILABLE = True
 except ImportError:
     wandb = None
+    WANDB_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 
-def make_sample(buffer, past_len, future_len, processor):
+def make_sample(
+    buffer: List[Dict], 
+    past_len: int, 
+    future_len: int,
+    num_imgs_per_sample: int = 0,
+) -> Dict[str, Any]:
+    """
+    Create a sample from a buffer of labeled actions.
+    
+    Args:
+        buffer: List of labeled action dicts
+        past_len: Number of past actions to include
+        future_len: Number of future actions (ground truth)
+        num_imgs_per_sample: Number of images to include (from most recent actions)
+    
+    Returns a dict with 'messages' for the renderer.
+    """
+    from PIL import Image
+    
     window = buffer[-(past_len + future_len):]
     past = window[:past_len]
     future = window[past_len:]
@@ -33,31 +78,306 @@ def make_sample(buffer, past_len, future_len, processor):
     past_actions_block = build_actions_block(past)
     future_actions = build_actions_block(future)
 
+    # Build content - optionally include images
+    if num_imgs_per_sample > 0:
+        # Collect images from the most recent N actions
+        image_content = []
+        for i in range(past_len):
+            if i >= (past_len - num_imgs_per_sample):
+                img_path = past[i].get("img")
+                if img_path and Path(img_path).exists():
+                    try:
+                        img = Image.open(img_path)
+                        image_content.append({"type": "image", "image": img})
+                    except Exception as e:
+                        logger.warning(f"Failed to load image {img_path}: {e}")
+        
+        if image_content:
+            task_desc = (
+                "You will analyze user behavior and predict what the user will do next. "
+                "Below are the actions the user took. Look at the images of their device "
+                "to help you predict the user's next action."
+            )
+            content = image_content + [
+                {"type": "text", "text": task_desc + "\n\n" + past_actions_block}
+            ]
+        else:
+            # No images loaded successfully, fall back to text-only
+            content = TASK_DESCRIPTION + "\n\n" + past_actions_block
+    else:
+        content = TASK_DESCRIPTION + "\n\n" + past_actions_block
+
     messages = [{
         "role": "user",
-        "content": [{"type": "text", "text": TASK_DESCRIPTION + "\n\n" + past_actions_block}],
+        "content": content,
     }]
-
-    prompt = processor.apply_chat_template(
-        messages, add_generation_prompt=False, tokenize=False,
-    )
 
     start_ts = datetime.strptime(past[0]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
     end_ts = datetime.strptime(future[-1]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
 
     return {
-        "prompt": prompt,
+        "messages": messages,
         "solution": future_actions,
         "ts": start_ts,
         "end_ts": end_ts,
         "future_len": future_len,
         "past_len": past_len,
-        "actions": future_actions,
         "past_actions": past_actions_block,
     }
 
 
-def label_loop(recorder, labeler, trainer, label_queue, inference_buffer):
+class OnlineEnvTrainer:
+    """
+    Online trainer using the Env abstraction.
+    
+    This manages the training loop for streaming data, using LongNAPEnv
+    for the multi-turn Think → Revise → Actions flow.
+    """
+    
+    def __init__(
+        self,
+        model_name: str = "Qwen/Qwen3-VL-30B-A3B-Instruct",
+        reward_llm: str = "gemini/gemini-3-flash-preview",
+        num_generations: int = 8,
+        learning_rate: float = 1e-5,
+        max_tokens: int = 512,
+        temperature: float = 1.0,
+        lora_rank: int = 32,
+        num_imgs_per_sample: int = 0,
+        retrieval_top_k: int = 10,
+        retrieval_mmr_k: int = 10,
+        retrieval_mmr_alpha: float = 0.5,
+        retrieval_time_decay_lambda: float = 0.5,
+        dedup_threshold: float = 0.8,
+        log_dir: str = "./logs",
+        log_to_wandb: bool = False,
+        wandb_project: str = "longnap-online",
+        wandb_run_name: str = "longnap-online",
+        checkpoint_every_n_steps: int = 0,
+        resume_from_checkpoint: Optional[str] = None,
+    ):
+        self.model_name = model_name
+        self.num_generations = num_generations
+        self.learning_rate = learning_rate
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        self.log_dir = log_dir
+        self.log_to_wandb = log_to_wandb and WANDB_AVAILABLE
+        self.checkpoint_every_n_steps = checkpoint_every_n_steps
+        self.run_name = wandb_run_name
+        
+        # Initialize Tinker clients
+        self.service_client = tinker.ServiceClient()
+        self.training_client = self.service_client.create_lora_training_client(
+            base_model=model_name,
+            rank=lora_rank,
+        )
+        self.tokenizer = self.training_client.get_tokenizer()
+        self.num_imgs_per_sample = num_imgs_per_sample
+        
+        # Get renderer - use appropriate renderer with image processor for vision models
+        renderer_name = model_info.get_recommended_renderer_name(model_name)
+        if "vl" in renderer_name.lower() or (num_imgs_per_sample > 0 and "VL" in model_name):
+            image_processor = get_image_processor(model_name)
+            self.renderer = get_renderer(renderer_name, self.tokenizer, image_processor)
+        else:
+            self.renderer = get_renderer(renderer_name, self.tokenizer)
+        
+        # Save initial weights for sampler
+        save_result = self.training_client.save_weights_for_sampler(
+            name=f'{self.run_name}.model'
+        ).result()
+        self.latest_sampler_path = save_result.path
+        self.sampling_client = self.service_client.create_sampling_client(
+            model_path=self.latest_sampler_path
+        )
+        
+        # Create retriever
+        def dedup_fn(a, b):
+            return jaccard_ngrams(a, b, n=3)
+        
+        self.retriever = InMemoryBM25Temporal(
+            dedup_threshold=dedup_threshold,
+            dedup_sim_fn=dedup_fn,
+        )
+        
+        # Create reward scorer
+        self.reward_scorer = create_reward_scorer(reward_llm=reward_llm)
+        
+        # Retrieval parameters
+        self.retrieval_top_k = retrieval_top_k
+        self.retrieval_mmr_k = retrieval_mmr_k
+        self.retrieval_mmr_alpha = retrieval_mmr_alpha
+        self.retrieval_time_decay_lambda = retrieval_time_decay_lambda
+        
+        # Training state
+        self._step = 0
+        self._start_time = None
+        
+        # Initialize wandb
+        if self.log_to_wandb:
+            wandb.init(
+                project=wandb_project,
+                name=wandb_run_name,
+                config={
+                    "model": model_name,
+                    "reward_llm": reward_llm,
+                    "max_tokens": max_tokens,
+                    "num_generations": num_generations,
+                    "temperature": temperature,
+                    "learning_rate": learning_rate,
+                }
+            )
+        
+        # Handle checkpoint resume
+        if resume_from_checkpoint:
+            self._load_checkpoint(resume_from_checkpoint)
+    
+    def _load_checkpoint(self, checkpoint_path: str):
+        """Load a checkpoint (simplified for online training)."""
+        logger.info(f"Loading checkpoint from {checkpoint_path}...")
+        try:
+            self.training_client.load_state(checkpoint_path).result()
+            save_result = self.training_client.save_weights_for_sampler(
+                name=f'{self.run_name}.model-resumed'
+            ).result()
+            self.latest_sampler_path = save_result.path
+            self.sampling_client = self.service_client.create_sampling_client(
+                model_path=self.latest_sampler_path
+            )
+            logger.info(f"Successfully loaded checkpoint")
+        except Exception as e:
+            logger.error(f"Failed to load checkpoint: {e}")
+    
+    def _save_checkpoint(self, step: int) -> Optional[str]:
+        """Save a checkpoint."""
+        try:
+            checkpoint_name = f"{self.run_name}.checkpoint_step_{step:06d}"
+            save_result = self.training_client.save_state(name=checkpoint_name).result()
+            logger.info(f"Saved checkpoint at step {step}: {save_result.path}")
+            return save_result.path
+        except Exception as e:
+            logger.error(f"Failed to save checkpoint: {e}")
+            return None
+    
+    async def train_on_batch(self, batch: List[Dict[str, Any]]) -> Dict[str, float]:
+        """
+        Train on a batch of samples using the Env abstraction.
+        
+        Args:
+            batch: List of sample dicts with 'messages', 'solution', etc.
+            
+        Returns:
+            Dict of metrics
+        """
+        step_start = time.time()
+        metrics = {}
+        
+        # Create EnvGroupBuilders for each sample in the batch
+        env_group_builders = []
+        for sample in batch:
+            builder = LongNAPEnvGroupBuilder(
+                input_data=sample,
+                renderer=self.renderer,
+                tokenizer=self.tokenizer,
+                retriever=self.retriever,
+                reward_scorer=self.reward_scorer,
+                num_envs=self.num_generations,
+                retrieval_top_k=self.retrieval_top_k,
+                retrieval_mmr_k=self.retrieval_mmr_k,
+                retrieval_mmr_alpha=self.retrieval_mmr_alpha,
+                retrieval_time_decay_lambda=self.retrieval_time_decay_lambda,
+            )
+            env_group_builders.append(builder)
+        
+        # Create policy completer
+        policy = TinkerTokenCompleter(
+            self.sampling_client,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+        )
+        
+        # Run rollouts for all groups
+        trajectory_groups: List[TrajectoryGroup] = []
+        for builder in env_group_builders:
+            traj_group = await do_group_rollout(builder, policy)
+            trajectory_groups.append(traj_group)
+        
+        # Compute advantages (GRPO-style per-group normalization)
+        advantages = compute_advantages(trajectory_groups)
+        
+        # Assemble training data
+        data_D, metadata_D = assemble_training_data(trajectory_groups, advantages)
+        
+        if not data_D:
+            logger.warning("No training data generated")
+            return {"step": self._step, "loss": 0.0}
+        
+        # Forward-backward pass
+        fwdbwd_future = self.training_client.forward_backward(
+            data_D,
+            loss_fn="importance_sampling",
+        )
+        
+        # Optimizer step (pipelined)
+        optim_future = self.training_client.optim_step(
+            AdamParams(learning_rate=self.learning_rate)
+        )
+        
+        # Wait for results
+        fwdbwd_result = fwdbwd_future.result()
+        optim_result = optim_future.result()
+        
+        # Update sampling client
+        save_result = self.training_client.save_weights_for_sampler(
+            name=f'{self.run_name}.model-step-{self._step}'
+        ).result()
+        self.latest_sampler_path = save_result.path
+        self.sampling_client = self.service_client.create_sampling_client(
+            model_path=self.latest_sampler_path
+        )
+        
+        # Compute metrics
+        all_rewards = []
+        for traj_group in trajectory_groups:
+            all_rewards.extend(traj_group.get_total_rewards())
+        
+        metrics["step"] = self._step
+        metrics["loss"] = fwdbwd_result.metrics.get("loss:sum", 0.0)
+        metrics["reward_mean"] = sum(all_rewards) / len(all_rewards) if all_rewards else 0.0
+        metrics["reward_std"] = (
+            (sum((r - metrics["reward_mean"])**2 for r in all_rewards) / len(all_rewards))**0.5
+            if all_rewards else 0.0
+        )
+        metrics["num_trajectories"] = len(all_rewards)
+        metrics["step_time"] = time.time() - step_start
+        metrics["retriever_size"] = self.retriever.N
+        
+        # Log to wandb
+        if self.log_to_wandb and wandb.run is not None:
+            wandb.log(metrics, step=self._step)
+        
+        # Console log
+        logger.info(
+            f"Step {self._step}: loss={metrics['loss']:.4f}, "
+            f"reward={metrics['reward_mean']:.4f}±{metrics['reward_std']:.4f}, "
+            f"time={metrics['step_time']:.2f}s"
+        )
+        
+        # Checkpoint
+        if self.checkpoint_every_n_steps > 0 and (self._step + 1) % self.checkpoint_every_n_steps == 0:
+            self._save_checkpoint(self._step + 1)
+        
+        self._step += 1
+        return metrics
+    
+    def train_sync(self, batch: List[Dict[str, Any]]) -> Dict[str, float]:
+        """Synchronous wrapper for train_on_batch."""
+        return asyncio.run(self.train_on_batch(batch))
+
+
+def label_loop(recorder, labeler, retriever, label_queue, inference_buffer):
+    """Label incoming screen recordings and add to retriever."""
     label_count = 0
 
     for agg in recorder.iter_aggregations():
@@ -67,7 +387,7 @@ def label_loop(recorder, labeler, trainer, label_queue, inference_buffer):
         label_count += 1
 
         ts = datetime.strptime(labeled["start_time"], "%Y-%m-%d_%H-%M-%S-%f")
-        trainer.retriever.add(
+        retriever.add(
             labeled["text"],
             event_ts=int(ts.timestamp()),
             namespace="train",
@@ -83,7 +403,6 @@ def label_loop(recorder, labeler, trainer, label_queue, inference_buffer):
                 "pipeline/label_text": wandb.Html(f"<pre>{labeled['text']}</pre>"),
             }
 
-            # log screenshot + caption every 10 labels
             if label_count % 10 == 1 and labeled.get("img") and Path(labeled["img"]).exists():
                 log["pipeline/label_image"] = wandb.Image(
                     labeled["img"], caption=labeled["text"][:200],
@@ -92,7 +411,8 @@ def label_loop(recorder, labeler, trainer, label_queue, inference_buffer):
             wandb.log(log)
 
 
-def batch_iter(recorder, label_queue, past_len, future_len, batch_size, processor):
+def batch_iter(recorder, label_queue, past_len, future_len, batch_size, num_imgs_per_sample=0):
+    """Iterate over batches from the label queue."""
     min_required = past_len + future_len
     buffer = []
     batch = []
@@ -107,7 +427,7 @@ def batch_iter(recorder, label_queue, past_len, future_len, batch_size, processo
         buffer.append(record)
 
         if len(buffer) >= min_required:
-            sample = make_sample(buffer, past_len, future_len, processor)
+            sample = make_sample(buffer, past_len, future_len, num_imgs_per_sample)
             batch.append(sample)
 
             if len(batch) >= batch_size:
@@ -123,27 +443,24 @@ def batch_iter(recorder, label_queue, past_len, future_len, batch_size, processo
                 batch = []
 
 
-def _build_ground_truth(records):
-    return build_actions_block(records)
-
-
 def inference_loop(predictor, inference_buffer, trainer, recorder,
                    past_len, future_len, processor, predict_interval,
                    reward_llm, overlay):
+    """Run periodic inference and evaluation."""
     last_path = None
     prediction_count = 0
     eval_count = 0
-    pending_evals = []  # (result, buffer_pos, future_len)
+    pending_evals = []
 
     while recorder.running:
-        # pick up new checkpoint
+        # Pick up new checkpoint
         path = getattr(trainer, "latest_sampler_path", None)
         if path and path != last_path:
             predictor.model_path = path
             last_path = path
             print(f"[inference] using checkpoint: {path}")
 
-        # make a prediction
+        # Make a prediction
         if predictor.model_path and len(inference_buffer) >= past_len:
             buffer_pos = len(inference_buffer)
             t0 = time.time()
@@ -167,11 +484,11 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
                     "inference/latency_s": latency,
                 })
 
-        # check pending evals — score predictions whose ground truth has arrived
+        # Check pending evals
         still_pending = []
         for result, buf_pos, fl in pending_evals:
             if len(inference_buffer) >= buf_pos + fl:
-                ground_truth = _build_ground_truth(inference_buffer[buf_pos:buf_pos + fl])
+                ground_truth = build_actions_block(inference_buffer[buf_pos:buf_pos + fl])
                 reward = predictor.score_prediction(result["actions"], ground_truth, reward_llm)
                 eval_count += 1
 
@@ -181,13 +498,6 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
                     wandb.log({
                         "inference/reward": reward,
                         "inference/evals_total": eval_count,
-                        "inference/eval": wandb.Table(
-                            columns=["step", "checkpoint", "think", "revise",
-                                     "actions", "ground_truth", "reward"],
-                            data=[[eval_count, result["model_path"],
-                                   result["think"], result["revise"],
-                                   result["actions"], ground_truth, reward]],
-                        ),
                     })
             else:
                 still_pending.append((result, buf_pos, fl))
@@ -197,68 +507,78 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Online record -> label -> train -> infer pipeline")
+    parser = argparse.ArgumentParser(
+        description="Online training pipeline using Env abstraction"
+    )
 
-    # recorder
+    # Recorder
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--buffer-seconds", type=int, default=12)
     parser.add_argument("--precision", type=str, choices=["accurate", "rough"], default="accurate")
 
-    # labeler
+    # Labeler
     parser.add_argument("--label-model", type=str, default="gemini/gemini-2.0-flash")
 
-    # trainer
+    # Trainer
     parser.add_argument("--model", type=str, default="Qwen/Qwen3-VL-30B-A3B-Instruct")
     parser.add_argument("--reward-llm", type=str, default="gemini/gemini-3-flash-preview")
     parser.add_argument("--num-generations", type=int, default=8)
     parser.add_argument("--learning-rate", type=float, default=1e-5)
     parser.add_argument("--max-completion-length", type=int, default=512)
+    parser.add_argument("--num-imgs-per-sample", type=int, default=0, 
+                        help="Number of images to include per sample (0 = text only)")
 
-    # pipeline
+    # Pipeline
     parser.add_argument("--past-len", type=int, default=8)
     parser.add_argument("--future-len", type=int, default=4)
     parser.add_argument("--batch-size", type=int, default=2)
 
-    # inference
+    # Inference
     parser.add_argument("--predict-every-n-seconds", type=int, default=10)
     parser.add_argument("--disable-inference", action="store_true")
     parser.add_argument("--no-overlay", action="store_true")
 
-    # logging
+    # Logging
     parser.add_argument("--log-every-n-steps", type=int, default=1)
     parser.add_argument("--log-dir", type=str, default="./logs")
     parser.add_argument("--log-to-wandb", action="store_true")
     parser.add_argument("--wandb-project", type=str, default="longnap-online")
-    parser.add_argument("--wandb-run-name", type=str, default="longnap-online")
+    parser.add_argument("--wandb-run-name", type=str, default="longnap-online-env")
 
-    # checkpointing
-    parser.add_argument("--checkpoint-every-n-steps", type=int, default=0, help="Save checkpoint every N steps (0 = disabled)")
-    parser.add_argument("--resume-from-checkpoint", type=str, default=None, help="Resume from checkpoint: 'auto' or a tinker:// path")
+    # Checkpointing
+    parser.add_argument("--checkpoint-every-n-steps", type=int, default=0)
+    parser.add_argument("--resume-from-checkpoint", type=str, default=None)
 
     args = parser.parse_args()
 
-    # setup precision preset
+    # Setup logging
+    logging.basicConfig(level=logging.INFO)
+
+    # Setup precision preset
     from record.constants import constants_manager
     constants_manager.set_preset(args.precision, verbose=False)
 
-    # tokenizer
+    # Tokenizer (for inference)
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
 
-    # stage 1: recorder
-    recorder = OnlineRecorder(fps=args.fps, buffer_seconds=args.buffer_seconds, log_dir=args.log_dir)
+    # Stage 1: Recorder
+    recorder = OnlineRecorder(
+        fps=args.fps,
+        buffer_seconds=args.buffer_seconds,
+        log_dir=args.log_dir,
+    )
 
-    # stage 2: labeler
+    # Stage 2: Labeler
     labeler = Labeler(model=args.label_model, log_dir=recorder.session_dir)
 
-    # stage 3: trainer (initializes wandb if --log-to-wandb)
-    trainer = LongNAP(
-        model=args.model,
+    # Stage 3: Trainer (using Env abstraction)
+    trainer = OnlineEnvTrainer(
+        model_name=args.model,
         reward_llm=args.reward_llm,
         num_generations=args.num_generations,
         learning_rate=args.learning_rate,
-        max_completion_length=args.max_completion_length,
-        generation_batch_size=args.batch_size,
-        log_every_n_steps=args.log_every_n_steps,
+        max_tokens=args.max_completion_length,
+        num_imgs_per_sample=args.num_imgs_per_sample,
         log_dir=args.log_dir,
         log_to_wandb=args.log_to_wandb,
         wandb_project=args.wandb_project,
@@ -267,7 +587,7 @@ def main():
         resume_from_checkpoint=args.resume_from_checkpoint,
     )
 
-    # stage 4: predictor (shares retriever with trainer)
+    # Stage 4: Predictor (shares retriever with trainer)
     predictor = Predictor(
         model_path=trainer.latest_sampler_path,
         max_tokens=args.max_completion_length,
@@ -275,12 +595,12 @@ def main():
         log_dir=recorder.session_dir,
     )
 
-    # overlay (must be created on main thread for AppKit)
+    # Overlay (must be on main thread for AppKit)
     overlay = None
     if not args.disable_inference and not args.no_overlay:
         overlay = ActionOverlay()
 
-    # wire it up
+    # Wire it up
     label_queue = Queue()
     inference_buffer = []
 
@@ -295,28 +615,37 @@ def main():
 
     recorder.start()
 
+    # Label thread
     label_thread = threading.Thread(
         target=label_loop,
-        args=(recorder, labeler, trainer, label_queue, inference_buffer),
+        args=(recorder, labeler, trainer.retriever, label_queue, inference_buffer),
         daemon=True,
     )
     label_thread.start()
 
+    # Inference thread
     if not args.disable_inference:
         inference_thread = threading.Thread(
             target=inference_loop,
-            args=(predictor, inference_buffer, trainer, recorder,
-                  args.past_len, args.future_len, tokenizer,
-                  args.predict_every_n_seconds, args.reward_llm, overlay),
+            args=(
+                predictor, inference_buffer, trainer, recorder,
+                args.past_len, args.future_len, tokenizer,
+                args.predict_every_n_seconds, args.reward_llm, overlay
+            ),
             daemon=True,
         )
         inference_thread.start()
 
-    # training runs on a background thread so main thread can run AppKit event loop
-    data = batch_iter(recorder, label_queue, args.past_len, args.future_len, args.batch_size, tokenizer)
+    # Training loop (runs on background thread)
+    data = batch_iter(
+        recorder, label_queue, args.past_len, args.future_len, 
+        args.batch_size, args.num_imgs_per_sample
+    )
 
     def train_loop():
-        trainer.train(data)
+        for batch in data:
+            trainer.train_sync(batch)
+        
         if overlay:
             overlay.close()
         recorder.stop()
@@ -324,8 +653,9 @@ def main():
     train_thread = threading.Thread(target=train_loop, daemon=True)
     train_thread.start()
 
+    # Main thread handles overlay or waits for training
     if overlay:
-        overlay.run()  # blocks main thread on AppKit run loop
+        overlay.run()
     else:
         train_thread.join()
 

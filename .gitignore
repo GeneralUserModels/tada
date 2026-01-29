@@ -1,3 +1,6 @@
+tinker-cookbook/
+pack/
+data/
 grpo_trainer.py
 
 *.parquet
