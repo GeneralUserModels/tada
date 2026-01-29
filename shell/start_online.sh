@@ -2,10 +2,10 @@
 set -e
 
 # LongNAP Online Pipeline
-# Records screen → labels with LLM → trains → predicts next actions
+# Records screen → labels with LLM → trains with Env-based RL → predicts next actions
 # Make sure .env is configured with GEMINI_API_KEY and TINKER_API_KEY
 
-python run_online.py \
+uv run run_online.py \
     --fps 5 \
     --buffer-seconds 12 \
     --precision accurate \
