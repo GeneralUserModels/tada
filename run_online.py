@@ -11,9 +11,6 @@ training through the tinker_cookbook Env abstraction.
 from dotenv import load_dotenv
 load_dotenv()
 
-from PIL import ImageFile
-ImageFile.LOAD_TRUNCATED_IMAGES = True
-
 import argparse
 import asyncio
 import logging
@@ -27,35 +24,62 @@ from concurrent.futures import ThreadPoolExecutor
 from queue import Queue, Empty
 from typing import Any, Dict, List, Optional
 
-from transformers import AutoTokenizer
+# ActionOverlay MUST be imported before torch/transformers/PIL —
+# PIL conflicts with AppKit's NSApplication on macOS.
+from powernap.inference import ActionOverlay
 
-import tinker
-from tinker.types import AdamParams
 
-from tinker_cookbook import model_info, renderers
-from tinker_cookbook.completers import TinkerTokenCompleter
-from tinker_cookbook.renderers.qwen3 import Qwen3VLInstructRenderer
-from tinker_cookbook.rl.data_processing import assemble_training_data, compute_advantages
-from tinker_cookbook.rl.train import _remove_mask
-from tinker_cookbook.rl.rollouts import do_group_rollout
-from tinker_cookbook.rl.types import TrajectoryGroup
-from tinker_cookbook.image_processing_utils import get_image_processor
-from tinker_cookbook.tokenizer_utils import get_tokenizer
+def _load_heavy_imports():
+    """Deferred imports that pull in torch/PIL. Call after overlay is created."""
+    import tinker
+    from tinker.types import AdamParams
+    from transformers import AutoTokenizer
+    from tinker_cookbook import model_info, renderers
+    from tinker_cookbook.completers import TinkerTokenCompleter
+    from tinker_cookbook.renderers.qwen3 import Qwen3VLInstructRenderer
+    from tinker_cookbook.rl.data_processing import assemble_training_data, compute_advantages
+    from tinker_cookbook.rl.train import _remove_mask
+    from tinker_cookbook.rl.rollouts import do_group_rollout
+    from tinker_cookbook.rl.types import TrajectoryGroup
+    from tinker_cookbook.image_processing_utils import get_image_processor
+    from tinker_cookbook.tokenizer_utils import get_tokenizer
+    from powernap.napsack import OnlineRecorder, Labeler
+    from powernap.longnap.env import LongNAPEnvGroupBuilder
+    from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams
+    from powernap.longnap.scorer import create_reward_scorer
+    from powernap.longnap.trainer_utils import TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block
+    from powernap.inference import Predictor
+    from powernap.sleepwalk import SleepWalker
 
-from powernap.napsack import OnlineRecorder, Labeler
-from powernap.longnap.env import LongNAPEnvGroupBuilder
-from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams
-from powernap.longnap.scorer import create_reward_scorer
-from powernap.longnap.trainer_utils import TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block
-from powernap.inference import Predictor, ActionOverlay
-from powernap.sleepwalk import SleepWalker
+    try:
+        import wandb
+        wandb_available = True
+    except ImportError:
+        wandb = None
+        wandb_available = False
 
-try:
-    import wandb
-    WANDB_AVAILABLE = True
-except ImportError:
-    wandb = None
-    WANDB_AVAILABLE = False
+    # Inject into module globals so the rest of the code can use them
+    g = globals()
+    g.update({
+        "tinker": tinker, "AdamParams": AdamParams, "AutoTokenizer": AutoTokenizer,
+        "model_info": model_info, "renderers": renderers,
+        "TinkerTokenCompleter": TinkerTokenCompleter,
+        "Qwen3VLInstructRenderer": Qwen3VLInstructRenderer,
+        "assemble_training_data": assemble_training_data,
+        "compute_advantages": compute_advantages, "_remove_mask": _remove_mask,
+        "do_group_rollout": do_group_rollout, "TrajectoryGroup": TrajectoryGroup,
+        "get_image_processor": get_image_processor, "get_tokenizer": get_tokenizer,
+        "OnlineRecorder": OnlineRecorder, "Labeler": Labeler,
+        "LongNAPEnvGroupBuilder": LongNAPEnvGroupBuilder,
+        "InMemoryBM25Temporal": InMemoryBM25Temporal, "jaccard_ngrams": jaccard_ngrams,
+        "create_reward_scorer": create_reward_scorer,
+        "TASK_DESCRIPTION": TASK_DESCRIPTION,
+        "TASK_DESCRIPTION_WITH_IMAGES": TASK_DESCRIPTION_WITH_IMAGES,
+        "build_actions_block": build_actions_block,
+        "Predictor": Predictor, "SleepWalker": SleepWalker,
+        "wandb": wandb, "WANDB_AVAILABLE": wandb_available,
+    })
+
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +101,9 @@ def make_sample(
     
     Returns a dict with 'messages' for the renderer.
     """
-    from PIL import Image
-    
+    from PIL import Image, ImageFile
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+
     window = buffer[-(past_len + future_len):]
     past = window[:past_len]
     future = window[past_len:]
@@ -396,7 +421,8 @@ def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, slee
     dedupe_threshold = 1
 
     import imagehash
-    from PIL import Image
+    from PIL import Image, ImageFile
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
 
     for agg in recorder.iter_aggregations():
         # pack-style sanitization: skip if no screenshot
@@ -423,21 +449,13 @@ def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, slee
         print(f"[label] labeled action #{label_count}: {labeled['text'][:80]}... ({latency:.2f}s)")
 
 
-        ts = datetime.strptime(labeled["start_time"], "%Y-%m-%d_%H-%M-%S-%f")
-        retriever.add(
-            labeled["text"],
-            event_ts=int(ts.timestamp()),
-            namespace="train",
-        )
-
-        label_queue.put(labeled)
-
+        # always add to inference buffer
         inference_buffer.append(labeled)
 
         # only feed training data when sleepwalk is NOT active
         if not sleepwalk_active.is_set():
             ts = datetime.strptime(labeled["start_time"], "%Y-%m-%d_%H-%M-%S-%f")
-            trainer.retriever.add(
+            retriever.add(
                 labeled["text"],
                 event_ts=int(ts.timestamp()),
                 namespace="train",
@@ -635,6 +653,14 @@ def main():
 
     args = parser.parse_args()
 
+    # Create overlay FIRST — before torch/transformers/PIL are loaded.
+    overlay = None
+    if not args.disable_inference and not args.no_overlay:
+        overlay = ActionOverlay()
+
+    # Now load heavy imports (torch, transformers, tinker, etc.)
+    _load_heavy_imports()
+
     # Setup logging
     logging.basicConfig(level=logging.INFO)
 
@@ -679,12 +705,6 @@ def main():
         log_dir=recorder.session_dir,
     )
 
-    # Overlay (must be on main thread for AppKit)
-    overlay = None
-    if not args.disable_inference and not args.no_overlay:
-        overlay = ActionOverlay()
-
-
     # sleepwalk
     sleepwalk_active = threading.Event()
     inference_buffer = []
@@ -722,6 +742,14 @@ def main():
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
+
+    # Preload HIServices on main thread — pyobjc lazy loading isn't thread-safe,
+    # and pynput's listener thread needs AXIsProcessTrusted() loaded before it starts.
+    try:
+        import HIServices
+        HIServices.AXIsProcessTrusted()
+    except Exception:
+        pass
 
     recorder.start()
 
