@@ -108,16 +108,23 @@ class LongNAP():
         log_to_wandb: bool = False,
         wandb_project: str = "napsack",
         wandb_run_name: str = "napsack",
+        # Checkpointing parameters
+        checkpoint_every_n_steps: int = 0,  # 0 = no checkpointing
+        resume_from_checkpoint: Optional[str] = None,  # "auto", or a tinker:// path
     ):
 
         base_model = model
+        
+        # Run name is used as prefix for all Tinker artifacts (helps avoid collisions on shared accounts)
+        self.run_name = wandb_run_name
+        
         self.service_client = tinker.ServiceClient()
         self.training_client = self.service_client.create_lora_training_client(
             base_model=base_model
         )
         self.tokenizer = self.training_client.get_tokenizer()
         self.reward_llm = reward_llm
-        save_result = self.training_client.save_weights_for_sampler(name='napsack-model').result()
+        save_result = self.training_client.save_weights_for_sampler(name=f'{self.run_name}/model').result()
         self.latest_sampler_path = save_result.path
         self.sampling_client = self.service_client.create_sampling_client(model_path=self.latest_sampler_path)
         self.retrieval_params = types.SamplingParams(
@@ -207,8 +214,18 @@ class LongNAP():
         if log_dir:
             os.makedirs(log_dir, exist_ok=True)
             self.metrics_file = os.path.join(log_dir, "metrics.jsonl")
+            self.checkpoints_file = os.path.join(log_dir, "checkpoints.jsonl")
         else:
             self.metrics_file = None
+            self.checkpoints_file = None
+
+        # Checkpointing configuration
+        self.checkpoint_every_n_steps = checkpoint_every_n_steps
+        self._resume_step = 0  # Step to resume from (0 = start fresh)
+        
+        # Handle checkpoint resume
+        if resume_from_checkpoint:
+            self._resume_step = self._load_checkpoint(resume_from_checkpoint)
 
         # Completion logs buffer
         self._logs = {
@@ -600,6 +617,138 @@ class LongNAP():
 
         return scores
 
+    def _save_checkpoint(self, step: int) -> Optional[str]:
+        """
+        Save a checkpoint to Tinker (weights + optimizer state) and retriever state.
+        
+        Args:
+            step: Current training step
+            
+        Returns:
+            The tinker:// path to the saved checkpoint, or None if save failed
+        """
+        try:
+            checkpoint_name = f"{self.run_name}/checkpoint_step_{step:06d}"
+            save_result = self.training_client.save_state(name=checkpoint_name).result()
+            checkpoint_path = save_result.path
+            
+            logger.info(f"Saved checkpoint at step {step}: {checkpoint_path}")
+            
+            # Save retriever state
+            retriever_path = None
+            if self.log_dir:
+                retriever_dir = os.path.join(self.log_dir, "retrievers")
+                os.makedirs(retriever_dir, exist_ok=True)
+                retriever_path = os.path.join(retriever_dir, f"retriever_step_{step:06d}.json.gz")
+                self.retriever.save_checkpoint(retriever_path)
+                logger.info(f"Saved retriever at step {step}: {retriever_path}")
+            
+            # Record checkpoint in local file
+            if self.checkpoints_file:
+                checkpoint_info = {
+                    "step": step,
+                    "path": checkpoint_path,
+                    "retriever_path": retriever_path,
+                    "timestamp": time.time(),
+                }
+                with open(self.checkpoints_file, "a") as f:
+                    f.write(json.dumps(checkpoint_info) + "\n")
+            
+            return checkpoint_path
+        except Exception as e:
+            logger.error(f"Failed to save checkpoint at step {step}: {e}")
+            return None
+    
+    def _get_latest_checkpoint(self) -> Optional[Dict[str, Any]]:
+        """
+        Get the latest checkpoint info from checkpoints.jsonl.
+        
+        Returns:
+            Dict with 'step' and 'path' keys, or None if no checkpoints found
+        """
+        if not self.checkpoints_file or not os.path.exists(self.checkpoints_file):
+            return None
+        
+        latest = None
+        try:
+            with open(self.checkpoints_file, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        checkpoint_info = json.loads(line)
+                        if latest is None or checkpoint_info["step"] > latest["step"]:
+                            latest = checkpoint_info
+        except Exception as e:
+            logger.error(f"Failed to read checkpoints file: {e}")
+            return None
+        
+        return latest
+    
+    def _load_checkpoint(self, checkpoint_arg: str) -> int:
+        """
+        Load a checkpoint from Tinker and retriever state.
+        
+        Args:
+            checkpoint_arg: Either "auto" to load latest from checkpoints.jsonl,
+                           or a specific tinker:// path
+        
+        Returns:
+            The step number to resume from (0 if no checkpoint loaded)
+        """
+        checkpoint_path = None
+        retriever_path = None
+        resume_step = 0
+        
+        if checkpoint_arg == "auto":
+            # Auto-detect latest checkpoint from checkpoints.jsonl
+            latest = self._get_latest_checkpoint()
+            if latest:
+                checkpoint_path = latest["path"]
+                retriever_path = latest.get("retriever_path")
+                resume_step = latest["step"]
+                logger.info(f"Auto-detected checkpoint at step {resume_step}: {checkpoint_path}")
+            else:
+                logger.info("No existing checkpoints found, starting fresh")
+                return 0
+        else:
+            # Use the provided path directly
+            checkpoint_path = checkpoint_arg
+            # Try to extract step from path (e.g., "checkpoint_step_000100")
+            match = re.search(r"checkpoint_step_(\d+)", checkpoint_path)
+            if match:
+                resume_step = int(match.group(1))
+            
+            # Try to find retriever path from checkpoints.jsonl
+            if self.checkpoints_file and os.path.exists(self.checkpoints_file):
+                with open(self.checkpoints_file, "r") as f:
+                    for line in f:
+                        info = json.loads(line.strip())
+                        if info.get("path") == checkpoint_path:
+                            resume_step = info["step"]
+                            retriever_path = info.get("retriever_path")
+                            break
+        
+        if checkpoint_path:
+            try:
+                logger.info(f"Loading checkpoint from {checkpoint_path}...")
+                self.training_client.load_state(checkpoint_path).result()
+                logger.info(f"Successfully loaded checkpoint, resuming from step {resume_step + 1}")
+                
+                # Load retriever state if available
+                if retriever_path and os.path.exists(retriever_path):
+                    logger.info(f"Loading retriever from {retriever_path}...")
+                    self.retriever.load_checkpoint(retriever_path)
+                    logger.info(f"Successfully loaded retriever with {self.retriever.N} documents")
+                elif retriever_path:
+                    logger.warning(f"Retriever checkpoint not found: {retriever_path}")
+                
+                return resume_step
+            except Exception as e:
+                logger.error(f"Failed to load checkpoint {checkpoint_path}: {e}")
+                return 0
+        
+        return 0
+
     def train(self, data):
         """
         Main training loop.
@@ -613,6 +762,14 @@ class LongNAP():
         tokenizer = self.training_client.get_tokenizer()
 
         for step, batch in enumerate(data):
+            # Skip steps that were already completed (when resuming)
+            if step < self._resume_step:
+                continue
+            
+            # Log if we're resuming
+            if step == self._resume_step and self._resume_step > 0:
+                logger.info(f"Resuming training from step {step}")
+            
             self._step = step
             step_start_time = time.time()
             B = len(batch)
@@ -694,7 +851,7 @@ class LongNAP():
             optim_result = optim_future.result()
             
             # 6) Update sampling client with new weights for next iteration
-            save_result = self.training_client.save_weights_for_sampler(name=f'napsack-model-step-{step}').result()
+            save_result = self.training_client.save_weights_for_sampler(name=f'{self.run_name}/model-step-{step}').result()
             self.latest_sampler_path = save_result.path
             self.sampling_client = self.service_client.create_sampling_client(model_path=self.latest_sampler_path)
             
@@ -730,10 +887,20 @@ class LongNAP():
                     step=step,
                     start_time=step_start_time
                 )
+            
+            # 9) Save checkpoint periodically (step+1 because we've completed this step)
+            if self.checkpoint_every_n_steps > 0 and (step + 1) % self.checkpoint_every_n_steps == 0:
+                self._save_checkpoint(step + 1)
         
         # Final logging
         if self.log_to_wandb:
             wandb.finish()
+        
+        # Save final checkpoint (only if not already saved at this step)
+        if self.checkpoint_every_n_steps > 0:
+            final_step = self._step + 1
+            if final_step % self.checkpoint_every_n_steps != 0:
+                self._save_checkpoint(final_step)
 
     def _add_winners_to_retriever(
         self,
