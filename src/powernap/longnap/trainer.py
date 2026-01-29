@@ -124,7 +124,7 @@ class LongNAP():
         )
         self.tokenizer = self.training_client.get_tokenizer()
         self.reward_llm = reward_llm
-        save_result = self.training_client.save_weights_for_sampler(name=f'{self.run_name}/model').result()
+        save_result = self.training_client.save_weights_for_sampler(name=f'{self.run_name}.model').result()
         self.latest_sampler_path = save_result.path
         self.sampling_client = self.service_client.create_sampling_client(model_path=self.latest_sampler_path)
         self.retrieval_params = types.SamplingParams(
@@ -628,7 +628,7 @@ class LongNAP():
             The tinker:// path to the saved checkpoint, or None if save failed
         """
         try:
-            checkpoint_name = f"{self.run_name}/checkpoint_step_{step:06d}"
+            checkpoint_name = f"{self.run_name}.checkpoint_step_{step:06d}"
             save_result = self.training_client.save_state(name=checkpoint_name).result()
             checkpoint_path = save_result.path
             
@@ -851,7 +851,7 @@ class LongNAP():
             optim_result = optim_future.result()
             
             # 6) Update sampling client with new weights for next iteration
-            save_result = self.training_client.save_weights_for_sampler(name=f'{self.run_name}/model-step-{step}').result()
+            save_result = self.training_client.save_weights_for_sampler(name=f'{self.run_name}.model-step-{step}').result()
             self.latest_sampler_path = save_result.path
             self.sampling_client = self.service_client.create_sampling_client(model_path=self.latest_sampler_path)
             
