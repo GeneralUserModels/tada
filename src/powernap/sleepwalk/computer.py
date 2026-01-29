@@ -3,7 +3,6 @@ import io
 import time
 
 import mss
-from PIL import Image
 from pynput.mouse import Controller as MouseController, Button
 from pynput.keyboard import Controller as KeyController, Key
 
@@ -55,6 +54,8 @@ class ComputerController:
 
     def screenshot(self):
         """Capture primary monitor, return base64-encoded PNG string."""
+        from PIL import Image
+
         with mss.mss() as sct:
             monitor = sct.monitors[1]  # primary monitor
             img = sct.grab(monitor)

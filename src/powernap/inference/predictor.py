@@ -53,29 +53,32 @@ class Predictor:
             self.predictions_file = log_path / "predictions.jsonl"
 
 
-    def _sample(self, prompt, stop, model_path=None):
-        response = self.client.completions.create(
+    def _sample(self, messages, stop, model_path=None):
+        response = self.client.chat.completions.create(
             model=model_path or self.model_path,
-            prompt=prompt,
+            messages=messages,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
             stop=stop,
         )
         return response.choices[0].message.content
 
-    def predict(self, messages, ts, future_len=4, past_actions=""):
+    def predict(self, messages, ts, future_len=4, past_actions="", model_path_override=None):
         """
         Run the 3-step Think → Revise → Actions flow.
-        
+
         Args:
             messages: Initial conversation messages (user context)
             ts: Timestamp for retrieval cutoff
             future_len: Number of actions to predict
             past_actions: Past actions block for retrieval query
+            model_path_override: Freeze model path for thread-safe concurrent predictions
         """
+        model_path = model_path_override or self.model_path
+
         # 1) Think - add think instruction and sample
         messages = messages + [build_think_user_message()]
-        think_text = self._sample(messages, stop=["</think>"])
+        think_text = self._sample(messages, stop=["</think>"], model_path=model_path)
         messages.append({"role": "assistant", "content": think_text})
 
         # 2) Retrieve using think output
@@ -95,12 +98,12 @@ class Predictor:
 
         # 3) Revise - add revise instruction with retrieved context and sample
         messages.append(build_revise_user_message(retrieved_text))
-        revise_text = self._sample(messages, stop=["</revise>"])
+        revise_text = self._sample(messages, stop=["</revise>"], model_path=model_path)
         messages.append({"role": "assistant", "content": revise_text})
 
         # 4) Actions - add actions instruction and sample
         messages.append(build_actions_user_message(future_len))
-        actions_text = self._sample(messages, stop=["</actions>"])
+        actions_text = self._sample(messages, stop=["</actions>"], model_path=model_path)
 
 
         result = {
@@ -135,7 +138,7 @@ class Predictor:
 
         ts = datetime.strptime(past[0]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
 
-        return self.predict(prompt, ts, future_len=future_len, past_actions=past_actions_block,
+        return self.predict(messages, ts, future_len=future_len, past_actions=past_actions_block,
                             model_path_override=model_path_override)
 
     def score_prediction(self, predicted_actions, ground_truth_actions, reward_llm):
