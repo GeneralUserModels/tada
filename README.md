@@ -14,11 +14,23 @@ cd ../powernap && uv pip install -e ".[wandb]"
 
 ## Environment
 
+Copy the example env file and fill in your keys:
+
 ```bash
-export GEMINI_API_KEY=...      # for litellm labeling & reward model
-export TINKER_API_KEY=...      # for tinker OAI inference endpoint
-# tinker service must be running for training + inference
+cp .env.example .env
 ```
+
+Required variables:
+
+| Variable | Description |
+|----------|-------------|
+| `GEMINI_API_KEY` | for litellm labeling & reward model |
+| `TINKER_API_KEY` | for tinker OAI inference endpoint |
+| `WANDB_API_KEY` | (optional) for wandb logging |
+
+The entry scripts (`train_longnap.py`, `run_inference.py`, `run_online.py`) automatically load `.env` via `python-dotenv`.
+
+> **Note:** tinker service must be running for training + inference
 
 ## Modules
 

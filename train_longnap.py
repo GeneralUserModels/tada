@@ -3,6 +3,9 @@
 Simple training script for LongNAP using Tinker.
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import argparse
 from datasets import load_dataset
 from transformers import AutoTokenizer
@@ -29,6 +32,9 @@ def main():
     parser.add_argument("--log_to_wandb", action="store_true")
     parser.add_argument("--wandb_project", type=str, default="longnap")
     parser.add_argument("--wandb_run_name", type=str, default="longnap-run")
+    # Checkpointing arguments
+    parser.add_argument("--checkpoint_every_n_steps", type=int, default=0, help="Save checkpoint every N steps (0 = disabled)")
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Resume from checkpoint: 'auto' or a tinker:// path")
     args = parser.parse_args()
 
     # Load tokenizer for chat template
@@ -60,6 +66,8 @@ def main():
         log_to_wandb=args.log_to_wandb,
         wandb_project=args.wandb_project,
         wandb_run_name=args.wandb_run_name,
+        checkpoint_every_n_steps=args.checkpoint_every_n_steps,
+        resume_from_checkpoint=args.resume_from_checkpoint,
     )
 
     # Create data iterator
