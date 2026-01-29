@@ -17,6 +17,8 @@ from tinker_cookbook.rl.types import (
 from tinker_cookbook.tokenizer_utils import get_tokenizer
 from tinker_cookbook.image_processing_utils import get_image_processor
 
+from .trainer_utils import TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
@@ -79,8 +81,7 @@ class NAPSack(Dataset):
                 "content": self.system_message,
             })
 
-        task_description = "You will analyze user behavior and predict what the user will do next. Below are the actions the user took" + \
-            ("." if self.num_imgs_per_sample == 0 else ". Look at the images of their device to help you predict the user's next action.")
+        task_description = TASK_DESCRIPTION_WITH_IMAGES if self.num_imgs_per_sample > 0 else TASK_DESCRIPTION
         
         all_images = []
         image_content = []
