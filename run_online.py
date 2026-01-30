@@ -464,30 +464,13 @@ def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, slee
 
     label_count = 0
     skip_count = 0
-    last_hash = None
-    dedupe_threshold = 1
-
-    import imagehash
-    from PIL import Image, ImageFile
-    ImageFile.LOAD_TRUNCATED_IMAGES = True
 
     for agg in recorder.iter_aggregations():
-        # pack-style sanitization: skip if no screenshot
+        # skip if no screenshot
         screenshot_path = agg.request.screenshot_path
         if not screenshot_path or not Path(screenshot_path).exists():
             skip_count += 1
             continue
-
-        # pack-style image dedup: skip if screenshot too similar to previous
-        try:
-            curr_hash = imagehash.phash(Image.open(screenshot_path))
-            if last_hash is not None and (curr_hash - last_hash) <= dedupe_threshold:
-                skip_count += 1
-                print(f"[label] dedup skip (hamming={curr_hash - last_hash}, total skipped={skip_count})")
-                continue
-            last_hash = curr_hash
-        except Exception:
-            pass
 
         t0 = time.time()
         labeled = labeler.label(agg)
