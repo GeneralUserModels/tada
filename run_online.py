@@ -14,6 +14,7 @@ load_dotenv()
 import argparse
 import asyncio
 import logging
+import re
 import signal
 import sys
 import threading
@@ -521,6 +522,7 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
 
     last_path = None
     last_buffer_len = 0
+    last_submit_time = 0
     prediction_count = 0
     prediction_seq = 0
     latest_completed_seq = 0
@@ -536,20 +538,25 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
             print(f"[inference] using checkpoint: {path}")
 
 
-        # submit new prediction every time the buffer grows
+        # submit new prediction when buffer has grown and enough time has passed
         cur_buffer_len = len(inference_buffer)
-        if predictor.model_path and cur_buffer_len >= past_len and cur_buffer_len > last_buffer_len:
+        now = time.time()
+        if (predictor.model_path and cur_buffer_len >= past_len
+                and cur_buffer_len > last_buffer_len
+                and now - last_submit_time >= predict_interval):
             last_buffer_len = cur_buffer_len
             buffer_pos = cur_buffer_len
             prediction_seq += 1
 
             model_path = predictor.model_path
+            buffer_snapshot = list(inference_buffer[-past_len:])
 
             future = executor.submit(
-                predictor.predict_from_buffer,
-                inference_buffer, past_len, future_len, processor,
+                predictor.predict_from_snapshot,
+                buffer_snapshot, future_len,
                 model_path_override=model_path,
             )
+            last_submit_time = now
             pending_predictions.append((future, buffer_pos, prediction_seq))
             print(f"[inference] submitted prediction seq {prediction_seq} (buffer={buffer_pos}, in-flight={len(pending_predictions)})")
 
@@ -563,15 +570,20 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
                 print(f"[inference] prediction #{prediction_count} (seq {seq}) complete:")
                 print(f"  actions: {result['actions']}")
 
-                # track for eval scoring
-                pending_evals.append((result, buf_pos, future_len))
+                actions_parsed = bool(re.search(r"<action>", result["actions"]))
 
-                # update overlay/walker only if this is newer than the last displayed
-                if seq > latest_completed_seq:
-                    latest_completed_seq = seq
-                    if overlay and not walker.active.is_set():
-                        overlay.update(result["actions"])
-                    walker.latest_prediction = {"actions": result["actions"], "seq": seq}
+                if not actions_parsed:
+                    print(f"[inference] prediction #{prediction_count}: no <action> tags, reward=0")
+                else:
+                    # track for eval scoring
+                    pending_evals.append((result, buf_pos, future_len))
+
+                    # update overlay/walker only if this is newer than the last displayed
+                    if seq > latest_completed_seq:
+                        latest_completed_seq = seq
+                        if overlay and not walker.active.is_set():
+                            overlay.update(result["actions"])
+                        walker.latest_prediction = {"actions": result["actions"], "seq": seq}
 
                 if wandb and wandb.run is not None:
                     wandb.log({
@@ -639,6 +651,8 @@ def main():
 
     parser.add_argument("--sleepwalk-model", type=str, default="gemini/gemini-3-flash-preview",
                         help="litellm model for SleepWalk computer-use agent")
+    parser.add_argument("--sleepwalk-max-iter", type=int, default=5,
+                        help="Max iterations per action for SleepWalk")
 
 
     parser.add_argument("--log-every-n-steps", type=int, default=1)
@@ -713,6 +727,7 @@ def main():
         model=args.sleepwalk_model,
         inference_buffer=inference_buffer,
         overlay=overlay,
+        max_iterations=args.sleepwalk_max_iter,
     )
 
     # wire Ctrl+G to toggle sleepwalk
