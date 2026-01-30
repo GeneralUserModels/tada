@@ -20,16 +20,13 @@ import time
 from litellm import completion as litellm_completion
 
 from powernap.sleepwalk.computer import ComputerController
-from powernap.sleepwalk.tools import make_messages, parse_steps, run_steps
+from powernap.sleepwalk.tools import make_messages, parse_steps, run_step, is_done
 
 
 ACTIONS = [
-    "Press Cmd+Space to open Spotlight search",
-    "Type 'chrome' in the search bar",
-    "Press Enter to open Chrome",
+    "Launch Chrome",
     "Click the Chrome address bar at the top of the browser",
-    "Type 'warriors' in the address bar",
-    "Press Enter to search",
+    "Do a Google search for 'warriors'",
 ]
 
 
@@ -38,6 +35,7 @@ def main():
     parser.add_argument("--model", type=str, default="gemini/gemini-3-flash-preview")
     parser.add_argument("--dry-run", action="store_true", help="Print steps without executing")
     parser.add_argument("--delay", type=float, default=2.0, help="Seconds to wait between actions")
+    parser.add_argument("--max-iter", type=int, default=5, help="Max iterations per action")
     args = parser.parse_args()
 
     computer = ComputerController()
@@ -54,34 +52,49 @@ def main():
         print(f"Action {i}/{len(ACTIONS)}: {action}")
         print(f"{'='*60}")
 
-        # take screenshot
-        print("[screenshot] capturing...")
-        screenshot_b64, width, height = computer.screenshot()
-        print(f"[screenshot] {width}x{height}")
+        for iteration in range(1, args.max_iter + 1):
+            print(f"\n--- Iteration {iteration}/{args.max_iter} ---")
 
-        # build prompt and call LLM
-        messages = make_messages(action, screenshot_b64)
-        print(f"[llm] calling {args.model}...")
-        t0 = time.time()
-        response = litellm_completion(model=args.model, messages=messages)
-        latency = time.time() - t0
+            # take screenshot
+            print("[screenshot] capturing...")
+            screenshot_b64, width, height = computer.screenshot()
+            print(f"[screenshot] {width}x{height}")
 
-        response_text = response.choices[0].message.content or ""
-        print(f"[llm] response ({latency:.2f}s): {response_text[:300]}")
+            # build prompt and call LLM
+            messages = make_messages(action, screenshot_b64)
+            print(f"[llm] calling {args.model}...")
+            t0 = time.time()
+            response = litellm_completion(model=args.model, messages=messages)
+            latency = time.time() - t0
 
-        # parse
-        steps = parse_steps(response_text)
-        print(f"[parse] {len(steps)} step(s):")
-        for j, step in enumerate(steps, 1):
-            print(f"  {j}. {step}")
+            response_text = response.choices[0].message.content or ""
+            print(f"[llm] response ({latency:.2f}s): {response_text[:300]}")
 
-        # execute
-        if not args.dry_run:
-            print("[execute] running...")
-            run_steps(steps, computer)
-            print("[execute] done")
+            # check for done
+            if is_done(response_text):
+                print(f"[done] action complete after {iteration} iteration(s)")
+                break
+
+            # parse
+            steps = parse_steps(response_text)
+            if not steps:
+                print(f"[done] no steps parsed, treating as done")
+                break
+
+            step = steps[0]
+            print(f"[parse] step: {step}")
+
+            # execute
+            if not args.dry_run:
+                print("[execute] running...")
+                run_step(step, computer)
+                print("[execute] done")
+            else:
+                print("[execute] skipped (dry run)")
+
+            time.sleep(0.5)
         else:
-            print("[execute] skipped (dry run)")
+            print(f"[warn] max iterations ({args.max_iter}) reached for action")
 
         # wait for the action to settle
         time.sleep(args.delay)

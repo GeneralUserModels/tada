@@ -5,7 +5,7 @@ import threading
 from litellm import completion as litellm_completion
 
 from powernap.sleepwalk.computer import ComputerController
-from powernap.sleepwalk.tools import make_messages, parse_steps, run_steps
+from powernap.sleepwalk.tools import make_messages, parse_steps, run_step, is_done
 
 
 def parse_actions(text):
@@ -65,19 +65,28 @@ class SleepWalker:
 
         print("[sleepwalk] deactivated")
 
-    def _execute_action(self, action_text):
-        """Send screenshot + action to LLM, parse JSON steps, execute them."""
-        screenshot_b64, width, height = self.computer.screenshot()
-        messages = make_messages(action_text, screenshot_b64)
+    def _execute_action(self, action_text, max_iterations=5):
+        """Loop: screenshot → LLM → steps or DONE → repeat until done."""
+        for i in range(max_iterations):
+            screenshot_b64, width, height = self.computer.screenshot()
+            messages = make_messages(action_text, screenshot_b64)
 
-        print(f"[sleepwalk] calling {self.model}")
-        response = litellm_completion(model=self.model, messages=messages)
+            print(f"[sleepwalk] iteration {i + 1}/{max_iterations}, calling {self.model}")
+            response = litellm_completion(model=self.model, messages=messages)
 
-        response_text = response.choices[0].message.content or ""
-        print(f"[sleepwalk] response: {response_text[:500]}")
+            response_text = response.choices[0].message.content or ""
+            print(f"[sleepwalk] response: {response_text[:500]}")
 
-        steps = parse_steps(response_text)
-        print(f"[sleepwalk] parsed {len(steps)} step(s)")
+            if is_done(response_text):
+                print(f"[sleepwalk] action done after {i + 1} iteration(s)")
+                return
 
-        run_steps(steps, self.computer)
-        time.sleep(0.3)
+            steps = parse_steps(response_text)
+            if not steps:
+                print(f"[sleepwalk] no steps parsed, treating as done")
+                return
+
+            run_step(steps[0], self.computer)
+            time.sleep(0.5)
+
+        print(f"[sleepwalk] max iterations ({max_iterations}) reached")
