@@ -19,6 +19,7 @@ class ActionOverlay:
         self._visible = True
         self._monitor = None
         self._screen_frame = None
+        self._sleepwalk_callback = None
 
         if sys.platform != "darwin":
             return
@@ -92,12 +93,17 @@ class ActionOverlay:
         self._text_view = text_view
         self._app = app
 
-        # Register global hotkey (Ctrl+H) to toggle overlay visibility
+        # Register global hotkeys: Ctrl+H (toggle visibility), Ctrl+G (toggle SleepWalk)
         def _on_key_event(event):
             flags = event.modifierFlags()
             ctrl_pressed = flags & AppKit.NSEventModifierFlagControl
-            if ctrl_pressed and event.charactersIgnoringModifiers() == "h":
+            if not ctrl_pressed:
+                return
+            char = event.charactersIgnoringModifiers()
+            if char == "h":
                 self._toggle_visibility()
+            elif char == "g" and self._sleepwalk_callback:
+                self._sleepwalk_callback()
 
         self._monitor = AppKit.NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
             AppKit.NSEventMaskKeyDown, _on_key_event
@@ -211,6 +217,103 @@ class ActionOverlay:
 
         return result
 
+    @staticmethod
+    def _build_sleepwalk_string(current_action, active):
+        """Build a styled string for SleepWalk mode."""
+        import AppKit
+
+        result = AppKit.NSMutableAttributedString.alloc().init()
+
+        # ── Header ──
+        header_font = AppKit.NSFont.systemFontOfSize_weight_(
+            13, AppKit.NSFontWeightBold
+        )
+        if active:
+            header_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                0.3, 0.95, 0.55, 1.0  # green
+            )
+            header_text = "SleepWalk Active\n"
+        else:
+            header_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                1.0, 1.0, 1.0, 0.5
+            )
+            header_text = "SleepWalk Stopped\n"
+
+        header_attrs = {
+            AppKit.NSFontAttributeName: header_font,
+            AppKit.NSForegroundColorAttributeName: header_color,
+        }
+        header = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+            header_text, header_attrs
+        )
+        result.appendAttributedString_(header)
+
+        # ── Separator ──
+        sep_font = AppKit.NSFont.systemFontOfSize_weight_(
+            6, AppKit.NSFontWeightRegular
+        )
+        sep_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+            1.0, 1.0, 1.0, 0.25
+        )
+        sep_attrs = {
+            AppKit.NSFontAttributeName: sep_font,
+            AppKit.NSForegroundColorAttributeName: sep_color,
+        }
+        separator = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+            "\u2500" * 46 + "\n\n", sep_attrs
+        )
+        result.appendAttributedString_(separator)
+
+        if current_action:
+            # ── Label ──
+            label_font = AppKit.NSFont.systemFontOfSize_weight_(
+                10, AppKit.NSFontWeightMedium
+            )
+            label_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                1.0, 0.85, 0.35, 0.8  # amber
+            )
+            label_attrs = {
+                AppKit.NSFontAttributeName: label_font,
+                AppKit.NSForegroundColorAttributeName: label_color,
+            }
+            label = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+                "Executing:\n", label_attrs
+            )
+            result.appendAttributedString_(label)
+
+            # ── Action text ──
+            body_font = AppKit.NSFont.systemFontOfSize_weight_(
+                11.5, AppKit.NSFontWeightRegular
+            )
+            body_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                1.0, 1.0, 1.0, 0.92
+            )
+            body_attrs = {
+                AppKit.NSFontAttributeName: body_font,
+                AppKit.NSForegroundColorAttributeName: body_color,
+            }
+            body = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+                current_action, body_attrs
+            )
+            result.appendAttributedString_(body)
+        elif active:
+            wait_font = AppKit.NSFont.systemFontOfSize_weight_(
+                11.5, AppKit.NSFontWeightRegular
+            )
+            wait_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                1.0, 1.0, 1.0, 0.5
+            )
+            wait_attrs = {
+                AppKit.NSFontAttributeName: wait_font,
+                AppKit.NSForegroundColorAttributeName: wait_color,
+            }
+            wait = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+                "Waiting for prediction\u2026", wait_attrs
+            )
+            result.appendAttributedString_(wait)
+
+        return result
+
     # ------------------------------------------------------------------
     # Main-thread UI updates
     # ------------------------------------------------------------------
@@ -278,6 +381,20 @@ class ActionOverlay:
             self._do_update(attr_str)
 
         AppHelper.callAfter(_on_main)
+
+    def update_sleepwalk(self, current_action, active):
+        if self._text_view is None:
+            return
+        attr_str = self._build_sleepwalk_string(current_action, active)
+        from PyObjCTools import AppHelper
+
+        def _on_main():
+            self._do_update(attr_str)
+
+        AppHelper.callAfter(_on_main)
+
+    def set_sleepwalk_callback(self, callback):
+        self._sleepwalk_callback = callback
 
     def close(self):
         if self._monitor:
