@@ -416,7 +416,7 @@ class OnlineEnvTrainer:
 
         # Log to wandb
         if self.log_to_wandb and wandb.run is not None:
-            wandb.log(metrics, step=self._step)
+            wandb.log(metrics)
 
         # Console log
         logger.info(
