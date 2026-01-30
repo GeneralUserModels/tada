@@ -541,7 +541,7 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
         # submit new prediction when buffer has grown and enough time has passed
         cur_buffer_len = len(inference_buffer)
         now = time.time()
-        if (predictor.model_path and cur_buffer_len >= past_len
+        if (overlay and predictor.model_path and cur_buffer_len >= past_len
                 and cur_buffer_len > last_buffer_len
                 and now - last_submit_time >= predict_interval):
             last_buffer_len = cur_buffer_len
