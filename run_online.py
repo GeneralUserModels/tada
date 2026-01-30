@@ -11,48 +11,76 @@ training through the tinker_cookbook Env abstraction.
 from dotenv import load_dotenv
 load_dotenv()
 
-from PIL import ImageFile
-ImageFile.LOAD_TRUNCATED_IMAGES = True
-
 import argparse
 import asyncio
 import logging
+import re
 import signal
 import sys
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from queue import Queue, Empty
 from typing import Any, Dict, List, Optional
 
-import tinker
-from tinker.types import AdamParams
-from transformers import AutoTokenizer
+# ActionOverlay MUST be imported before torch/transformers/PIL —
+# PIL conflicts with AppKit's NSApplication on macOS.
+from powernap.inference import ActionOverlay
 
-from tinker_cookbook import model_info, renderers
-from tinker_cookbook.completers import TinkerTokenCompleter
-from tinker_cookbook.renderers.qwen3 import Qwen3VLInstructRenderer
-from tinker_cookbook.rl.data_processing import assemble_training_data, compute_advantages
-from tinker_cookbook.rl.train import _remove_mask
-from tinker_cookbook.rl.rollouts import do_group_rollout
-from tinker_cookbook.rl.types import TrajectoryGroup
-from tinker_cookbook.image_processing_utils import get_image_processor
-from tinker_cookbook.tokenizer_utils import get_tokenizer
 
-from powernap.napsack import OnlineRecorder, Labeler
-from powernap.longnap.env import LongNAPEnvGroupBuilder
-from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams
-from powernap.longnap.scorer import create_reward_scorer
-from powernap.longnap.trainer_utils import TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block
-from powernap.inference import Predictor, ActionOverlay
+def _load_heavy_imports():
+    """Deferred imports that pull in torch/PIL. Call after overlay is created."""
+    import tinker
+    from tinker.types import AdamParams
+    from transformers import AutoTokenizer
+    from tinker_cookbook import model_info, renderers
+    from tinker_cookbook.completers import TinkerTokenCompleter
+    from tinker_cookbook.renderers.qwen3 import Qwen3VLInstructRenderer
+    from tinker_cookbook.rl.data_processing import assemble_training_data, compute_advantages
+    from tinker_cookbook.rl.train import _remove_mask
+    from tinker_cookbook.rl.rollouts import do_group_rollout
+    from tinker_cookbook.rl.types import TrajectoryGroup
+    from tinker_cookbook.image_processing_utils import get_image_processor
+    from tinker_cookbook.tokenizer_utils import get_tokenizer
+    from powernap.napsack import OnlineRecorder, Labeler
+    from powernap.longnap.env import LongNAPEnvGroupBuilder
+    from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams
+    from powernap.longnap.scorer import create_reward_scorer
+    from powernap.longnap.trainer_utils import TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block
+    from powernap.inference import Predictor
+    from powernap.sleepwalk import SleepWalker
 
-try:
-    import wandb
-    WANDB_AVAILABLE = True
-except ImportError:
-    wandb = None
-    WANDB_AVAILABLE = False
+    try:
+        import wandb
+        wandb_available = True
+    except ImportError:
+        wandb = None
+        wandb_available = False
+
+    # Inject into module globals so the rest of the code can use them
+    g = globals()
+    g.update({
+        "tinker": tinker, "AdamParams": AdamParams, "AutoTokenizer": AutoTokenizer,
+        "model_info": model_info, "renderers": renderers,
+        "TinkerTokenCompleter": TinkerTokenCompleter,
+        "Qwen3VLInstructRenderer": Qwen3VLInstructRenderer,
+        "assemble_training_data": assemble_training_data,
+        "compute_advantages": compute_advantages, "_remove_mask": _remove_mask,
+        "do_group_rollout": do_group_rollout, "TrajectoryGroup": TrajectoryGroup,
+        "get_image_processor": get_image_processor, "get_tokenizer": get_tokenizer,
+        "OnlineRecorder": OnlineRecorder, "Labeler": Labeler,
+        "LongNAPEnvGroupBuilder": LongNAPEnvGroupBuilder,
+        "InMemoryBM25Temporal": InMemoryBM25Temporal, "jaccard_ngrams": jaccard_ngrams,
+        "create_reward_scorer": create_reward_scorer,
+        "TASK_DESCRIPTION": TASK_DESCRIPTION,
+        "TASK_DESCRIPTION_WITH_IMAGES": TASK_DESCRIPTION_WITH_IMAGES,
+        "build_actions_block": build_actions_block,
+        "Predictor": Predictor, "SleepWalker": SleepWalker,
+        "wandb": wandb, "WANDB_AVAILABLE": wandb_available,
+    })
+
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +102,9 @@ def make_sample(
     
     Returns a dict with 'messages' for the renderer.
     """
-    from PIL import Image
-    
+    from PIL import Image, ImageFile
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+
     window = buffer[-(past_len + future_len):]
     past = window[:past_len]
     future = window[past_len:]
@@ -124,7 +153,6 @@ def make_sample(
         "past_len": past_len,
         "past_actions": past_actions_block,
     }
-
 
 class OnlineEnvTrainer:
     """
@@ -384,26 +412,56 @@ class OnlineEnvTrainer:
         return asyncio.run(self.train_on_batch(batch))
 
 
-def label_loop(recorder, labeler, retriever, label_queue, inference_buffer):
+
+def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active):
     """Label incoming screen recordings and add to retriever."""
+
     label_count = 0
+    skip_count = 0
+    last_hash = None
+    dedupe_threshold = 1
+
+    import imagehash
+    from PIL import Image, ImageFile
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
 
     for agg in recorder.iter_aggregations():
+        # pack-style sanitization: skip if no screenshot
+        screenshot_path = agg.request.screenshot_path
+        if not screenshot_path or not Path(screenshot_path).exists():
+            skip_count += 1
+            continue
+
+        # pack-style image dedup: skip if screenshot too similar to previous
+        try:
+            curr_hash = imagehash.phash(Image.open(screenshot_path))
+            if last_hash is not None and (curr_hash - last_hash) <= dedupe_threshold:
+                skip_count += 1
+                print(f"[label] dedup skip (hamming={curr_hash - last_hash}, total skipped={skip_count})")
+                continue
+            last_hash = curr_hash
+        except Exception:
+            pass
+
         t0 = time.time()
         labeled = labeler.label(agg)
         latency = time.time() - t0
         label_count += 1
         print(f"[label] labeled action #{label_count}: {labeled['text'][:80]}... ({latency:.2f}s)")
 
-        ts = datetime.strptime(labeled["start_time"], "%Y-%m-%d_%H-%M-%S-%f")
-        retriever.add(
-            labeled["text"],
-            event_ts=int(ts.timestamp()),
-            namespace="train",
-        )
 
-        label_queue.put(labeled)
+        # always add to inference buffer
         inference_buffer.append(labeled)
+
+        # only feed training data when sleepwalk is NOT active
+        if not sleepwalk_active.is_set():
+            ts = datetime.strptime(labeled["start_time"], "%Y-%m-%d_%H-%M-%S-%f")
+            retriever.add(
+                labeled["text"],
+                event_ts=int(ts.timestamp()),
+                namespace="train",
+            )
+            label_queue.put(labeled)
 
         if wandb and wandb.run is not None:
             log = {
@@ -457,10 +515,17 @@ def batch_iter(recorder, label_queue, past_len, future_len, batch_size, num_imgs
 
 def inference_loop(predictor, inference_buffer, trainer, recorder,
                    past_len, future_len, processor, predict_interval,
-                   reward_llm, overlay):
-    """Run periodic inference and evaluation."""
+                   reward_llm, overlay, walker):
+  
+    executor = ThreadPoolExecutor(max_workers=8)
+    pending_predictions = []  # (future, buffer_pos, seq)
+
     last_path = None
+    last_buffer_len = 0
+    last_submit_time = 0
     prediction_count = 0
+    prediction_seq = 0
+    latest_completed_seq = 0
     eval_count = 0
     pending_evals = []
 
@@ -472,29 +537,62 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
             last_path = path
             print(f"[inference] using checkpoint: {path}")
 
-        # Make a prediction
-        if predictor.model_path and len(inference_buffer) >= past_len:
-            buffer_pos = len(inference_buffer)
-            t0 = time.time()
-            result = predictor.predict_from_buffer(
-                inference_buffer, past_len, future_len, processor,
+
+        # submit new prediction when buffer has grown and enough time has passed
+        cur_buffer_len = len(inference_buffer)
+        now = time.time()
+        if (predictor.model_path and cur_buffer_len >= past_len
+                and cur_buffer_len > last_buffer_len
+                and now - last_submit_time >= predict_interval):
+            last_buffer_len = cur_buffer_len
+            buffer_pos = cur_buffer_len
+            prediction_seq += 1
+
+            model_path = predictor.model_path
+            buffer_snapshot = list(inference_buffer[-past_len:])
+
+            future = executor.submit(
+                predictor.predict_from_snapshot,
+                buffer_snapshot, future_len,
+                model_path_override=model_path,
             )
-            latency = time.time() - t0
-            prediction_count += 1
+            last_submit_time = now
+            pending_predictions.append((future, buffer_pos, prediction_seq))
+            print(f"[inference] submitted prediction seq {prediction_seq} (buffer={buffer_pos}, in-flight={len(pending_predictions)})")
 
-            pending_evals.append((result, buffer_pos, future_len))
+        # collect completed predictions
+        still_pending_preds = []
+        for future, buf_pos, seq in pending_predictions:
+            if future.done():
+                result = future.result()
+                prediction_count += 1
 
-            print(f"[inference] prediction #{prediction_count}:")
-            print(f"  actions: {result['actions']}")
+                print(f"[inference] prediction #{prediction_count} (seq {seq}) complete:")
+                print(f"  actions: {result['actions']}")
 
-            if overlay:
-                overlay.update(result["actions"])
+                actions_parsed = bool(re.search(r"<action>", result["actions"]))
 
-            if wandb and wandb.run is not None:
-                wandb.log({
-                    "inference/predictions_total": prediction_count,
-                    "inference/latency_s": latency,
-                })
+                if not actions_parsed:
+                    print(f"[inference] prediction #{prediction_count}: no <action> tags, reward=0")
+                else:
+                    # track for eval scoring
+                    pending_evals.append((result, buf_pos, future_len))
+
+                    # update overlay/walker only if this is newer than the last displayed
+                    if seq > latest_completed_seq:
+                        latest_completed_seq = seq
+                        if overlay and not walker.active.is_set():
+                            overlay.update(result["actions"])
+                        walker.latest_prediction = {"actions": result["actions"], "seq": seq}
+
+                if wandb and wandb.run is not None:
+                    wandb.log({
+                        "inference/predictions_total": prediction_count,
+                        "inference/in_flight": len(still_pending_preds),
+                    })
+            else:
+                still_pending_preds.append((future, buf_pos, seq))
+        pending_predictions = still_pending_preds
 
         # Check pending evals
         still_pending = []
@@ -515,7 +613,7 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
                 still_pending.append((result, buf_pos, fl))
         pending_evals = still_pending
 
-        time.sleep(predict_interval)
+        time.sleep(1)
 
 
 def main():
@@ -550,7 +648,13 @@ def main():
     parser.add_argument("--disable-inference", action="store_true")
     parser.add_argument("--no-overlay", action="store_true")
 
-    # Logging
+
+    parser.add_argument("--sleepwalk-model", type=str, default="gemini/gemini-3-flash-preview",
+                        help="litellm model for SleepWalk computer-use agent")
+    parser.add_argument("--sleepwalk-max-iter", type=int, default=5,
+                        help="Max iterations per action for SleepWalk")
+
+
     parser.add_argument("--log-every-n-steps", type=int, default=1)
     parser.add_argument("--log-dir", type=str, default="./logs")
     parser.add_argument("--log-to-wandb", action="store_true")
@@ -562,6 +666,14 @@ def main():
     parser.add_argument("--resume-from-checkpoint", type=str, default=None)
 
     args = parser.parse_args()
+
+    # Create overlay FIRST — before torch/transformers/PIL are loaded.
+    overlay = None
+    if not args.disable_inference and not args.no_overlay:
+        overlay = ActionOverlay()
+
+    # Now load heavy imports (torch, transformers, tinker, etc.)
+    _load_heavy_imports()
 
     # Setup logging
     logging.basicConfig(level=logging.INFO)
@@ -607,14 +719,35 @@ def main():
         log_dir=recorder.session_dir,
     )
 
-    # Overlay (must be on main thread for AppKit)
-    overlay = None
-    if not args.disable_inference and not args.no_overlay:
-        overlay = ActionOverlay()
-
-    # Wire it up
-    label_queue = Queue()
+    # sleepwalk
+    sleepwalk_active = threading.Event()
     inference_buffer = []
+
+    walker = SleepWalker(
+        model=args.sleepwalk_model,
+        inference_buffer=inference_buffer,
+        overlay=overlay,
+        max_iterations=args.sleepwalk_max_iter,
+    )
+
+    # wire Ctrl+G to toggle sleepwalk
+    if overlay:
+        def on_sleepwalk_toggle():
+            if walker.active.is_set():
+                print("[sleepwalk] deactivating — resuming training data collection")
+                walker.active.clear()
+                sleepwalk_active.clear()
+                overlay.update_sleepwalk(None, active=False)
+            else:
+                print("[sleepwalk] activating — pausing training data collection")
+                walker.active.set()
+                sleepwalk_active.set()
+                overlay.update_sleepwalk(None, active=True)
+
+        overlay.set_sleepwalk_callback(on_sleepwalk_toggle)
+
+
+    label_queue = Queue()
 
     def shutdown(sig, frame):
         if overlay:
@@ -625,12 +758,20 @@ def main():
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
+    # Preload HIServices on main thread — pyobjc lazy loading isn't thread-safe,
+    # and pynput's listener thread needs AXIsProcessTrusted() loaded before it starts.
+    try:
+        import HIServices
+        HIServices.AXIsProcessTrusted()
+    except Exception:
+        pass
+
     recorder.start()
 
     # Label thread
     label_thread = threading.Thread(
         target=label_loop,
-        args=(recorder, labeler, trainer.retriever, label_queue, inference_buffer),
+        args=(recorder, labeler, trainer.retriever, label_queue, inference_buffer, sleepwalk_active),
         daemon=True,
     )
     label_thread.start()
@@ -639,14 +780,18 @@ def main():
     if not args.disable_inference:
         inference_thread = threading.Thread(
             target=inference_loop,
-            args=(
-                predictor, inference_buffer, trainer, recorder,
-                args.past_len, args.future_len, tokenizer,
-                args.predict_every_n_seconds, args.reward_llm, overlay
-            ),
+            args=(predictor, inference_buffer, trainer, recorder,
+                  args.past_len, args.future_len, tokenizer,
+                  args.predict_every_n_seconds, args.reward_llm, overlay, walker),
+
             daemon=True,
         )
         inference_thread.start()
+
+
+     # sleepwalk thread
+    sleepwalk_thread = threading.Thread(target=walker.run, daemon=True)
+    sleepwalk_thread.start()
 
     # Training loop (runs on background thread)
     data = batch_iter(

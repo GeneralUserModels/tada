@@ -11,6 +11,7 @@ requires-python = ">=3.12,<3.14"
 dependencies = [
     "accelerate",
     "datasets",
+    "imagehash",
     "litellm",
     "numpy",
     "pack",

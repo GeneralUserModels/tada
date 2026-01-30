@@ -211,14 +211,17 @@ class RewardScorer:
     def _call_judge_sync(self, action_text: str, ground_truth: str) -> float:
         """
         Synchronously call the judge LLM to score a single action prediction.
-        
+
         Args:
             action_text: The predicted actions text
             ground_truth: The ground truth actions
-            
+
         Returns:
             Score between 0.0 and 1.0
         """
+        if not action_text or not re.search(r"<action>", action_text):
+            return 0.0
+
         # Normalize the action text
         normalized = self.normalize_and_validate(action_text)
         
