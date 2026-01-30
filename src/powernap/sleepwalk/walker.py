@@ -19,10 +19,11 @@ def parse_actions(text):
 
 class SleepWalker:
 
-    def __init__(self, model, inference_buffer, overlay):
+    def __init__(self, model, inference_buffer, overlay, max_iterations=5):
         self.model = model
         self.inference_buffer = inference_buffer
         self.overlay = overlay
+        self.max_iterations = max_iterations
         self.computer = ComputerController()
         self.active = threading.Event()
         self.latest_prediction = None  # set by inference thread: {"actions": "...", "seq": int}
@@ -65,13 +66,13 @@ class SleepWalker:
 
         print("[sleepwalk] deactivated")
 
-    def _execute_action(self, action_text, max_iterations=5):
-        """Loop: screenshot → LLM → steps or DONE → repeat until done."""
-        for i in range(max_iterations):
+    def _execute_action(self, action_text):
+        """Loop: screenshot → LLM → one step or DONE → repeat until done."""
+        for i in range(self.max_iterations):
             screenshot_b64, width, height = self.computer.screenshot()
             messages = make_messages(action_text, screenshot_b64)
 
-            print(f"[sleepwalk] iteration {i + 1}/{max_iterations}, calling {self.model}")
+            print(f"[sleepwalk] iteration {i + 1}/{self.max_iterations}, calling {self.model}")
             response = litellm_completion(model=self.model, messages=messages)
 
             response_text = response.choices[0].message.content or ""
@@ -89,4 +90,4 @@ class SleepWalker:
             run_step(steps[0], self.computer)
             time.sleep(0.5)
 
-        print(f"[sleepwalk] max iterations ({max_iterations}) reached")
+        print(f"[sleepwalk] max iterations ({self.max_iterations}) reached")

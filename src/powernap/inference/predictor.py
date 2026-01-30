@@ -128,7 +128,10 @@ class Predictor:
     def predict_from_buffer(self, buffer, past_len, future_len, processor, model_path_override=None):
         """Build messages from buffer and run prediction."""
         past = buffer[-past_len:]
+        return self.predict_from_snapshot(past, future_len, model_path_override=model_path_override)
 
+    def predict_from_snapshot(self, past, future_len, model_path_override=None):
+        """Run prediction from a pre-sliced list of past actions."""
         past_actions_block = build_actions_block(past)
 
         messages = [{
@@ -142,6 +145,9 @@ class Predictor:
                             model_path_override=model_path_override)
 
     def score_prediction(self, predicted_actions, ground_truth_actions, reward_llm):
+        if not re.search(r"<action>", predicted_actions):
+            return 0.0
+
         verifier_prompt = VERIFIER_PROMPT_PATH.read_text()
 
         candidate_block = f"- **Candidate 1**:\n{predicted_actions}\n"
