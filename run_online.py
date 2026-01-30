@@ -13,6 +13,7 @@ load_dotenv()
 
 import argparse
 import asyncio
+import json
 import logging
 import re
 import signal
@@ -260,33 +261,57 @@ class OnlineEnvTrainer:
         # Handle checkpoint resume
         if resume_from_checkpoint:
             self._load_checkpoint(resume_from_checkpoint)
-    
-    def _load_checkpoint(self, checkpoint_path: str):
-        """Load a checkpoint (simplified for online training)."""
-        logger.info(f"Loading checkpoint from {checkpoint_path}...")
-        try:
-            self.training_client.load_state(checkpoint_path).result()
-            save_result = self.training_client.save_weights_for_sampler(
-                name=f'{self.run_name}.model-resumed'
-            ).result()
-            self.latest_sampler_path = save_result.path
-            self.sampling_client = self.service_client.create_sampling_client(
-                model_path=self.latest_sampler_path
-            )
-            logger.info(f"Successfully loaded checkpoint")
-        except Exception as e:
-            logger.error(f"Failed to load checkpoint: {e}")
-    
-    def _save_checkpoint(self, step: int) -> Optional[str]:
-        """Save a checkpoint."""
-        try:
-            checkpoint_name = f"{self.run_name}.checkpoint_step_{step:06d}"
-            save_result = self.training_client.save_state(name=checkpoint_name).result()
-            logger.info(f"Saved checkpoint at step {step}: {save_result.path}")
-            return save_result.path
-        except Exception as e:
-            logger.error(f"Failed to save checkpoint: {e}")
+
+    def _resolve_checkpoint(self, checkpoint_path):
+        """Resolve 'auto' to the latest checkpoint from checkpoints.jsonl, or return as-is."""
+        if checkpoint_path != "auto":
+            return checkpoint_path
+        ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
+        if not ckpt_file.exists():
+            logger.warning(f"No checkpoints.jsonl found in {self.log_dir}")
             return None
+        last = None
+        for line in ckpt_file.read_text().strip().splitlines():
+            entry = json.loads(line)
+            if "state_path" in entry:
+                last = entry
+        if last:
+            logger.info(f"Auto-resolved checkpoint: {last['state_path']}")
+            return last["state_path"]
+        logger.warning("No valid checkpoints found in checkpoints.jsonl")
+        return None
+
+    def _load_checkpoint(self, checkpoint_path):
+        """Load a checkpoint. Supports 'auto' to pick the latest."""
+        resolved = self._resolve_checkpoint(checkpoint_path)
+        if not resolved:
+            logger.warning("No checkpoint to load")
+            return
+        logger.info(f"Loading checkpoint from {resolved}...")
+        self.training_client.load_state(resolved).result()
+        save_result = self.training_client.save_weights_for_sampler(
+            name=f'{self.run_name}.model-resumed'
+        ).result()
+        self.latest_sampler_path = save_result.path
+        self.sampling_client = self.service_client.create_sampling_client(
+            model_path=self.latest_sampler_path
+        )
+        logger.info(f"Successfully loaded checkpoint from {resolved}")
+
+    def _save_checkpoint(self, step):
+        """Save a checkpoint and record it to checkpoints.jsonl."""
+        checkpoint_name = f"{self.run_name}.checkpoint_step_{step:06d}"
+        save_result = self.training_client.save_state(name=checkpoint_name).result()
+        state_path = save_result.path
+        logger.info(f"Saved checkpoint at step {step}: {state_path}")
+
+        ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
+        ckpt_file.parent.mkdir(parents=True, exist_ok=True)
+        entry = {"name": checkpoint_name, "step": step, "state_path": state_path}
+        with open(ckpt_file, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+
+        return state_path
     
     async def train_on_batch(self, batch: List[Dict[str, Any]]) -> Dict[str, float]:
         """
