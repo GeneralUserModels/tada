@@ -401,29 +401,31 @@ class OnlineEnvTrainer:
         for traj_group in trajectory_groups:
             all_rewards.extend(traj_group.get_total_rewards())
         
-        metrics["step"] = self._step
-        metrics["loss"] = fwdbwd_result.metrics.get("loss:sum", 0.0)
-        metrics["reward_mean"] = sum(all_rewards) / len(all_rewards) if all_rewards else 0.0
-        metrics["reward_std"] = (
-            (sum((r - metrics["reward_mean"])**2 for r in all_rewards) / len(all_rewards))**0.5
+        reward_mean = sum(all_rewards) / len(all_rewards) if all_rewards else 0.0
+        reward_std = (
+            (sum((r - reward_mean)**2 for r in all_rewards) / len(all_rewards))**0.5
             if all_rewards else 0.0
         )
-        metrics["num_trajectories"] = len(all_rewards)
-        metrics["step_time"] = time.time() - step_start
-        metrics["retriever_size"] = self.retriever.N
-        
+        metrics["train/step"] = self._step
+        metrics["train/loss"] = fwdbwd_result.metrics.get("loss:sum", 0.0)
+        metrics["train/reward_mean"] = reward_mean
+        metrics["train/reward_std"] = reward_std
+        metrics["train/num_trajectories"] = len(all_rewards)
+        metrics["train/step_time"] = time.time() - step_start
+        metrics["train/retriever_size"] = self.retriever.N
+
         # Log to wandb
         if self.log_to_wandb and wandb.run is not None:
             wandb.log(metrics, step=self._step)
-        
+
         # Console log
         logger.info(
-            f"Step {self._step}: loss={metrics['loss']:.4f}, "
-            f"reward={metrics['reward_mean']:.4f}±{metrics['reward_std']:.4f}, "
-            f"time={metrics['step_time']:.2f}s"
+            f"Step {self._step}: loss={metrics['train/loss']:.4f}, "
+            f"reward={reward_mean:.4f}±{reward_std:.4f}, "
+            f"time={metrics['train/step_time']:.2f}s"
         )
         
-        print(f"[train] step {self._step} completed in {metrics['step_time']:.2f}s")
+        print(f"[train] step {self._step} completed in {metrics['train/step_time']:.2f}s")
 
         # Checkpoint
         if self.checkpoint_every_n_steps > 0 and (self._step + 1) % self.checkpoint_every_n_steps == 0:
@@ -566,7 +568,8 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
         # submit new prediction when buffer has grown and enough time has passed
         cur_buffer_len = len(inference_buffer)
         now = time.time()
-        if (overlay and predictor.model_path and cur_buffer_len >= past_len
+        if (overlay and overlay._visible and predictor.model_path
+                and cur_buffer_len >= past_len
                 and cur_buffer_len > last_buffer_len
                 and now - last_submit_time >= predict_interval):
             last_buffer_len = cur_buffer_len
