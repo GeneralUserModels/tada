@@ -184,8 +184,10 @@ class OnlineEnvTrainer:
         wandb_run_name: str = "longnap-online",
         checkpoint_every_n_steps: int = 0,
         resume_from_checkpoint: Optional[str] = None,
+        sampler_ttl_seconds: Optional[int] = 60,
     ):
         self.model_name = model_name
+        self.sampler_ttl_seconds = sampler_ttl_seconds
         self.num_generations = num_generations
         self.learning_rate = learning_rate
         self.max_tokens = max_tokens
@@ -197,11 +199,13 @@ class OnlineEnvTrainer:
         
         # Initialize Tinker clients
         self.service_client = tinker.ServiceClient()
+        self.rest_client = self.service_client.create_rest_client()
         self.training_client = self.service_client.create_lora_training_client(
             base_model=model_name,
             rank=lora_rank,
         )
         self.num_imgs_per_sample = num_imgs_per_sample
+        self._last_checkpoint_path: Optional[str] = None
         
         # Get tokenizer and renderer
         self.tokenizer = get_tokenizer(model_name)
@@ -214,7 +218,8 @@ class OnlineEnvTrainer:
         
         # Save initial weights for sampler
         save_result = self.training_client.save_weights_for_sampler(
-            name=f'{self.run_name}.model'
+            name=f'{self.run_name}.model',
+            ttl_seconds=self.sampler_ttl_seconds,
         ).result()
         self.latest_sampler_path = save_result.path
         self.sampling_client = self.service_client.create_sampling_client(
@@ -290,7 +295,8 @@ class OnlineEnvTrainer:
         logger.info(f"Loading checkpoint from {resolved}...")
         self.training_client.load_state(resolved).result()
         save_result = self.training_client.save_weights_for_sampler(
-            name=f'{self.run_name}.model-resumed'
+            name=f'{self.run_name}.model-resumed',
+            ttl_seconds=self.sampler_ttl_seconds,
         ).result()
         self.latest_sampler_path = save_result.path
         self.sampling_client = self.service_client.create_sampling_client(
@@ -299,11 +305,23 @@ class OnlineEnvTrainer:
         logger.info(f"Successfully loaded checkpoint from {resolved}")
 
     def _save_checkpoint(self, step):
-        """Save a checkpoint and record it to checkpoints.jsonl."""
+        """Save a checkpoint and record it to checkpoints.jsonl. Deletes previous checkpoint."""
         checkpoint_name = f"{self.run_name}.checkpoint_step_{step:06d}"
         save_result = self.training_client.save_state(name=checkpoint_name).result()
         state_path = save_result.path
         logger.info(f"Saved checkpoint at step {step}: {state_path}")
+
+        # Delete previous checkpoint to only keep the latest
+        if self._last_checkpoint_path:
+            try:
+                self.rest_client.delete_checkpoint_from_tinker_path(
+                    self._last_checkpoint_path
+                ).result()
+                logger.info(f"Deleted previous checkpoint: {self._last_checkpoint_path}")
+            except Exception as e:
+                logger.warning(f"Failed to delete previous checkpoint: {e}")
+        
+        self._last_checkpoint_path = state_path
 
         ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
         ckpt_file.parent.mkdir(parents=True, exist_ok=True)
@@ -389,7 +407,8 @@ class OnlineEnvTrainer:
         
         # Update sampling client
         save_result = self.training_client.save_weights_for_sampler(
-            name=f'{self.run_name}.model-step-{self._step}'
+            name=f'{self.run_name}.model-step-{self._step}',
+            ttl_seconds=self.sampler_ttl_seconds,
         ).result()
         self.latest_sampler_path = save_result.path
         self.sampling_client = self.service_client.create_sampling_client(
@@ -692,6 +711,8 @@ def main():
     # Checkpointing
     parser.add_argument("--checkpoint-every-n-steps", type=int, default=0)
     parser.add_argument("--resume-from-checkpoint", type=str, default=None)
+    parser.add_argument("--sampler-ttl-seconds", type=int, default=60,
+                        help="TTL in seconds for sampler checkpoints (default: 60, use 0 for no expiry)")
 
     args = parser.parse_args()
 
@@ -737,6 +758,7 @@ def main():
         wandb_run_name=args.wandb_run_name,
         checkpoint_every_n_steps=args.checkpoint_every_n_steps,
         resume_from_checkpoint=args.resume_from_checkpoint,
+        sampler_ttl_seconds=args.sampler_ttl_seconds or None,
     )
 
     # Stage 4: Predictor (shares retriever with trainer)
