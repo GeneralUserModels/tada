@@ -23,8 +23,10 @@ A step is a JSON object with an "action" key and action-specific fields:
   {"action": "press_key", "key": "enter"}          — also supports combos: "ctrl+c", "cmd+s"
   {"action": "scroll", "x": 400, "y": 300, "dy": -3}  — negative dy = scroll down
   {"action": "mouse_move", "x": 100, "y": 200}
+  {"action": "open_app", "app": "Google Chrome"}       — open or switch to an app by name
 
-Coordinates are absolute pixels from top-left of the screen."""
+Coordinates are absolute pixels from top-left of the screen.
+Use open_app to switch to or launch an application before interacting with it."""
 
 
 def is_done(response_text):
@@ -80,6 +82,8 @@ def run_step(step, computer):
         computer.scroll(step["x"], step["y"], step.get("dx", 0), step.get("dy", 0))
     elif action == "mouse_move":
         computer.mouse_move(step["x"], step["y"])
+    elif action == "open_app":
+        computer.open_app(step["app"])
     else:
         print(f"[sleepwalk] unknown action: {action}")
 

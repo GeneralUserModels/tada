@@ -1,5 +1,6 @@
 import base64
 import io
+import subprocess
 import time
 
 import mss
@@ -97,6 +98,10 @@ class ComputerController:
         self.mouse.position = (x, y)
         time.sleep(0.05)
         self.mouse.scroll(dx, dy)
+
+    def open_app(self, app_name):
+        """Open or switch to an app by name using macOS `open -a`."""
+        subprocess.run(["open", "-a", app_name])
 
     def type_text(self, text):
         self.keyboard.type(text)
