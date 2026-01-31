@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import re
 import signal
 import sys
@@ -369,80 +370,70 @@ class OnlineEnvTrainer:
 
         return state_path
     
-    async def train_on_batch(self, batch: List[Dict[str, Any]]) -> Dict[str, float]:
-        """
-        Train on a batch of samples using the Env abstraction.
-        
-        Args:
-            batch: List of sample dicts with 'messages', 'solution', etc.
-            
+    async def _process_one_sample(self, sample: Dict[str, Any]) -> tuple:
+        """Process a single sample: rollout + forward_backward (micro-batch = 1).
+
         Returns:
-            Dict of metrics
+            (TrajectoryGroup, fwdbwd_future) — future is None if no training data produced.
         """
-        step_start = time.time()
-        metrics = {}
-        print(f"[train] step {self._step}: creating env builders for {len(batch)} samples...")
-        
-        # Create EnvGroupBuilders for each sample in the batch
-        env_group_builders = []
-        for sample in batch:
-            builder = LongNAPEnvGroupBuilder(
-                input_data=sample,
-                renderer=self.renderer,
-                tokenizer=self.tokenizer,
-                retriever=self.retriever,
-                reward_scorer=self.reward_scorer,
-                num_envs=self.num_generations,
-                retrieval_top_k=self.retrieval_top_k,
-                retrieval_mmr_k=self.retrieval_mmr_k,
-                retrieval_mmr_alpha=self.retrieval_mmr_alpha,
-                retrieval_time_decay_lambda=self.retrieval_time_decay_lambda,
-            )
-            env_group_builders.append(builder)
-        
-        # Create policy completer
+        builder = LongNAPEnvGroupBuilder(
+            input_data=sample,
+            renderer=self.renderer,
+            tokenizer=self.tokenizer,
+            retriever=self.retriever,
+            reward_scorer=self.reward_scorer,
+            num_envs=self.num_generations,
+            retrieval_top_k=self.retrieval_top_k,
+            retrieval_mmr_k=self.retrieval_mmr_k,
+            retrieval_mmr_alpha=self.retrieval_mmr_alpha,
+            retrieval_time_decay_lambda=self.retrieval_time_decay_lambda,
+        )
+
         policy = TinkerTokenCompleter(
             self.sampling_client,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
         )
-        print(f"[train] step {self._step}: running rollouts ({self.num_generations} generations per sample)...")
-        
-        # Run rollouts for all groups
-        trajectory_groups: List[TrajectoryGroup] = []
-        for i, builder in enumerate(env_group_builders):
-            print(f"[train] step {self._step}: rollout {i+1}/{len(env_group_builders)}...")
-            traj_group = await do_group_rollout(builder, policy)
-            trajectory_groups.append(traj_group)
-        
-        # Compute advantages (GRPO-style per-group normalization)
-        print(f"[train] step {self._step}: computing advantages...")
-        advantages = compute_advantages(trajectory_groups)
-        
-        # Assemble training data
-        data_D, metadata_D = assemble_training_data(trajectory_groups, advantages)
-        
+
+        traj_group = await do_group_rollout(builder, policy)
+
+        # Compute advantages (GRPO normalizes per-group)
+        advantages = compute_advantages([traj_group])
+        data_D, metadata_D = assemble_training_data([traj_group], advantages)
+
         if not data_D:
-            logger.warning("No training data generated")
-            return {"step": self._step, "loss": 0.0}
-                
-        # Forward-backward pass (remove mask like cookbook's train_step does)
-        print(f"[train] step {self._step}: forward-backward pass...")
+            logger.warning("No training data for sample")
+            return traj_group, None
+
+        # Forward-backward — gradients accumulate until optim_step
         fwdbwd_future = self.training_client.forward_backward(
             [_remove_mask(d) for d in data_D],
             loss_fn="importance_sampling",
         )
-        
-        # Optimizer step (pipelined)
+        return traj_group, fwdbwd_future
+
+    def _finish_step(self, fwdbwd_futures: list, trajectory_groups: list, step_start: float) -> Dict[str, float]:
+        """Complete one optimizer step on accumulated gradients.
+
+        Runs optim_step, waits for results, updates sampler, logs metrics, checkpoints.
+        """
+        if not fwdbwd_futures:
+            logger.warning("No forward_backward futures to process")
+            return {}
+
+        # Single optimizer step on accumulated gradients
+        print(f"[train] step {self._step}: optim step on {len(fwdbwd_futures)} micro-batches...")
         optim_future = self.training_client.optim_step(
             AdamParams(learning_rate=self.learning_rate)
         )
-        
-        # Wait for results
-        print(f"[train] step {self._step}: waiting for training to complete...")
-        fwdbwd_result = fwdbwd_future.result()
+
+        # Wait for all forward_backward results
+        total_loss = 0.0
+        for f in fwdbwd_futures:
+            result = f.result()
+            total_loss += result.metrics.get("loss:sum", 0.0)
         optim_result = optim_future.result()
-        
+
         # Update sampling client
         save_result = self.training_client.save_weights_for_sampler(
             name=f'{self.run_name}.model-step-{self._step}',
@@ -452,36 +443,36 @@ class OnlineEnvTrainer:
         self.sampling_client = self.service_client.create_sampling_client(
             model_path=self.latest_sampler_path
         )
-        
+
         # Compute metrics
         all_rewards = []
         for traj_group in trajectory_groups:
             all_rewards.extend(traj_group.get_total_rewards())
-        
+
         reward_mean = sum(all_rewards) / len(all_rewards) if all_rewards else 0.0
         reward_std = (
             (sum((r - reward_mean)**2 for r in all_rewards) / len(all_rewards))**0.5
             if all_rewards else 0.0
         )
-        metrics["train/step"] = self._step
-        metrics["train/loss"] = fwdbwd_result.metrics.get("loss:sum", 0.0)
-        metrics["train/reward_mean"] = reward_mean
-        metrics["train/reward_std"] = reward_std
-        metrics["train/num_trajectories"] = len(all_rewards)
-        metrics["train/step_time"] = time.time() - step_start
-        metrics["train/retriever_size"] = self.retriever.N
 
-        # Log to wandb
+        metrics = {
+            "train/step": self._step,
+            "train/loss": total_loss / len(fwdbwd_futures),
+            "train/reward_mean": reward_mean,
+            "train/reward_std": reward_std,
+            "train/num_trajectories": len(all_rewards),
+            "train/step_time": time.time() - step_start,
+            "train/retriever_size": self.retriever.N,
+        }
+
         if self.log_to_wandb and wandb.run is not None:
             wandb.log(metrics)
 
-        # Console log
         logger.info(
             f"Step {self._step}: loss={metrics['train/loss']:.4f}, "
             f"reward={reward_mean:.4f}±{reward_std:.4f}, "
             f"time={metrics['train/step_time']:.2f}s"
         )
-        
         print(f"[train] step {self._step} completed in {metrics['train/step_time']:.2f}s")
 
         # Checkpoint
@@ -490,10 +481,77 @@ class OnlineEnvTrainer:
         
         self._step += 1
         return metrics
-    
-    def train_sync(self, batch: List[Dict[str, Any]]) -> Dict[str, float]:
-        """Synchronous wrapper for train_on_batch."""
-        return asyncio.run(self.train_on_batch(batch))
+
+    def run_streaming(self, recorder, label_queue, past_len: int, future_len: int,
+                      batch_size: int, num_imgs_per_sample: int = 0,
+                      shutdown_event: Optional[threading.Event] = None):
+        """Main streaming training loop.
+
+        Pulls samples from label_queue one at a time, immediately runs rollout +
+        forward_backward (micro-batch = 1), and fires optim_step every batch_size
+        micro-batches.
+        """
+        min_required = past_len + future_len
+        buffer = []
+        micro_count = 0
+        fwdbwd_futures = []
+        trajectory_groups = []
+        step_start = None
+        steps_completed = 0
+
+        def _should_run():
+            if shutdown_event and shutdown_event.is_set():
+                return False
+            return recorder.running or not label_queue.empty()
+
+        while _should_run():
+            try:
+                record = label_queue.get(timeout=1.0)
+            except Empty:
+                continue
+
+            buffer.append(record)
+            print(f"[train] buffer size: {len(buffer)}/{min_required}")
+
+            if len(buffer) < min_required:
+                continue
+
+            # Create sample from sliding window
+            sample = make_sample(buffer, past_len, future_len, num_imgs_per_sample)
+
+            if step_start is None:
+                step_start = time.time()
+
+            # Rollout + forward_backward for this sample
+            print(f"[train] step {self._step}: micro-batch {micro_count + 1}/{batch_size} — rollout + forward_backward...")
+            traj_group, fwdbwd_future = asyncio.run(self._process_one_sample(sample))
+
+            trajectory_groups.append(traj_group)
+            if fwdbwd_future is not None:
+                fwdbwd_futures.append(fwdbwd_future)
+                micro_count += 1
+
+            # Optimizer step when batch_size micro-batches accumulated
+            if micro_count >= batch_size:
+                self._finish_step(fwdbwd_futures, trajectory_groups, step_start)
+                steps_completed += 1
+
+                if wandb and wandb.run is not None:
+                    wandb.log({
+                        "pipeline/buffer_size": len(buffer),
+                        "pipeline/batches_yielded": steps_completed,
+                    })
+
+                # Reset accumulators
+                micro_count = 0
+                fwdbwd_futures = []
+                trajectory_groups = []
+                step_start = None
+
+        # Handle leftover micro-batches (skip if forced shutdown)
+        if micro_count > 0 and fwdbwd_futures and not (shutdown_event and shutdown_event.is_set()):
+            logger.info(f"Recorder stopped with {micro_count} pending micro-batches. Finishing partial step.")
+            self._finish_step(fwdbwd_futures, trajectory_groups, step_start or time.time())
 
 
 
@@ -546,41 +604,6 @@ def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, slee
                 )
 
             wandb.log(log)
-
-
-def batch_iter(recorder, label_queue, past_len, future_len, batch_size, num_imgs_per_sample=0):
-    """Iterate over batches from the label queue."""
-    min_required = past_len + future_len
-    buffer = []
-    batch = []
-    batches_yielded = 0
-
-    while recorder.running or not label_queue.empty():
-        try:
-            record = label_queue.get(timeout=1.0)
-        except Empty:
-            continue
-
-        buffer.append(record)
-        print(f"[train] buffer size: {len(buffer)}/{min_required} (need {batch_size} samples to start training)")
-
-        if len(buffer) >= min_required:
-            sample = make_sample(buffer, past_len, future_len, num_imgs_per_sample)
-            batch.append(sample)
-            print(f"[train] created sample, batch size: {len(batch)}/{batch_size}")
-
-            if len(batch) >= batch_size:
-                print(f"[train] yielding batch for training (step {batches_yielded + 1})")
-                batches_yielded += 1
-
-                if wandb and wandb.run is not None:
-                    wandb.log({
-                        "pipeline/buffer_size": len(buffer),
-                        "pipeline/batches_yielded": batches_yielded,
-                    })
-
-                yield batch
-                batch = []
 
 
 def inference_loop(predictor, inference_buffer, trainer, recorder,
@@ -708,7 +731,7 @@ def main():
     parser.add_argument("--num-generations", type=int, default=8)
     parser.add_argument("--learning-rate", type=float, default=1e-5)
     parser.add_argument("--max-completion-length", type=int, default=512)
-    parser.add_argument("--num-imgs-per-sample", type=int, default=0, 
+    parser.add_argument("--num-imgs-per-sample", type=int, default=2, 
                         help="Number of images to include per sample (0 = text only)")
 
     # Pipeline
@@ -825,12 +848,18 @@ def main():
 
 
     label_queue = Queue()
+    shutdown_event = threading.Event()
 
     def shutdown(sig, frame):
+        if shutdown_event.is_set():
+            # Second Ctrl+C — force exit immediately
+            print("\n[shutdown] forced exit")
+            os._exit(1)
+        print("\n[shutdown] shutting down...")
+        shutdown_event.set()
+        recorder.stop()
         if overlay:
             overlay.close()
-        recorder.stop()
-        sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
@@ -871,15 +900,17 @@ def main():
     sleepwalk_thread.start()
 
     # Training loop (runs on background thread)
-    data = batch_iter(
-        recorder, label_queue, args.past_len, args.future_len, 
-        args.batch_size, args.num_imgs_per_sample
-    )
-
     def train_loop():
-        for batch in data:
-            trainer.train_sync(batch)
-        
+        trainer.run_streaming(
+            recorder=recorder,
+            label_queue=label_queue,
+            past_len=args.past_len,
+            future_len=args.future_len,
+            batch_size=args.batch_size,
+            num_imgs_per_sample=args.num_imgs_per_sample,
+            shutdown_event=shutdown_event,
+        )
+
         if overlay:
             overlay.close()
         recorder.stop()
@@ -893,7 +924,19 @@ def main():
     else:
         train_thread.join()
 
+    # Cleanup
+    shutdown_event.set()
     recorder.stop()
+    train_thread.join(timeout=5)
+
+    if args.log_to_wandb:
+        try:
+            if wandb and wandb.run is not None:
+                wandb.finish()
+        except Exception:
+            pass
+
+    print("[shutdown] done")
 
 
 if __name__ == "__main__":
