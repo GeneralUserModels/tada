@@ -19,6 +19,7 @@ dependencies = [
     "pillow",
     "python-dotenv",
     "rich",
+    "screeninfo",
     "tinker",
     "tinker-cookbook",
     "torch",
