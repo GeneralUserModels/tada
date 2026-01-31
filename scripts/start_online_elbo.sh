@@ -20,3 +20,6 @@ uv run run_online.py \
     --wandb-run-name "${USER:-longnap}-$(date +%Y%m%d-%H%M%S)" \
     --checkpoint-every-n-steps 10 \
     --resume-from-checkpoint auto --loss-mode logprob_elbo --eval-with-llm-judge
+
+    # add --eval-with-llm-judge to use LLM judge reward for comparison
+    # add --sft-weight to increase the importance of the SFT loss
