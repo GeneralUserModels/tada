@@ -78,7 +78,7 @@ class Predictor:
 
         # 1) Think - add think instruction and sample
         messages = messages + [build_think_user_message()]
-        think_text = self._sample(messages, stop=["</think>"], model_path=model_path)
+        think_text = self._sample(messages, stop=["</rationale>"], model_path=model_path)
         messages.append({"role": "assistant", "content": think_text})
 
         # 2) Retrieve using think output
