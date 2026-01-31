@@ -127,8 +127,13 @@ class Labeler:
         }
 
         if self.labels_file:
+            # Write only the path to disk (not the in-memory image)
+            serializable_result = {
+                **result,
+                "img": processed_agg.request.screenshot_path,
+            }
             with open(self.labels_file, "a") as f:
-                json.dump(result, f)
+                json.dump(serializable_result, f, default=str)
                 f.write("\n")
 
         return result

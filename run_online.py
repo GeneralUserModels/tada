@@ -207,10 +207,23 @@ class OnlineEnvTrainer:
         # Initialize Tinker clients
         self.service_client = tinker.ServiceClient()
         self.rest_client = self.service_client.create_rest_client()
-        self.training_client = self.service_client.create_lora_training_client(
-            base_model=model_name,
-            rank=lora_rank,
-        )
+        
+        # Resolve checkpoint path early (before creating training client)
+        self._resolved_checkpoint = self._resolve_checkpoint_static(resume_from_checkpoint, log_dir)
+        
+        # Create training client - use create_training_client_from_state if resuming from checkpoint
+        # This supports cross-session checkpoint loading
+        if self._resolved_checkpoint:
+            logger.info(f"Creating training client from checkpoint: {self._resolved_checkpoint}")
+            self.training_client = self.service_client.create_training_client_from_state(
+                self._resolved_checkpoint
+            )
+        else:
+            self.training_client = self.service_client.create_lora_training_client(
+                base_model=model_name,
+                rank=lora_rank,
+            )
+        
         self.num_imgs_per_sample = num_imgs_per_sample
         self._last_checkpoint_path: Optional[str] = None
         self._last_retriever_checkpoint_path: Optional[str] = None
@@ -271,17 +284,23 @@ class OnlineEnvTrainer:
                 }
             )
         
-        # Handle checkpoint resume
-        if resume_from_checkpoint:
-            self._load_checkpoint(resume_from_checkpoint)
+        # Handle checkpoint resume (restore step counter, retriever, etc.)
+        if self._resolved_checkpoint:
+            self._restore_checkpoint_metadata(self._resolved_checkpoint)
 
-    def _resolve_checkpoint(self, checkpoint_path):
-        """Resolve 'auto' to the latest checkpoint from checkpoints.jsonl, or return as-is."""
+    @staticmethod
+    def _resolve_checkpoint_static(checkpoint_path: Optional[str], log_dir: str) -> Optional[str]:
+        """Resolve 'auto' to the latest checkpoint from checkpoints.jsonl, or return as-is.
+        
+        Static method so it can be called before self is fully initialized.
+        """
+        if not checkpoint_path:
+            return None
         if checkpoint_path != "auto":
             return checkpoint_path
-        ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
+        ckpt_file = Path(log_dir) / "checkpoints.jsonl"
         if not ckpt_file.exists():
-            logger.warning(f"No checkpoints.jsonl found in {self.log_dir}")
+            logger.warning(f"No checkpoints.jsonl found in {log_dir}")
             return None
         last = None
         for line in ckpt_file.read_text().strip().splitlines():
@@ -293,6 +312,10 @@ class OnlineEnvTrainer:
             return last["state_path"]
         logger.warning("No valid checkpoints found in checkpoints.jsonl")
         return None
+
+    def _resolve_checkpoint(self, checkpoint_path):
+        """Resolve 'auto' to the latest checkpoint. Instance method wrapper."""
+        return self._resolve_checkpoint_static(checkpoint_path, self.log_dir)
 
     def _get_checkpoint_entry(self, state_path):
         """Look up the full checkpoint entry for a given state_path from checkpoints.jsonl."""
@@ -312,6 +335,31 @@ class OnlineEnvTrainer:
         """Look up the retriever path for a given state_path from checkpoints.jsonl."""
         entry = self._get_checkpoint_entry(state_path)
         return entry.get("retriever_path") if entry else None
+
+    def _restore_checkpoint_metadata(self, checkpoint_path):
+        """Restore metadata from checkpoint (step counter, retriever) without loading model state.
+        
+        Used when training client was already initialized from state via create_training_client_from_state.
+        """
+        logger.info(f"Restoring checkpoint metadata from {checkpoint_path}...")
+        
+        # Restore step counter and checkpoint paths from the checkpoint entry
+        entry = self._get_checkpoint_entry(checkpoint_path)
+        if entry:
+            self._step = entry.get("step", 0)
+            self._last_checkpoint_path = checkpoint_path
+            retriever_path = entry.get("retriever_path")
+            if retriever_path and Path(retriever_path).exists():
+                self.retriever.load_checkpoint(retriever_path)
+                self._last_retriever_checkpoint_path = retriever_path
+                logger.info(f"Loaded retriever checkpoint from {retriever_path}")
+            else:
+                logger.warning(f"No retriever checkpoint found for {checkpoint_path}")
+            logger.info(f"Resumed from step {self._step}")
+        else:
+            logger.warning(f"No checkpoint entry found for {checkpoint_path}, starting from step 0")
+        
+        logger.info(f"Successfully restored checkpoint metadata from {checkpoint_path}")
 
     def _load_checkpoint(self, checkpoint_path):
         """Load a checkpoint. Supports 'auto' to pick the latest."""
@@ -431,7 +479,7 @@ class OnlineEnvTrainer:
         )
         return traj_group, fwdbwd_future
 
-    def _finish_step(self, fwdbwd_futures: list, trajectory_groups: list, step_start: float) -> Dict[str, float]:
+    async def _finish_step(self, fwdbwd_futures: list, trajectory_groups: list, step_start: float) -> Dict[str, float]:
         """Complete one optimizer step on accumulated gradients.
 
         Runs optim_step, waits for results, updates sampler, logs metrics, checkpoints.
@@ -496,7 +544,7 @@ class OnlineEnvTrainer:
 
         # Checkpoint
         if self.checkpoint_every_n_steps > 0 and (self._step + 1) % self.checkpoint_every_n_steps == 0:
-            asyncio.run(self._save_checkpoint(self._step + 1))
+            await self._save_checkpoint(self._step + 1)
         
         self._step += 1
         return metrics
@@ -506,17 +554,42 @@ class OnlineEnvTrainer:
                       shutdown_event: Optional[threading.Event] = None):
         """Main streaming training loop.
 
-        Pulls samples from label_queue one at a time, immediately runs rollout +
-        forward_backward (micro-batch = 1), and fires optim_step every batch_size
-        micro-batches.
+        Submits rollouts immediately as samples arrive (up to batch_size per batch).
+        Waits for all rollouts to complete before optim_step, ensuring all rollouts
+        in a batch use the same model weights.
+        """
+        asyncio.run(self._run_streaming_async(
+            recorder, label_queue, past_len, future_len,
+            batch_size, num_imgs_per_sample, shutdown_event,
+        ))
+
+    async def _run_streaming_async(self, recorder, label_queue, past_len: int, future_len: int,
+                                   batch_size: int, num_imgs_per_sample: int = 0,
+                                   shutdown_event: Optional[threading.Event] = None):
+        """Async implementation of streaming training with concurrent rollouts.
+        
+        Submits rollouts immediately as samples arrive (up to batch_size per batch).
+        Waits for all batch_size rollouts to complete before optim_step, ensuring
+        all rollouts in a batch use the same model weights.
         """
         min_required = past_len + future_len
         buffer = []
-        micro_count = 0
-        fwdbwd_futures = []
-        trajectory_groups = []
-        step_start = None
         steps_completed = 0
+
+        loop = asyncio.get_running_loop()
+
+        async def get_from_queue():
+            """Await items from threading Queue without CPU spinning."""
+            while True:
+                try:
+                    return await loop.run_in_executor(
+                        None, lambda: label_queue.get(timeout=1.0)
+                    )
+                except Empty:
+                    if shutdown_event and shutdown_event.is_set():
+                        return None
+                    if not recorder.running and label_queue.empty():
+                        return None
 
         def _should_run():
             if shutdown_event and shutdown_event.is_set():
@@ -524,35 +597,79 @@ class OnlineEnvTrainer:
             return recorder.running or not label_queue.empty()
 
         while _should_run():
-            try:
-                record = label_queue.get(timeout=1.0)
-            except Empty:
+            # === Collect and run one batch ===
+            batch_rollouts = []
+            pending_samples = []  # Samples ready to submit
+            step_start = None
+
+            # Start queue fetch
+            queue_task = asyncio.create_task(get_from_queue())
+
+            # Phase 1: Submit rollouts as samples arrive (up to batch_size)
+            while len(batch_rollouts) < batch_size:
+                if not _should_run():
+                    break
+
+                # Wait for either: new queue item OR a rollout to complete
+                wait_tasks = {queue_task} | set(batch_rollouts)
+                done, _ = await asyncio.wait(wait_tasks, return_when=asyncio.FIRST_COMPLETED)
+
+                for task in done:
+                    if task is queue_task:
+                        record = task.result()
+                        if record is None:
+                            queue_task = None
+                            break
+
+                        buffer.append(record)
+                        print(f"[train] buffer size: {len(buffer)}/{min_required}")
+
+                        if len(buffer) >= min_required:
+                            pending_samples.append(
+                                make_sample(buffer, past_len, future_len, num_imgs_per_sample)
+                            )
+
+                        # Keep fetching
+                        queue_task = asyncio.create_task(get_from_queue())
+
+                # Submit any pending samples (up to batch_size total)
+                while pending_samples and len(batch_rollouts) < batch_size:
+                    sample = pending_samples.pop(0)
+                    if step_start is None:
+                        step_start = time.time()
+                    idx = len(batch_rollouts) + 1
+                    print(f"[train] step {self._step}: micro-batch {idx}/{batch_size} — rollout + forward_backward...")
+                    rollout_task = asyncio.create_task(self._process_one_sample(sample))
+                    batch_rollouts.append(rollout_task)
+
+                if queue_task is None:
+                    break
+
+            # Cancel queue task while we finish this batch
+            if queue_task and not queue_task.done():
+                queue_task.cancel()
+                try:
+                    await queue_task
+                except asyncio.CancelledError:
+                    pass
+
+            # Phase 2: Wait for ALL rollouts in this batch to complete
+            if not batch_rollouts:
                 continue
 
-            buffer.append(record)
-            print(f"[train] buffer size: {len(buffer)}/{min_required}")
+            trajectory_groups = []
+            fwdbwd_futures = []
 
-            if len(buffer) < min_required:
-                continue
+            done, _ = await asyncio.wait(batch_rollouts)
+            for task in done:
+                traj_group, fwdbwd_future = task.result()
+                trajectory_groups.append(traj_group)
+                if fwdbwd_future is not None:
+                    fwdbwd_futures.append(fwdbwd_future)
 
-            # Create sample from sliding window
-            sample = make_sample(buffer, past_len, future_len, num_imgs_per_sample)
-
-            if step_start is None:
-                step_start = time.time()
-
-            # Rollout + forward_backward for this sample
-            print(f"[train] step {self._step}: micro-batch {micro_count + 1}/{batch_size} — rollout + forward_backward...")
-            traj_group, fwdbwd_future = asyncio.run(self._process_one_sample(sample))
-
-            trajectory_groups.append(traj_group)
-            if fwdbwd_future is not None:
-                fwdbwd_futures.append(fwdbwd_future)
-                micro_count += 1
-
-            # Optimizer step when batch_size micro-batches accumulated
-            if micro_count >= batch_size:
-                self._finish_step(fwdbwd_futures, trajectory_groups, step_start)
+            # Phase 3: Optimizer step (all rollouts used same weights)
+            if fwdbwd_futures:
+                await self._finish_step(fwdbwd_futures, trajectory_groups, step_start or time.time())
                 steps_completed += 1
 
                 if wandb and wandb.run is not None:
@@ -560,17 +677,6 @@ class OnlineEnvTrainer:
                         "pipeline/buffer_size": len(buffer),
                         "pipeline/batches_yielded": steps_completed,
                     })
-
-                # Reset accumulators
-                micro_count = 0
-                fwdbwd_futures = []
-                trajectory_groups = []
-                step_start = None
-
-        # Handle leftover micro-batches (skip if forced shutdown)
-        if micro_count > 0 and fwdbwd_futures and not (shutdown_event and shutdown_event.is_set()):
-            logger.info(f"Recorder stopped with {micro_count} pending micro-batches. Finishing partial step.")
-            self._finish_step(fwdbwd_futures, trajectory_groups, step_start or time.time())
 
 
 
@@ -603,12 +709,6 @@ def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, slee
 
         # only feed training data when sleepwalk is NOT active
         if not sleepwalk_active.is_set():
-            ts = datetime.strptime(labeled["start_time"], "%Y-%m-%d_%H-%M-%S-%f")
-            retriever.add(
-                labeled["text"],
-                event_ts=int(ts.timestamp()),
-                namespace="train",
-            )
             label_queue.put(labeled)
 
         if wandb and wandb.run is not None:
