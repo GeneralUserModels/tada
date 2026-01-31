@@ -73,6 +73,24 @@ The entry scripts (`train_longnap.py`, `run_inference.py`, `run_online.py`) auto
 - Predictions are evaluated against ground truth labels as they arrive (delayed scoring with LLM judge)
 - macOS overlay shows predicted next actions in real time
 
+### Training & Gradient Accumulation
+
+The training loop uses **streaming micro-batch gradient accumulation**. Each labeled sample is processed immediately as it arrives — no waiting for a full batch:
+
+1. A new record arrives from `label_queue`
+2. Once enough context is buffered (`past_len + future_len` records), a sample is created
+3. The sample is immediately rolled out (GRPO with `num_generations` completions) and `forward_backward` is called (micro-batch = 1)
+4. Tinker accumulates gradients across `forward_backward` calls
+5. After `batch_size` micro-batches, a single `optim_step` applies the accumulated gradients and the sampler weights are updated
+
+This means training starts as soon as data is available, rather than waiting for an entire batch to fill up. The `--batch-size` flag controls how many micro-batches of gradients accumulate before each optimizer step. All micro-batches within a step use the same policy weights for rollouts (the sampler is only updated after `optim_step`).
+
+Advantages are computed per-group (GRPO-style normalization), and the logged loss is the mean across micro-batches in the step.
+
+### Shutdown
+
+Press **Ctrl+C** to shut down gracefully. The signal handler stops the recorder, closes the overlay, and lets threads exit cleanly. Press **Ctrl+C a second time** to force an immediate exit.
+
 ### Run
 
 ```bash
@@ -84,14 +102,33 @@ With options:
 ```bash
 uv run run_online.py \
   --model Qwen/Qwen3-VL-30B-A3B-Instruct \
-  --label-model gemini/gemini-3-flash-preview \
+  --label-model gemini/gemini-2.0-flash \
   --reward-llm gemini/gemini-3-flash-preview \
+  --num-generations 8 \
+  --learning-rate 1e-5 \
   --past-len 8 --future-len 4 --batch-size 2 \
+  --num-imgs-per-sample 2 \
   --predict-every-n-seconds 10 \
   --log-dir ./logs --log-to-wandb --wandb-project longnap-online
 ```
 
-Use `--disable-inference` to skip the inference thread, or `--no-overlay` to run inference without the screen overlay.
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--model` | `Qwen/Qwen3-VL-30B-A3B-Instruct` | Base model for training & sampling |
+| `--label-model` | `gemini/gemini-2.0-flash` | LLM for labeling screen recordings |
+| `--reward-llm` | `gemini/gemini-3-flash-preview` | LLM judge for reward scoring |
+| `--num-generations` | `8` | Rollouts per sample (GRPO group size) |
+| `--learning-rate` | `1e-5` | Adam learning rate |
+| `--max-completion-length` | `512` | Max tokens per rollout completion |
+| `--num-imgs-per-sample` | `2` | Screenshots per sample (0 = text only) |
+| `--past-len` | `8` | Context actions in each sample |
+| `--future-len` | `4` | Ground-truth actions to predict |
+| `--batch-size` | `2` | Micro-batches accumulated per optimizer step |
+| `--predict-every-n-seconds` | `10` | Inference polling interval |
+| `--disable-inference` | off | Skip inference thread entirely |
+| `--no-overlay` | off | Run inference without macOS overlay |
+| `--checkpoint-every-n-steps` | `0` | Save checkpoint every N steps (0 = disabled) |
+| `--resume-from-checkpoint` | none | Path or `auto` to resume from latest |
 
 ### Inference Only
 
@@ -134,10 +171,14 @@ Pass `--log-to-wandb` to log pipeline, training, and inference metrics:
 | `pipeline/label_latency_s` | seconds per litellm call |
 | `pipeline/label_image` | screenshot + caption (every 10th) |
 | `pipeline/buffer_size` | labeled records in buffer |
-| `pipeline/batches_yielded` | batches sent to trainer |
-| `loss`, `reward_mean`, ... | training metrics (from LongNAP) |
+| `pipeline/batches_yielded` | optimizer steps completed |
+| `train/step` | current training step |
+| `train/loss` | mean loss across micro-batches in step |
+| `train/reward_mean` | mean reward across all trajectories in step |
+| `train/reward_std` | reward standard deviation |
+| `train/num_trajectories` | total trajectories in step |
+| `train/step_time` | wall-clock seconds for the step |
+| `train/retriever_size` | documents in the BM25 retriever |
 | `inference/predictions_total` | cumulative predictions made |
-| `inference/latency_s` | seconds per prediction |
 | `inference/reward` | LLM judge score (0-1) for prediction vs ground truth |
 | `inference/evals_total` | cumulative evaluations completed |
-| `inference/eval` | table with think, revise, actions, ground truth, reward |
