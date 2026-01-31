@@ -288,8 +288,8 @@ class OnlineEnvTrainer:
         logger.warning("No valid checkpoints found in checkpoints.jsonl")
         return None
 
-    def _get_retriever_path_for_checkpoint(self, state_path):
-        """Look up the retriever path for a given state_path from checkpoints.jsonl."""
+    def _get_checkpoint_entry(self, state_path):
+        """Look up the full checkpoint entry for a given state_path from checkpoints.jsonl."""
         ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
         if not ckpt_file.exists():
             return None
@@ -297,10 +297,15 @@ class OnlineEnvTrainer:
             try:
                 entry = json.loads(line)
                 if entry.get("state_path") == state_path:
-                    return entry.get("retriever_path")
+                    return entry
             except json.JSONDecodeError:
                 continue
         return None
+
+    def _get_retriever_path_for_checkpoint(self, state_path):
+        """Look up the retriever path for a given state_path from checkpoints.jsonl."""
+        entry = self._get_checkpoint_entry(state_path)
+        return entry.get("retriever_path") if entry else None
 
     def _load_checkpoint(self, checkpoint_path):
         """Load a checkpoint. Supports 'auto' to pick the latest."""
@@ -319,13 +324,21 @@ class OnlineEnvTrainer:
             model_path=self.latest_sampler_path
         )
         
-        # Load retriever checkpoint
-        retriever_path = self._get_retriever_path_for_checkpoint(resolved)
-        if retriever_path and Path(retriever_path).exists():
-            self.retriever.load_checkpoint(retriever_path)
-            logger.info(f"Loaded retriever checkpoint from {retriever_path}")
+        # Restore step counter and checkpoint paths from the checkpoint entry
+        entry = self._get_checkpoint_entry(resolved)
+        if entry:
+            self._step = entry.get("step", 0)
+            self._last_checkpoint_path = resolved
+            retriever_path = entry.get("retriever_path")
+            if retriever_path and Path(retriever_path).exists():
+                self.retriever.load_checkpoint(retriever_path)
+                self._last_retriever_checkpoint_path = retriever_path
+                logger.info(f"Loaded retriever checkpoint from {retriever_path}")
+            else:
+                logger.warning(f"No retriever checkpoint found for {resolved}")
+            logger.info(f"Resumed from step {self._step}")
         else:
-            logger.warning(f"No retriever checkpoint found for {resolved}")
+            logger.warning(f"No checkpoint entry found for {resolved}, starting from step 0")
         
         logger.info(f"Successfully loaded checkpoint from {resolved}")
 
@@ -477,7 +490,7 @@ class OnlineEnvTrainer:
 
         # Checkpoint
         if self.checkpoint_every_n_steps > 0 and (self._step + 1) % self.checkpoint_every_n_steps == 0:
-            await self._save_checkpoint(self._step + 1)
+            asyncio.run(self._save_checkpoint(self._step + 1))
         
         self._step += 1
         return metrics
