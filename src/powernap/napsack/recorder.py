@@ -3,14 +3,39 @@ from pathlib import Path
 from datetime import datetime
 from queue import Queue, Empty
 
-from record.__main__ import ScreenRecorder
+from record.__main__ import ScreenRecorder, get_monitor_dpis, calculate_monitor_scales
+
+
+# Default DPI for screenshot rescaling (lower = smaller images, fewer tokens)
+DEFAULT_TARGET_DPI = 100
 
 
 class OnlineRecorder(ScreenRecorder):
 
     DEFAULT_LOG_DIR = Path(__file__).resolve().parents[4] / "logs"
 
-    def __init__(self, *args, queue_maxsize=0, log_dir=None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        queue_maxsize=0,
+        log_dir=None,
+        target_dpi=DEFAULT_TARGET_DPI,
+        lossless=True,
+        save_screenshots=False,
+        **kwargs
+    ):
+        # Calculate scale from target DPI if not explicitly provided
+        if "scale" not in kwargs and target_dpi is not None:
+            monitor_dpis = get_monitor_dpis()
+            if monitor_dpis:
+                kwargs["scale"] = calculate_monitor_scales(target_dpi, monitor_dpis)
+        
+        # Default to lossless (PNG) saving
+        kwargs.setdefault("lossless", lossless)
+        
+        # Default to NOT saving screenshots (for tinker usage)
+        kwargs.setdefault("save_screenshots", save_screenshots)
+        
         super().__init__(*args, **kwargs)
         self.aggregation_queue = Queue(maxsize=queue_maxsize)
 

@@ -42,6 +42,8 @@ def main():
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--buffer-seconds", type=int, default=12)
     parser.add_argument("--precision", type=str, choices=["accurate", "rough"], default="accurate")
+    parser.add_argument("--save-screenshots", action="store_true",
+                        help="Save screenshots to disk (disabled by default)")
 
     # labeler
     parser.add_argument("--label-model", type=str, default="gemini/gemini-2.0-flash")
@@ -72,7 +74,12 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, trust_remote_code=True)
 
     # stage 1: recorder
-    recorder = OnlineRecorder(fps=args.fps, buffer_seconds=args.buffer_seconds, log_dir=args.log_dir)
+    recorder = OnlineRecorder(
+        fps=args.fps,
+        buffer_seconds=args.buffer_seconds,
+        log_dir=args.log_dir,
+        save_screenshots=args.save_screenshots,
+    )
 
     # stage 2: labeler
     labeler = Labeler(model=args.label_model, log_dir=recorder.session_dir)
