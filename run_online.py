@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import re
 import signal
 import sys
@@ -425,7 +426,8 @@ class OnlineEnvTrainer:
         return metrics
 
     def run_streaming(self, recorder, label_queue, past_len: int, future_len: int,
-                      batch_size: int, num_imgs_per_sample: int = 0):
+                      batch_size: int, num_imgs_per_sample: int = 0,
+                      shutdown_event: Optional[threading.Event] = None):
         """Main streaming training loop.
 
         Pulls samples from label_queue one at a time, immediately runs rollout +
@@ -440,7 +442,12 @@ class OnlineEnvTrainer:
         step_start = None
         steps_completed = 0
 
-        while recorder.running or not label_queue.empty():
+        def _should_run():
+            if shutdown_event and shutdown_event.is_set():
+                return False
+            return recorder.running or not label_queue.empty()
+
+        while _should_run():
             try:
                 record = label_queue.get(timeout=1.0)
             except Empty:
@@ -484,8 +491,8 @@ class OnlineEnvTrainer:
                 trajectory_groups = []
                 step_start = None
 
-        # Handle leftover micro-batches at shutdown
-        if micro_count > 0 and fwdbwd_futures:
+        # Handle leftover micro-batches (skip if forced shutdown)
+        if micro_count > 0 and fwdbwd_futures and not (shutdown_event and shutdown_event.is_set()):
             logger.info(f"Recorder stopped with {micro_count} pending micro-batches. Finishing partial step.")
             self._finish_step(fwdbwd_futures, trajectory_groups, step_start or time.time())
 
@@ -679,7 +686,7 @@ def main():
     parser.add_argument("--num-generations", type=int, default=8)
     parser.add_argument("--learning-rate", type=float, default=1e-5)
     parser.add_argument("--max-completion-length", type=int, default=512)
-    parser.add_argument("--num-imgs-per-sample", type=int, default=0, 
+    parser.add_argument("--num-imgs-per-sample", type=int, default=2, 
                         help="Number of images to include per sample (0 = text only)")
 
     # Pipeline
@@ -792,12 +799,18 @@ def main():
 
 
     label_queue = Queue()
+    shutdown_event = threading.Event()
 
     def shutdown(sig, frame):
+        if shutdown_event.is_set():
+            # Second Ctrl+C — force exit immediately
+            print("\n[shutdown] forced exit")
+            os._exit(1)
+        print("\n[shutdown] shutting down...")
+        shutdown_event.set()
+        recorder.stop()
         if overlay:
             overlay.close()
-        recorder.stop()
-        sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
@@ -846,6 +859,7 @@ def main():
             future_len=args.future_len,
             batch_size=args.batch_size,
             num_imgs_per_sample=args.num_imgs_per_sample,
+            shutdown_event=shutdown_event,
         )
 
         if overlay:
@@ -861,7 +875,19 @@ def main():
     else:
         train_thread.join()
 
+    # Cleanup
+    shutdown_event.set()
     recorder.stop()
+    train_thread.join(timeout=5)
+
+    if args.log_to_wandb:
+        try:
+            if wandb and wandb.run is not None:
+                wandb.finish()
+        except Exception:
+            pass
+
+    print("[shutdown] done")
 
 
 if __name__ == "__main__":
