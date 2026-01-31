@@ -5,8 +5,8 @@ set -e
 # Records screen → labels with LLM → trains with Env-based RL → predicts next actions
 # Make sure .env is configured with GEMINI_API_KEY and TINKER_API_KEY
 
-uv run_online.py \                                                                
-    --fps 5 --checkpoint-every-n-steps 20\
+uv run run_online.py \
+    --fps 5 \
     --buffer-seconds 120 \
     --precision accurate \
     --label-model gemini/gemini-3-flash-preview \
@@ -25,5 +25,5 @@ uv run_online.py \
     --log-to-wandb \
     --wandb-project longnap-online \
     --wandb-run-name "${USER:-longnap}-$(date +%Y%m%d-%H%M%S)" \
-    --checkpoint-every-n-steps 10 \
+    --checkpoint-every-n-steps 2 \
     --resume-from-checkpoint auto
