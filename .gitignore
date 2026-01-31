@@ -2,6 +2,7 @@ tinker-cookbook/
 pack/
 data/
 grpo_trainer.py
+tmp_images/
 
 *.parquet
 *.backup
