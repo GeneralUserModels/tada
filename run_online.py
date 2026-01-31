@@ -190,12 +190,10 @@ class OnlineEnvTrainer:
         resume_from_checkpoint: Optional[str] = None,
         loss_mode: str = "llm_judge",
         eval_with_llm_judge: bool = False,
-        sft_weight: float = 1.0,
     ):
         self.model_name = model_name
         self.loss_mode = loss_mode
         self.eval_with_llm_judge = eval_with_llm_judge
-        self.sft_weight = sft_weight
         self.num_generations = num_generations
         self.learning_rate = learning_rate
         self.max_tokens = max_tokens
@@ -423,8 +421,7 @@ class OnlineEnvTrainer:
             full_chunks = list(actions_ob.chunks) + [tinker.EncodedTextChunk(tokens=gt_tokens)]
             prompt_len = actions_ob.length
             weights = torch.zeros(prompt_len + len(gt_tokens))
-            # Average over group and tokens: sft_weight/(G * T_y) gives scaled per-token mean NLL
-            weights[prompt_len:] = self.sft_weight / (num_trajs * len(gt_tokens))
+            weights[prompt_len:] = 1.0
             model_input = tinker.ModelInput(chunks=full_chunks)
             sft_datum = datum_from_model_input_weights(model_input, weights)
             sft_data.append(sft_datum)
@@ -472,8 +469,9 @@ class OnlineEnvTrainer:
                 loss_fn="importance_sampling",
             )
 
+        total_gt_tokens = len(gt_tokens) * num_trajs
         extra_metrics = {
-            "sft_loss": sft_result.metrics.get("loss:sum", 0.0),  # already per-token mean NLL (weights = 1/G*T_y)
+            "sft_loss": sft_result.metrics.get("loss:sum", 0.0) / total_gt_tokens if total_gt_tokens > 0 else 0.0,
             "logprob_reward_mean": rewards_t.mean().item(),
             "logprob_reward_std": rewards_t.std().item() if len(rewards) > 1 else 0.0,
         }
@@ -847,8 +845,6 @@ def main():
                         help="Loss formulation: LLM judge reward or logprob ELBO (paper 2601.04436)")
     parser.add_argument("--eval-with-llm-judge", action="store_true",
                         help="When using logprob_elbo, also compute LLM judge reward for comparison")
-    parser.add_argument("--sft-weight", type=float, default=1.0,
-                        help="Coefficient for SFT loss term in logprob_elbo mode")
 
     # Pipeline
     parser.add_argument("--past-len", type=int, default=8)
@@ -923,7 +919,6 @@ def main():
         resume_from_checkpoint=args.resume_from_checkpoint,
         loss_mode=args.loss_mode,
         eval_with_llm_judge=args.eval_with_llm_judge,
-        sft_weight=args.sft_weight,
     )
 
     # Stage 4: Predictor (shares retriever with trainer)
