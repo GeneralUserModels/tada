@@ -194,12 +194,14 @@ class OnlineEnvTrainer:
         wandb_run_name: str = "longnap-online",
         checkpoint_every_n_steps: int = 0,
         resume_from_checkpoint: Optional[str] = None,
+        sampler_ttl_seconds: Optional[int] = 60,
         loss_mode: str = "llm_judge",
         eval_with_llm_judge: bool = False,
     ):
         self.model_name = model_name
         self.loss_mode = loss_mode
         self.eval_with_llm_judge = eval_with_llm_judge
+        self.sampler_ttl_seconds = sampler_ttl_seconds
         self.num_generations = num_generations
         self.learning_rate = learning_rate
         self.max_tokens = max_tokens
@@ -437,16 +439,8 @@ class OnlineEnvTrainer:
 
         return state_path
     
-    async def _process_one_sample(self, sample: Dict[str, Any]) -> tuple:
-        """Process a single sample: rollout + forward_backward (micro-batch = 1).
-
-        Returns:
-            (TrajectoryGroup, fwdbwd_future, extra_metrics) — future is None if no
-            training data produced.
-        """
-        if self.loss_mode == "logprob_elbo":
-            return await self._process_one_sample_elbo(sample)
-
+    async def _rollout_one_sample(self, sample: Dict[str, Any]):
+        """Run rollout only (no forward_backward). Returns (TrajectoryGroup, sample)."""
         builder = LongNAPEnvGroupBuilder(
             input_data=sample,
             renderer=self.renderer,
@@ -467,133 +461,126 @@ class OnlineEnvTrainer:
         )
 
         traj_group = await do_group_rollout(builder, policy)
+        return traj_group, sample
 
-        # Compute advantages (GRPO normalizes per-group)
-        advantages = compute_advantages([traj_group])
-        data_D, metadata_D = assemble_training_data([traj_group], advantages)
-
-        if not data_D:
-            logger.warning("No training data for sample")
-            return traj_group, None, {}
-
-        # Forward-backward — gradients accumulate until optim_step
-        fwdbwd_future = self.training_client.forward_backward(
-            [_remove_mask(d) for d in data_D],
-            loss_fn="importance_sampling",
-        )
-        return traj_group, fwdbwd_future, {}
-
-    async def _process_one_sample_elbo(self, sample: Dict[str, Any]) -> tuple:
-        """Process a single sample with ELBO loss (logprob reward + SFT on GT).
-
-        Two gradient terms accumulate:
-        1. SFT: cross-entropy on ground truth actions conditioned on sampled CoT
-        2. RL: importance_sampling on CoT tokens with logprob-based reward
+    def _train_batch_llm_judge(self, traj_groups: list, samples: list):
+        """Compute advantages and one batched forward_backward for all groups.
 
         Returns:
-            (TrajectoryGroup, rl_fwdbwd_future_or_None, extra_metrics)
+            (fwdbwd_future_or_None, extra_metrics)
+        """
+        all_data = []
+        for traj_group in traj_groups:
+            advantages = compute_advantages([traj_group])
+            data_D, _ = assemble_training_data([traj_group], advantages)
+            all_data.extend([_remove_mask(d) for d in data_D])
+
+        if not all_data:
+            logger.warning("No training data produced for batch")
+            return None, {}
+
+        fwdbwd_future = self.training_client.forward_backward(
+            all_data, loss_fn="importance_sampling",
+        )
+        return fwdbwd_future, {}
+
+    def _train_batch_elbo(self, traj_groups: list, samples: list):
+        """Batched ELBO training: one SFT forward_backward (blocking) then one RL forward_backward.
+
+        Returns:
+            (rl_fwdbwd_future_or_None, extra_metrics)
         """
         import torch
 
+        # --- Build ALL SFT datums across all groups ---
+        all_sft_data = []
+        group_traj_counts = []  # track num_trajs per group for reward extraction
+        for traj_group, sample in zip(traj_groups, samples):
+            gt_tokens = self.tokenizer.encode(sample["solution"], add_special_tokens=False)
+            num_trajs = len(traj_group.trajectories_G)
+            group_traj_counts.append((num_trajs, len(gt_tokens)))
+            for traj in traj_group.trajectories_G:
+                actions_ob = traj.transitions[2].ob
+                full_chunks = list(actions_ob.chunks) + [tinker.EncodedTextChunk(tokens=gt_tokens)]
+                prompt_len = actions_ob.length
+                weights = torch.zeros(prompt_len + len(gt_tokens))
+                weights[prompt_len:] = 1.0
+                sft_datum = datum_from_model_input_weights(
+                    tinker.ModelInput(chunks=full_chunks), weights
+                )
+                all_sft_data.append(sft_datum)
 
-        # 1. Rollout — same 3-phase env (Think → Retrieve → Revise → Actions)
-        builder = LongNAPEnvGroupBuilder(
-            input_data=sample,
-            renderer=self.renderer,
-            tokenizer=self.tokenizer,
-            retriever=self.retriever,
-            reward_scorer=self.reward_scorer,
-            num_envs=self.num_generations,
-            retrieval_top_k=self.retrieval_top_k,
-            retrieval_mmr_k=self.retrieval_mmr_k,
-            retrieval_mmr_alpha=self.retrieval_mmr_alpha,
-            retrieval_time_decay_lambda=self.retrieval_time_decay_lambda,
-        )
+        if not all_sft_data:
+            return None, {}
 
-        policy = TinkerTokenCompleter(
-            self.sampling_client,
-            max_tokens=self.max_tokens,
-            temperature=self.temperature,
-        )
-
-        traj_group = await do_group_rollout(builder, policy)
-
-        # 2. Build SFT data — one Datum per trajectory
-        #    transition_2.ob = full rendered prompt:
-        #      [context + think_response + revise_prompt + revise_response + actions_instruction]
-        #    We append tokenized ground truth so the SFT target is:
-        #      [full_prompt_including_actions_instruction | ground_truth_action_tokens]
-        ground_truth = sample["solution"]
-        gt_tokens = self.tokenizer.encode(ground_truth, add_special_tokens=False)
-
-        num_trajs = len(traj_group.trajectories_G)
-        sft_data = []
-        for traj in traj_group.trajectories_G:
-            actions_ob = traj.transitions[2].ob  # Full prompt through Actions instruction
-            full_chunks = list(actions_ob.chunks) + [tinker.EncodedTextChunk(tokens=gt_tokens)]
-            prompt_len = actions_ob.length
-            weights = torch.zeros(prompt_len + len(gt_tokens))
-            weights[prompt_len:] = 1.0
-            model_input = tinker.ModelInput(chunks=full_chunks)
-            sft_datum = datum_from_model_input_weights(model_input, weights)
-            sft_data.append(sft_datum)
-
-        # 3. SFT forward_backward — BLOCKING (need logprobs to compute reward)
-        logger.info(f"ELBO: SFT forward_backward on {len(sft_data)} trajectories")
+        # --- 1 SFT forward_backward — BLOCKING (need logprobs for reward) ---
+        logger.info(f"ELBO batch: SFT forward_backward on {len(all_sft_data)} datums")
         sft_result = self.training_client.forward_backward(
-            sft_data, loss_fn="cross_entropy"
+            all_sft_data, loss_fn="cross_entropy",
         ).result()
 
-        # 4. Extract rewards from GT logprobs
-        rewards = []
-        for i in range(len(traj_group.trajectories_G)):
-            logprobs = sft_result.loss_fn_outputs[i]["logprobs"].to_torch()
-            w = sft_data[i].loss_fn_inputs["weights"].to_torch()
-            gt_mask = w > 0
-            gt_logprobs = logprobs[gt_mask]
-            reward = torch.clamp(gt_logprobs, min=-5.0).mean().item()
-            rewards.append(reward)
+        # --- Extract rewards per trajectory, GRPO normalize per group ---
+        all_rl_data = []
+        datum_idx = 0
+        total_gt_tokens = 0
+        all_logprob_rewards = []
 
-        # 5. GRPO normalize rewards across group
-        rewards_t = torch.tensor(rewards)
-        advantages_G = rewards_t - rewards_t.mean()
+        for traj_group, sample in zip(traj_groups, samples):
+            gt_tokens = self.tokenizer.encode(sample["solution"], add_special_tokens=False)
+            num_trajs = len(traj_group.trajectories_G)
+            rewards = []
+            for i in range(num_trajs):
+                logprobs = sft_result.loss_fn_outputs[datum_idx]["logprobs"].to_torch()
+                w = all_sft_data[datum_idx].loss_fn_inputs["weights"].to_torch()
+                gt_logprobs = logprobs[w > 0]
+                reward = torch.clamp(gt_logprobs, min=-5.0).mean().item()
+                rewards.append(reward)
+                datum_idx += 1
 
-        logger.info(
-            f"ELBO rewards: mean={rewards_t.mean().item():.4f}, "
-            f"std={rewards_t.std().item() if len(rewards) > 1 else 0:.4f}"
-        )
+            total_gt_tokens += len(gt_tokens) * num_trajs
+            all_logprob_rewards.extend(rewards)
 
-        # 6. Build RL data — CoT-only trajectories (transitions 0,1 = Think + Revise)
-        rl_data = []
-        for traj, adv in zip(traj_group.trajectories_G, advantages_G):
-            cot_traj = Trajectory(
-                transitions=traj.transitions[:2],
-                final_ob=traj.transitions[2].ob,
+            # GRPO normalize within this group
+            rewards_t = torch.tensor(rewards)
+            advantages_G = rewards_t - rewards_t.mean()
+
+            logger.info(
+                f"ELBO group rewards: mean={rewards_t.mean().item():.4f}, "
+                f"std={rewards_t.std().item() if len(rewards) > 1 else 0:.4f}"
             )
-            new_data = trajectory_to_data(cot_traj, float(adv))
-            rl_data.extend(new_data)
 
+            # Build CoT-only RL datums
+            for traj, adv in zip(traj_group.trajectories_G, advantages_G):
+                cot_traj = Trajectory(
+                    transitions=traj.transitions[:2],
+                    final_ob=traj.transitions[2].ob,
+                )
+                new_data = trajectory_to_data(cot_traj, float(adv))
+                all_rl_data.extend([_remove_mask(d) for d in new_data])
+
+        # --- 1 RL forward_backward ---
         rl_fwdbwd_future = None
-        if rl_data:
-            logger.info(f"ELBO: RL forward_backward on {len(rl_data)} datums (CoT tokens)")
+        if all_rl_data:
+            logger.info(f"ELBO batch: RL forward_backward on {len(all_rl_data)} datums (CoT tokens)")
             rl_fwdbwd_future = self.training_client.forward_backward(
-                [_remove_mask(d) for d in rl_data],
-                loss_fn="importance_sampling",
+                all_rl_data, loss_fn="importance_sampling",
             )
 
-        total_gt_tokens = len(gt_tokens) * num_trajs
+        total_sft_loss = sft_result.metrics.get("loss:sum", 0.0)
+        rewards_all = torch.tensor(all_logprob_rewards)
         extra_metrics = {
-            "sft_loss": sft_result.metrics.get("loss:sum", 0.0) / total_gt_tokens if total_gt_tokens > 0 else 0.0,
-            "logprob_reward_mean": rewards_t.mean().item(),
-            "logprob_reward_std": rewards_t.std().item() if len(rewards) > 1 else 0.0,
+            "sft_loss": total_sft_loss / total_gt_tokens if total_gt_tokens > 0 else 0.0,
+            "logprob_reward_mean": rewards_all.mean().item(),
+            "logprob_reward_std": rewards_all.std().item() if len(all_logprob_rewards) > 1 else 0.0,
         }
 
-        # Log LLM judge reward for comparison if eval_with_llm_judge is enabled
         if self.eval_with_llm_judge:
-            judge_rewards = traj_group.get_total_rewards()
-            extra_metrics["llm_judge_reward_mean"] = sum(judge_rewards) / len(judge_rewards)
+            judge_rewards = []
+            for tg in traj_groups:
+                judge_rewards.extend(tg.get_total_rewards())
+            extra_metrics["llm_judge_reward_mean"] = sum(judge_rewards) / len(judge_rewards) if judge_rewards else 0.0
 
-        return traj_group, rl_fwdbwd_future, extra_metrics
+        return rl_fwdbwd_future, extra_metrics
 
     async def _finish_step(
         self,
@@ -603,16 +590,16 @@ class OnlineEnvTrainer:
         extra_metrics_list: Optional[List[Dict[str, float]]] = None,
     ) -> Dict[str, float]:
 
-        """Complete one optimizer step on accumulated gradients.
+        """Complete one optimizer step after batched forward_backward.
 
-        Runs optim_step, waits for results, updates sampler, logs metrics, checkpoints.
+        Runs optim_step (pipelined with forward_backward), waits for results,
+        updates sampler, logs metrics, checkpoints.
         """
         if not fwdbwd_futures:
             logger.warning("No forward_backward futures to process")
             return {}
 
-        # Single optimizer step on accumulated gradients
-        print(f"[train] step {self._step}: optim step on {len(fwdbwd_futures)} micro-batches...")
+        print(f"[train] step {self._step}: optim step...")
         optim_future = self.training_client.optim_step(
             AdamParams(learning_rate=self.learning_rate)
         )
@@ -692,9 +679,8 @@ class OnlineEnvTrainer:
                       shutdown_event: Optional[threading.Event] = None):
         """Main streaming training loop.
 
-        Submits rollouts immediately as samples arrive (up to batch_size per batch).
-        Waits for all rollouts to complete before optim_step, ensuring all rollouts
-        in a batch use the same model weights.
+        Runs batch_size rollouts concurrently, then sends one batched
+        forward_backward + optim_step (1-2 Tinker clock cycles per step).
         """
         asyncio.run(self._run_streaming_async(
             recorder, label_queue, past_len, future_len,
@@ -704,19 +690,15 @@ class OnlineEnvTrainer:
     async def _run_streaming_async(self, recorder, label_queue, past_len: int, future_len: int,
                                    batch_size: int, num_imgs_per_sample: int = 0,
                                    shutdown_event: Optional[threading.Event] = None):
-        """Async implementation of streaming training with concurrent rollouts.
-        
-        Submits rollouts immediately as samples arrive (up to batch_size per batch).
-        Waits for all batch_size rollouts to complete before optim_step, ensuring
-        all rollouts in a batch use the same model weights.
+        """Async implementation of streaming training with batched forward_backward.
+
+        Phase 1: Submit rollouts concurrently as samples arrive (up to batch_size).
+        Phase 2: Gather all rollout results.
+        Phase 3: One batched forward_backward + optim_step (1 clock cycle for LLM judge,
+                 2 clock cycles for ELBO).
         """
         min_required = past_len + future_len
         buffer = []
-        micro_count = 0
-        fwdbwd_futures = []
-        trajectory_groups = []
-        extra_metrics_list = []
-        step_start = None
         steps_completed = 0
 
         loop = asyncio.get_running_loop()
@@ -742,10 +724,9 @@ class OnlineEnvTrainer:
         while _should_run():
             # === Collect and run one batch ===
             batch_rollouts = []
-            pending_samples = []  # Samples ready to submit
+            pending_samples = []
             step_start = None
 
-            # Start queue fetch
             queue_task = asyncio.create_task(get_from_queue())
 
             # Phase 1: Submit rollouts as samples arrive (up to batch_size)
@@ -753,7 +734,6 @@ class OnlineEnvTrainer:
                 if not _should_run():
                     break
 
-                # Wait for either: new queue item OR a rollout to complete
                 wait_tasks = {queue_task} | set(batch_rollouts)
                 done, _ = await asyncio.wait(wait_tasks, return_when=asyncio.FIRST_COMPLETED)
 
@@ -772,17 +752,15 @@ class OnlineEnvTrainer:
                                 make_sample(buffer, past_len, future_len, num_imgs_per_sample)
                             )
 
-                        # Keep fetching
                         queue_task = asyncio.create_task(get_from_queue())
 
-                # Submit any pending samples (up to batch_size total)
                 while pending_samples and len(batch_rollouts) < batch_size:
                     sample = pending_samples.pop(0)
                     if step_start is None:
                         step_start = time.time()
                     idx = len(batch_rollouts) + 1
-                    print(f"[train] step {self._step}: micro-batch {idx}/{batch_size} — rollout + forward_backward...")
-                    rollout_task = asyncio.create_task(self._process_one_sample(sample))
+                    print(f"[train] step {self._step}: rollout {idx}/{batch_size}...")
+                    rollout_task = asyncio.create_task(self._rollout_one_sample(sample))
                     batch_rollouts.append(rollout_task)
 
                 if queue_task is None:
@@ -796,27 +774,37 @@ class OnlineEnvTrainer:
                 except asyncio.CancelledError:
                     pass
 
-            # Phase 2: Wait for ALL rollouts in this batch to complete
+            # Phase 2: Wait for all rollouts to complete
             if not batch_rollouts:
                 continue
 
-            trajectory_groups = []
-            fwdbwd_futures = []
+            results = await asyncio.gather(*batch_rollouts, return_exceptions=True)
 
-            # Rollout + forward_backward for this sample
-            print(f"[train] step {self._step}: micro-batch {micro_count + 1}/{batch_size} — rollout + forward_backward...")
-            traj_group, fwdbwd_future, extra_metrics = asyncio.run(self._process_one_sample(sample))
+            traj_groups = []
+            samples_for_batch = []
+            for r in results:
+                if isinstance(r, Exception):
+                    logger.error(f"Rollout failed: {r}")
+                    continue
+                traj_group, sample = r
+                traj_groups.append(traj_group)
+                samples_for_batch.append(sample)
 
-            trajectory_groups.append(traj_group)
-            if extra_metrics:
-                extra_metrics_list.append(extra_metrics)
-            if fwdbwd_future is not None:
-                fwdbwd_futures.append(fwdbwd_future)
-                micro_count += 1
+            if not traj_groups:
+                continue
 
-            # Optimizer step when batch_size micro-batches accumulated
-            if micro_count >= batch_size:
-                self._finish_step(fwdbwd_futures, trajectory_groups, step_start, extra_metrics_list)
+            # Phase 3: Batched training (1-2 forward_backward calls instead of N)
+            print(f"[train] step {self._step}: batched training on {len(traj_groups)} groups...")
+            if self.loss_mode == "logprob_elbo":
+                fwdbwd_future, extra_metrics = self._train_batch_elbo(traj_groups, samples_for_batch)
+            else:
+                fwdbwd_future, extra_metrics = self._train_batch_llm_judge(traj_groups, samples_for_batch)
+
+            fwdbwd_futures = [fwdbwd_future] if fwdbwd_future is not None else []
+            extra_metrics_list = [extra_metrics] if extra_metrics else []
+
+            if fwdbwd_futures:
+                await self._finish_step(fwdbwd_futures, traj_groups, step_start or time.time(), extra_metrics_list)
                 steps_completed += 1
 
                 if wandb and wandb.run is not None:
@@ -825,67 +813,102 @@ class OnlineEnvTrainer:
                         "pipeline/batches_yielded": steps_completed,
                     })
 
-                # Reset accumulators
-                micro_count = 0
-                fwdbwd_futures = []
-                trajectory_groups = []
-                extra_metrics_list = []
-                step_start = None
-
-        # Handle leftover micro-batches (skip if forced shutdown)
-        if micro_count > 0 and fwdbwd_futures and not (shutdown_event and shutdown_event.is_set()):
-            logger.info(f"Recorder stopped with {micro_count} pending micro-batches. Finishing partial step.")
-            self._finish_step(fwdbwd_futures, trajectory_groups, step_start or time.time(), extra_metrics_list)
-
 
 
 def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active):
-    """Label incoming screen recordings and add to retriever."""
-    from PIL import Image
+    """Label incoming screen recordings with concurrent async LLM calls."""
+    asyncio.run(_async_label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active))
 
+
+async def _async_label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active):
+    """Async label loop: fires off up to MAX_CONCURRENT labeling requests,
+    drains results in submission order to preserve chronological ordering."""
+    from PIL import Image
+    from collections import deque
+
+    MAX_CONCURRENT = 4
     label_count = 0
     skip_count = 0
+    loop = asyncio.get_running_loop()
 
-    for agg in recorder.iter_aggregations():
-        # skip if no screenshot (check both in-memory and file)
-        has_screenshot = (
-            agg.screenshot is not None or
-            (agg.request.screenshot_path and Path(agg.request.screenshot_path).exists())
-        )
-        if not has_screenshot:
-            skip_count += 1
-            continue
+    agg_iter = iter(recorder.iter_aggregations())
 
-        t0 = time.time()
-        labeled = labeler.label(agg)
-        latency = time.time() - t0
-        label_count += 1
-        print(f"[label] labeled action #{label_count}: {labeled['text'][:80]}... ({latency:.2f}s)")
+    async def get_next_agg():
+        return await loop.run_in_executor(None, lambda: next(agg_iter, None))
 
+    pending = deque()  # deque of (asyncio.Task, submit_time)
+    fetching = True
+    fetch_task = None
 
-        # always add to inference buffer
-        inference_buffer.append(labeled)
+    while fetching or pending:
+        # Start a fetch if we have room and aren't already fetching
+        if fetching and fetch_task is None and len(pending) < MAX_CONCURRENT:
+            fetch_task = asyncio.create_task(get_next_agg())
 
-        # only feed training data when sleepwalk is NOT active
-        if not sleepwalk_active.is_set():
-            label_queue.put(labeled)
+        # Build wait set: oldest pending label + fetch task
+        wait_set = set()
+        if fetch_task is not None:
+            wait_set.add(fetch_task)
+        if pending:
+            wait_set.add(pending[0][0])
 
-        if wandb and wandb.run is not None:
-            log = {
-                "pipeline/labels_total": label_count,
-                "pipeline/label_latency_s": latency,
-                "pipeline/label_text": wandb.Html(f"<pre>{labeled['text']}</pre>"),
-            }
+        if not wait_set:
+            break
 
-            if label_count % 10 == 1 and labeled.get("img") is not None:
-                img = labeled["img"]
-                # Handle both PIL Image and file path
-                if isinstance(img, Image.Image) or (isinstance(img, str) and Path(img).exists()):
-                    log["pipeline/label_image"] = wandb.Image(
-                        img, caption=labeled["text"][:200],
-                    )
+        done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED)
 
-            wandb.log(log)
+        # Handle fetch completion
+        if fetch_task in done:
+            agg = fetch_task.result()
+            fetch_task = None
+            if agg is None:
+                fetching = False
+            else:
+                has_screenshot = (
+                    agg.screenshot is not None or
+                    (agg.request.screenshot_path and Path(agg.request.screenshot_path).exists())
+                )
+                if has_screenshot:
+                    task = asyncio.create_task(labeler.alabel(agg))
+                    pending.append((task, time.time()))
+                else:
+                    skip_count += 1
+
+        # Drain completed tasks from the front (preserves chronological order)
+        while pending and pending[0][0].done():
+            task, t0 = pending.popleft()
+            try:
+                labeled = task.result()
+            except Exception as e:
+                logger.error(f"Labeling failed: {e}")
+                continue
+
+            latency = time.time() - t0
+            label_count += 1
+            print(f"[label] labeled action #{label_count}: {labeled['text'][:80]}... ({latency:.2f}s, in-flight={len(pending)})")
+
+            # always add to inference buffer
+            inference_buffer.append(labeled)
+
+            # only feed training data when sleepwalk is NOT active
+            if not sleepwalk_active.is_set():
+                label_queue.put(labeled)
+
+            if wandb and wandb.run is not None:
+                log = {
+                    "pipeline/labels_total": label_count,
+                    "pipeline/label_latency_s": latency,
+                    "pipeline/label_text": wandb.Html(f"<pre>{labeled['text']}</pre>"),
+                }
+
+                if label_count % 10 == 1 and labeled.get("img") is not None:
+                    img = labeled["img"]
+                    if isinstance(img, Image.Image) or (isinstance(img, str) and Path(img).exists()):
+                        log["pipeline/label_image"] = wandb.Image(
+                            img, caption=labeled["text"][:200],
+                        )
+
+                wandb.log(log)
 
 
 def inference_loop(predictor, inference_buffer, trainer, recorder,

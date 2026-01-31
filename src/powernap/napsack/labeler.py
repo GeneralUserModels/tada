@@ -1,4 +1,5 @@
 import base64
+import asyncio
 import io
 import json
 import re
@@ -6,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from litellm import completion as litellm_completion
+from litellm import acompletion as litellm_acompletion
 from label.models import Aggregation as LabelAggregation
 
 
@@ -142,9 +144,58 @@ class Labeler:
         for agg in recorder.iter_aggregations():
             yield self.label(agg)
 
-    async def async_iter_labeled(self, recorder):
-        async for agg in recorder.async_iter_aggregations():
-            yield self.label(agg)
+    async def alabel(self, processed_agg):
+        """Async label using litellm acompletion — no thread pool needed."""
+        label_agg = self._to_label_agg(processed_agg)
+        events_text = label_agg.to_prompt("00:00")
+        prompt = LABEL_PROMPT.replace("{{LOGS}}", events_text)
+
+        content = []
+        b64, mime = _screenshot_to_base64(processed_agg)
+        if b64:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{b64}"}
+            })
+        content.append({"type": "text", "text": prompt})
+
+        response = await litellm_acompletion(
+            model=self.model,
+            messages=[{"role": "user", "content": content}],
+        )
+
+        captions = self._parse_response(response.choices[0].message.content)
+
+        ts = processed_agg.request.timestamp
+        start_time = datetime.fromtimestamp(ts).strftime("%Y-%m-%d_%H-%M-%S-%f")
+
+        img = None
+        if processed_agg.screenshot is not None:
+            try:
+                from PIL import Image
+                img = Image.fromarray(processed_agg.screenshot.screenshot)
+            except Exception:
+                pass
+        if img is None:
+            img = processed_agg.request.screenshot_path
+
+        result = {
+            "text": captions[0]["caption"] if captions else "",
+            "start_time": start_time,
+            "img": img,
+            "raw_events": processed_agg.events,
+        }
+
+        if self.labels_file:
+            serializable_result = {
+                **result,
+                "img": processed_agg.request.screenshot_path,
+            }
+            with open(self.labels_file, "a") as f:
+                json.dump(serializable_result, f, default=str)
+                f.write("\n")
+
+        return result
 
     def _to_label_agg(self, processed_agg):
         req = processed_agg.request
