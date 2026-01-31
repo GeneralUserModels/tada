@@ -25,5 +25,5 @@ uv run run_online.py \
     --log-to-wandb \
     --wandb-project longnap-online \
     --wandb-run-name "${USER:-longnap}-$(date +%Y%m%d-%H%M%S)" \
-    --checkpoint-every-n-steps 10 \
+    --checkpoint-every-n-steps 2 \
     --resume-from-checkpoint auto
