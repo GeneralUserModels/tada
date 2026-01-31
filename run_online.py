@@ -349,12 +349,8 @@ class OnlineEnvTrainer:
             self._step = entry.get("step", 0)
             self._last_checkpoint_path = checkpoint_path
             retriever_path = entry.get("retriever_path")
-            if retriever_path and Path(retriever_path).exists():
-                self.retriever.load_checkpoint(retriever_path)
-                self._last_retriever_checkpoint_path = retriever_path
-                logger.info(f"Loaded retriever checkpoint from {retriever_path}")
-            else:
-                logger.warning(f"No retriever checkpoint found for {checkpoint_path}")
+            self.retriever.load_checkpoint(retriever_path)
+            self._last_retriever_checkpoint_path = retriever_path
             logger.info(f"Resumed from step {self._step}")
         else:
             logger.warning(f"No checkpoint entry found for {checkpoint_path}, starting from step 0")
@@ -410,22 +406,16 @@ class OnlineEnvTrainer:
 
         # Delete previous model checkpoint to only keep the latest
         if self._last_checkpoint_path:
-            try:
-                await self.rest_client.delete_checkpoint_from_tinker_path_async(
-                    self._last_checkpoint_path
-                )
-                logger.info(f"Deleted previous checkpoint: {self._last_checkpoint_path}")
-            except Exception as e:
-                logger.warning(f"Failed to delete previous checkpoint: {e}")
+            await self.rest_client.delete_checkpoint_from_tinker_path_async(
+                self._last_checkpoint_path
+            )
+            logger.info(f"Deleted previous checkpoint: {self._last_checkpoint_path}")
 
         # Delete previous retriever checkpoint to only keep the latest
         if self._last_retriever_checkpoint_path:
-            try:
-                Path(self._last_retriever_checkpoint_path).unlink()
-                logger.info(f"Deleted previous retriever checkpoint: {self._last_retriever_checkpoint_path}")
-            except Exception as e:
-                logger.warning(f"Failed to delete previous retriever checkpoint: {e}")
-        
+            Path(self._last_retriever_checkpoint_path).unlink()
+            logger.info(f"Deleted previous retriever checkpoint: {self._last_retriever_checkpoint_path}")
+    
         self._last_checkpoint_path = state_path
         self._last_retriever_checkpoint_path = str(retriever_path)
 
