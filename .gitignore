@@ -2,7 +2,9 @@ tinker-cookbook/
 pack/
 data/
 grpo_trainer.py
+tmp_images/
 
+*.pdf
 *.parquet
 *.backup
 uv.lock
