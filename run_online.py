@@ -40,10 +40,11 @@ def _load_heavy_imports():
     from tinker_cookbook import model_info, renderers
     from tinker_cookbook.completers import TinkerTokenCompleter
     from tinker_cookbook.renderers.qwen3 import Qwen3VLInstructRenderer
-    from tinker_cookbook.rl.data_processing import assemble_training_data, compute_advantages
+    from tinker_cookbook.rl.data_processing import assemble_training_data, compute_advantages, trajectory_to_data
     from tinker_cookbook.rl.train import _remove_mask
     from tinker_cookbook.rl.rollouts import do_group_rollout
-    from tinker_cookbook.rl.types import TrajectoryGroup
+    from tinker_cookbook.rl.types import TrajectoryGroup, Trajectory
+    from tinker_cookbook.supervised.common import datum_from_model_input_weights
     from tinker_cookbook.image_processing_utils import get_image_processor
     from tinker_cookbook.tokenizer_utils import get_tokenizer
     from powernap.napsack import OnlineRecorder, Labeler
@@ -69,8 +70,10 @@ def _load_heavy_imports():
         "TinkerTokenCompleter": TinkerTokenCompleter,
         "Qwen3VLInstructRenderer": Qwen3VLInstructRenderer,
         "assemble_training_data": assemble_training_data,
-        "compute_advantages": compute_advantages, "_remove_mask": _remove_mask,
+        "compute_advantages": compute_advantages, "trajectory_to_data": trajectory_to_data,
+        "_remove_mask": _remove_mask,
         "do_group_rollout": do_group_rollout, "TrajectoryGroup": TrajectoryGroup,
+        "Trajectory": Trajectory, "datum_from_model_input_weights": datum_from_model_input_weights,
         "get_image_processor": get_image_processor, "get_tokenizer": get_tokenizer,
         "OnlineRecorder": OnlineRecorder, "Labeler": Labeler,
         "LongNAPEnvGroupBuilder": LongNAPEnvGroupBuilder,
@@ -120,13 +123,19 @@ def make_sample(
         image_content = []
         for i in range(past_len):
             if i >= (past_len - num_imgs_per_sample):
-                img_path = past[i].get("img")
-                if img_path and Path(img_path).exists():
+                img = past[i].get("img")
+                if img is not None:
                     try:
-                        img = Image.open(img_path).convert("RGB")  # Convert to RGB for consistency
-                        image_content.append({"type": "image", "image": img})
+                        # Handle both PIL Image (in-memory) and file path
+                        if isinstance(img, Image.Image):
+                            pil_img = img.convert("RGB")
+                        elif isinstance(img, str) and Path(img).exists():
+                            pil_img = Image.open(img).convert("RGB")
+                        else:
+                            continue
+                        image_content.append({"type": "image", "image": pil_img})
                     except Exception as e:
-                        logger.warning(f"Failed to load image {img_path}: {e}")
+                        logger.warning(f"Failed to load image: {e}")
         
         if image_content:
             content = image_content + [
@@ -185,8 +194,14 @@ class OnlineEnvTrainer:
         wandb_run_name: str = "longnap-online",
         checkpoint_every_n_steps: int = 0,
         resume_from_checkpoint: Optional[str] = None,
+        sampler_ttl_seconds: Optional[int] = 60,
+        loss_mode: str = "llm_judge",
+        eval_with_llm_judge: bool = False,
     ):
         self.model_name = model_name
+        self.loss_mode = loss_mode
+        self.eval_with_llm_judge = eval_with_llm_judge
+        self.sampler_ttl_seconds = sampler_ttl_seconds
         self.num_generations = num_generations
         self.learning_rate = learning_rate
         self.max_tokens = max_tokens
@@ -198,11 +213,27 @@ class OnlineEnvTrainer:
         
         # Initialize Tinker clients
         self.service_client = tinker.ServiceClient()
-        self.training_client = self.service_client.create_lora_training_client(
-            base_model=model_name,
-            rank=lora_rank,
-        )
+        self.rest_client = self.service_client.create_rest_client()
+        
+        # Resolve checkpoint path early (before creating training client)
+        self._resolved_checkpoint = self._resolve_checkpoint_static(resume_from_checkpoint, log_dir)
+        
+        # Create training client - use create_training_client_from_state if resuming from checkpoint
+        # This supports cross-session checkpoint loading
+        if self._resolved_checkpoint:
+            logger.info(f"Creating training client from checkpoint: {self._resolved_checkpoint}")
+            self.training_client = self.service_client.create_training_client_from_state(
+                self._resolved_checkpoint
+            )
+        else:
+            self.training_client = self.service_client.create_lora_training_client(
+                base_model=model_name,
+                rank=lora_rank,
+            )
+        
         self.num_imgs_per_sample = num_imgs_per_sample
+        self._last_checkpoint_path: Optional[str] = None
+        self._last_retriever_checkpoint_path: Optional[str] = None
         
         # Get tokenizer and renderer
         self.tokenizer = get_tokenizer(model_name)
@@ -215,7 +246,8 @@ class OnlineEnvTrainer:
         
         # Save initial weights for sampler
         save_result = self.training_client.save_weights_for_sampler(
-            name=f'{self.run_name}.model'
+            name=f'{self.run_name}.model',
+            ttl_seconds=self.sampler_ttl_seconds,
         ).result()
         self.latest_sampler_path = save_result.path
         self.sampling_client = self.service_client.create_sampling_client(
@@ -232,7 +264,12 @@ class OnlineEnvTrainer:
         )
         
         # Create reward scorer
-        self.reward_scorer = create_reward_scorer(reward_llm=reward_llm)
+        if self.loss_mode == "logprob_elbo" and not self.eval_with_llm_judge:
+            async def _dummy_scorer(actions, ground_truth):
+                return 0.0
+            self.reward_scorer = _dummy_scorer
+        else:
+            self.reward_scorer = create_reward_scorer(reward_llm=reward_llm)
         
         # Retrieval parameters
         self.retrieval_top_k = retrieval_top_k
@@ -259,17 +296,23 @@ class OnlineEnvTrainer:
                 }
             )
         
-        # Handle checkpoint resume
-        if resume_from_checkpoint:
-            self._load_checkpoint(resume_from_checkpoint)
+        # Handle checkpoint resume (restore step counter, retriever, etc.)
+        if self._resolved_checkpoint:
+            self._restore_checkpoint_metadata(self._resolved_checkpoint)
 
-    def _resolve_checkpoint(self, checkpoint_path):
-        """Resolve 'auto' to the latest checkpoint from checkpoints.jsonl, or return as-is."""
+    @staticmethod
+    def _resolve_checkpoint_static(checkpoint_path: Optional[str], log_dir: str) -> Optional[str]:
+        """Resolve 'auto' to the latest checkpoint from checkpoints.jsonl, or return as-is.
+        
+        Static method so it can be called before self is fully initialized.
+        """
+        if not checkpoint_path:
+            return None
         if checkpoint_path != "auto":
             return checkpoint_path
-        ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
+        ckpt_file = Path(log_dir) / "checkpoints.jsonl"
         if not ckpt_file.exists():
-            logger.warning(f"No checkpoints.jsonl found in {self.log_dir}")
+            logger.warning(f"No checkpoints.jsonl found in {log_dir}")
             return None
         last = None
         for line in ckpt_file.read_text().strip().splitlines():
@@ -282,6 +325,50 @@ class OnlineEnvTrainer:
         logger.warning("No valid checkpoints found in checkpoints.jsonl")
         return None
 
+    def _resolve_checkpoint(self, checkpoint_path):
+        """Resolve 'auto' to the latest checkpoint. Instance method wrapper."""
+        return self._resolve_checkpoint_static(checkpoint_path, self.log_dir)
+
+    def _get_checkpoint_entry(self, state_path):
+        """Look up the full checkpoint entry for a given state_path from checkpoints.jsonl."""
+        ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
+        if not ckpt_file.exists():
+            return None
+        for line in ckpt_file.read_text().strip().splitlines():
+            try:
+                entry = json.loads(line)
+                if entry.get("state_path") == state_path:
+                    return entry
+            except json.JSONDecodeError:
+                continue
+        return None
+
+    def _get_retriever_path_for_checkpoint(self, state_path):
+        """Look up the retriever path for a given state_path from checkpoints.jsonl."""
+        entry = self._get_checkpoint_entry(state_path)
+        return entry.get("retriever_path") if entry else None
+
+    def _restore_checkpoint_metadata(self, checkpoint_path):
+        """Restore metadata from checkpoint (step counter, retriever) without loading model state.
+        
+        Used when training client was already initialized from state via create_training_client_from_state.
+        """
+        logger.info(f"Restoring checkpoint metadata from {checkpoint_path}...")
+        
+        # Restore step counter and checkpoint paths from the checkpoint entry
+        entry = self._get_checkpoint_entry(checkpoint_path)
+        if entry:
+            self._step = entry.get("step", 0)
+            self._last_checkpoint_path = checkpoint_path
+            retriever_path = entry.get("retriever_path")
+            self.retriever.load_checkpoint(retriever_path)
+            self._last_retriever_checkpoint_path = retriever_path
+            logger.info(f"Resumed from step {self._step}")
+        else:
+            logger.warning(f"No checkpoint entry found for {checkpoint_path}, starting from step 0")
+        
+        logger.info(f"Successfully restored checkpoint metadata from {checkpoint_path}")
+
     def _load_checkpoint(self, checkpoint_path):
         """Load a checkpoint. Supports 'auto' to pick the latest."""
         resolved = self._resolve_checkpoint(checkpoint_path)
@@ -291,35 +378,69 @@ class OnlineEnvTrainer:
         logger.info(f"Loading checkpoint from {resolved}...")
         self.training_client.load_state(resolved).result()
         save_result = self.training_client.save_weights_for_sampler(
-            name=f'{self.run_name}.model-resumed'
+            name=f'{self.run_name}.model-resumed',
+            ttl_seconds=self.sampler_ttl_seconds,
         ).result()
         self.latest_sampler_path = save_result.path
         self.sampling_client = self.service_client.create_sampling_client(
             model_path=self.latest_sampler_path
         )
+        
+        # Restore step counter and checkpoint paths from the checkpoint entry
+        entry = self._get_checkpoint_entry(resolved)
+        if entry:
+            self._step = entry.get("step", 0)
+            self._last_checkpoint_path = resolved
+            retriever_path = entry.get("retriever_path")
+            if retriever_path and Path(retriever_path).exists():
+                self.retriever.load_checkpoint(retriever_path)
+                self._last_retriever_checkpoint_path = retriever_path
+                logger.info(f"Loaded retriever checkpoint from {retriever_path}")
+            else:
+                logger.warning(f"No retriever checkpoint found for {resolved}")
+            logger.info(f"Resumed from step {self._step}")
+        else:
+            logger.warning(f"No checkpoint entry found for {resolved}, starting from step 0")
+        
         logger.info(f"Successfully loaded checkpoint from {resolved}")
 
-    def _save_checkpoint(self, step):
-        """Save a checkpoint and record it to checkpoints.jsonl."""
+    async def _save_checkpoint(self, step):
+        """Save a checkpoint and record it to checkpoints.jsonl. Deletes previous checkpoint."""
         checkpoint_name = f"{self.run_name}.checkpoint_step_{step:06d}"
         save_result = self.training_client.save_state(name=checkpoint_name).result()
         state_path = save_result.path
         logger.info(f"Saved checkpoint at step {step}: {state_path}")
 
+        # Save retriever checkpoint
+        retriever_path = Path(self.log_dir) / f"retriever_step_{step:06d}.json.gz"
+        self.retriever.save_checkpoint(str(retriever_path))
+        logger.info(f"Saved retriever checkpoint at step {step}: {retriever_path}")
+
+        # Delete previous model checkpoint to only keep the latest
+        if self._last_checkpoint_path:
+            await self.rest_client.delete_checkpoint_from_tinker_path_async(
+                self._last_checkpoint_path
+            )
+            logger.info(f"Deleted previous checkpoint: {self._last_checkpoint_path}")
+
+        # Delete previous retriever checkpoint to only keep the latest
+        if self._last_retriever_checkpoint_path:
+            Path(self._last_retriever_checkpoint_path).unlink()
+            logger.info(f"Deleted previous retriever checkpoint: {self._last_retriever_checkpoint_path}")
+    
+        self._last_checkpoint_path = state_path
+        self._last_retriever_checkpoint_path = str(retriever_path)
+
         ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
         ckpt_file.parent.mkdir(parents=True, exist_ok=True)
-        entry = {"name": checkpoint_name, "step": step, "state_path": state_path}
+        entry = {"name": checkpoint_name, "step": step, "state_path": state_path, "retriever_path": str(retriever_path)}
         with open(ckpt_file, "a") as f:
             f.write(json.dumps(entry) + "\n")
 
         return state_path
     
-    async def _process_one_sample(self, sample: Dict[str, Any]) -> tuple:
-        """Process a single sample: rollout + forward_backward (micro-batch = 1).
-
-        Returns:
-            (TrajectoryGroup, fwdbwd_future) — future is None if no training data produced.
-        """
+    async def _rollout_one_sample(self, sample: Dict[str, Any]):
+        """Run rollout only (no forward_backward). Returns (TrajectoryGroup, sample)."""
         builder = LongNAPEnvGroupBuilder(
             input_data=sample,
             renderer=self.renderer,
@@ -340,33 +461,145 @@ class OnlineEnvTrainer:
         )
 
         traj_group = await do_group_rollout(builder, policy)
+        return traj_group, sample
 
-        # Compute advantages (GRPO normalizes per-group)
-        advantages = compute_advantages([traj_group])
-        data_D, metadata_D = assemble_training_data([traj_group], advantages)
+    def _train_batch_llm_judge(self, traj_groups: list, samples: list):
+        """Compute advantages and one batched forward_backward for all groups.
 
-        if not data_D:
-            logger.warning("No training data for sample")
-            return traj_group, None
+        Returns:
+            (fwdbwd_future_or_None, extra_metrics)
+        """
+        all_data = []
+        for traj_group in traj_groups:
+            advantages = compute_advantages([traj_group])
+            data_D, _ = assemble_training_data([traj_group], advantages)
+            all_data.extend([_remove_mask(d) for d in data_D])
 
-        # Forward-backward — gradients accumulate until optim_step
+        if not all_data:
+            logger.warning("No training data produced for batch")
+            return None, {}
+
         fwdbwd_future = self.training_client.forward_backward(
-            [_remove_mask(d) for d in data_D],
-            loss_fn="importance_sampling",
+            all_data, loss_fn="importance_sampling",
         )
-        return traj_group, fwdbwd_future
+        return fwdbwd_future, {}
 
-    def _finish_step(self, fwdbwd_futures: list, trajectory_groups: list, step_start: float) -> Dict[str, float]:
-        """Complete one optimizer step on accumulated gradients.
+    def _train_batch_elbo(self, traj_groups: list, samples: list):
+        """Batched ELBO training: one SFT forward_backward (blocking) then one RL forward_backward.
 
-        Runs optim_step, waits for results, updates sampler, logs metrics, checkpoints.
+        Returns:
+            (rl_fwdbwd_future_or_None, extra_metrics)
+        """
+        import torch
+
+        # --- Build ALL SFT datums across all groups ---
+        all_sft_data = []
+        group_traj_counts = []  # track num_trajs per group for reward extraction
+        for traj_group, sample in zip(traj_groups, samples):
+            gt_tokens = self.tokenizer.encode(sample["solution"], add_special_tokens=False)
+            num_trajs = len(traj_group.trajectories_G)
+            group_traj_counts.append((num_trajs, len(gt_tokens)))
+            for traj in traj_group.trajectories_G:
+                actions_ob = traj.transitions[2].ob
+                full_chunks = list(actions_ob.chunks) + [tinker.EncodedTextChunk(tokens=gt_tokens)]
+                prompt_len = actions_ob.length
+                weights = torch.zeros(prompt_len + len(gt_tokens))
+                weights[prompt_len:] = 1.0
+                sft_datum = datum_from_model_input_weights(
+                    tinker.ModelInput(chunks=full_chunks), weights
+                )
+                all_sft_data.append(sft_datum)
+
+        if not all_sft_data:
+            return None, {}
+
+        # --- 1 SFT forward_backward — BLOCKING (need logprobs for reward) ---
+        logger.info(f"ELBO batch: SFT forward_backward on {len(all_sft_data)} datums")
+        sft_result = self.training_client.forward_backward(
+            all_sft_data, loss_fn="cross_entropy",
+        ).result()
+
+        # --- Extract rewards per trajectory, GRPO normalize per group ---
+        all_rl_data = []
+        datum_idx = 0
+        total_gt_tokens = 0
+        all_logprob_rewards = []
+
+        for traj_group, sample in zip(traj_groups, samples):
+            gt_tokens = self.tokenizer.encode(sample["solution"], add_special_tokens=False)
+            num_trajs = len(traj_group.trajectories_G)
+            rewards = []
+            for i in range(num_trajs):
+                logprobs = sft_result.loss_fn_outputs[datum_idx]["logprobs"].to_torch()
+                w = all_sft_data[datum_idx].loss_fn_inputs["weights"].to_torch()
+                gt_logprobs = logprobs[w > 0]
+                reward = torch.clamp(gt_logprobs, min=-5.0).mean().item()
+                rewards.append(reward)
+                datum_idx += 1
+
+            total_gt_tokens += len(gt_tokens) * num_trajs
+            all_logprob_rewards.extend(rewards)
+
+            # GRPO normalize within this group
+            rewards_t = torch.tensor(rewards)
+            advantages_G = rewards_t - rewards_t.mean()
+
+            logger.info(
+                f"ELBO group rewards: mean={rewards_t.mean().item():.4f}, "
+                f"std={rewards_t.std().item() if len(rewards) > 1 else 0:.4f}"
+            )
+
+            # Build CoT-only RL datums
+            for traj, adv in zip(traj_group.trajectories_G, advantages_G):
+                cot_traj = Trajectory(
+                    transitions=traj.transitions[:2],
+                    final_ob=traj.transitions[2].ob,
+                )
+                new_data = trajectory_to_data(cot_traj, float(adv))
+                all_rl_data.extend([_remove_mask(d) for d in new_data])
+
+        # --- 1 RL forward_backward ---
+        rl_fwdbwd_future = None
+        if all_rl_data:
+            logger.info(f"ELBO batch: RL forward_backward on {len(all_rl_data)} datums (CoT tokens)")
+            rl_fwdbwd_future = self.training_client.forward_backward(
+                all_rl_data, loss_fn="importance_sampling",
+            )
+
+        total_sft_loss = sft_result.metrics.get("loss:sum", 0.0)
+        rewards_all = torch.tensor(all_logprob_rewards)
+        extra_metrics = {
+            "sft_loss": total_sft_loss / total_gt_tokens if total_gt_tokens > 0 else 0.0,
+            "logprob_reward_mean": rewards_all.mean().item(),
+            "logprob_reward_std": rewards_all.std().item() if len(all_logprob_rewards) > 1 else 0.0,
+        }
+
+        if self.eval_with_llm_judge:
+            judge_rewards = []
+            for tg in traj_groups:
+                judge_rewards.extend(tg.get_total_rewards())
+            extra_metrics["llm_judge_reward_mean"] = sum(judge_rewards) / len(judge_rewards) if judge_rewards else 0.0
+
+        return rl_fwdbwd_future, extra_metrics
+
+    async def _finish_step(
+        self,
+        fwdbwd_futures: list,
+        trajectory_groups: list,
+        step_start: float,
+        extra_metrics_list: Optional[List[Dict[str, float]]] = None,
+    ) -> Dict[str, float]:
+
+        """Complete one optimizer step after batched forward_backward.
+
+        Runs optim_step (pipelined with forward_backward), waits for results,
+        updates sampler, logs metrics, checkpoints.
         """
         if not fwdbwd_futures:
             logger.warning("No forward_backward futures to process")
             return {}
 
-        # Single optimizer step on accumulated gradients
-        print(f"[train] step {self._step}: optim step on {len(fwdbwd_futures)} micro-batches...")
+        print(f"[train] step {self._step}: optim step...")
         optim_future = self.training_client.optim_step(
             AdamParams(learning_rate=self.learning_rate)
         )
@@ -380,7 +613,8 @@ class OnlineEnvTrainer:
 
         # Update sampling client
         save_result = self.training_client.save_weights_for_sampler(
-            name=f'{self.run_name}.model-step-{self._step}'
+            name=f'{self.run_name}.model-step-{self._step}',
+            ttl_seconds=self.sampler_ttl_seconds,
         ).result()
         self.latest_sampler_path = save_result.path
         self.sampling_client = self.service_client.create_sampling_client(
@@ -408,6 +642,21 @@ class OnlineEnvTrainer:
             "train/retriever_size": self.retriever.N,
         }
 
+        # Aggregate extra metrics from ELBO mode
+        if extra_metrics_list:
+            sft_losses = [m["sft_loss"] for m in extra_metrics_list if "sft_loss" in m]
+            if sft_losses:
+                metrics["train/sft_loss"] = sum(sft_losses) / len(sft_losses)
+            lp_rewards = [m["logprob_reward_mean"] for m in extra_metrics_list if "logprob_reward_mean" in m]
+            if lp_rewards:
+                metrics["train/logprob_reward_mean"] = sum(lp_rewards) / len(lp_rewards)
+                metrics["train/logprob_reward_std"] = (
+                    sum(m.get("logprob_reward_std", 0) for m in extra_metrics_list) / len(lp_rewards)
+                )
+            judge_rewards = [m["llm_judge_reward_mean"] for m in extra_metrics_list if "llm_judge_reward_mean" in m]
+            if judge_rewards:
+                metrics["train/llm_judge_reward_mean"] = sum(judge_rewards) / len(judge_rewards)
+
         if self.log_to_wandb and wandb.run is not None:
             wandb.log(metrics)
 
@@ -420,8 +669,8 @@ class OnlineEnvTrainer:
 
         # Checkpoint
         if self.checkpoint_every_n_steps > 0 and (self._step + 1) % self.checkpoint_every_n_steps == 0:
-            self._save_checkpoint(self._step + 1)
-
+            await self._save_checkpoint(self._step + 1)
+        
         self._step += 1
         return metrics
 
@@ -430,17 +679,42 @@ class OnlineEnvTrainer:
                       shutdown_event: Optional[threading.Event] = None):
         """Main streaming training loop.
 
-        Pulls samples from label_queue one at a time, immediately runs rollout +
-        forward_backward (micro-batch = 1), and fires optim_step every batch_size
-        micro-batches.
+        Runs batch_size rollouts concurrently, then sends one batched
+        forward_backward + optim_step (1-2 Tinker clock cycles per step).
+        """
+        asyncio.run(self._run_streaming_async(
+            recorder, label_queue, past_len, future_len,
+            batch_size, num_imgs_per_sample, shutdown_event,
+        ))
+
+    async def _run_streaming_async(self, recorder, label_queue, past_len: int, future_len: int,
+                                   batch_size: int, num_imgs_per_sample: int = 0,
+                                   shutdown_event: Optional[threading.Event] = None):
+        """Async implementation of streaming training with batched forward_backward.
+
+        Phase 1: Submit rollouts concurrently as samples arrive (up to batch_size).
+        Phase 2: Gather all rollout results.
+        Phase 3: One batched forward_backward + optim_step (1 clock cycle for LLM judge,
+                 2 clock cycles for ELBO).
         """
         min_required = past_len + future_len
         buffer = []
-        micro_count = 0
-        fwdbwd_futures = []
-        trajectory_groups = []
-        step_start = None
         steps_completed = 0
+
+        loop = asyncio.get_running_loop()
+
+        async def get_from_queue():
+            """Await items from threading Queue without CPU spinning."""
+            while True:
+                try:
+                    return await loop.run_in_executor(
+                        None, lambda: label_queue.get(timeout=1.0)
+                    )
+                except Empty:
+                    if shutdown_event and shutdown_event.is_set():
+                        return None
+                    if not recorder.running and label_queue.empty():
+                        return None
 
         def _should_run():
             if shutdown_event and shutdown_event.is_set():
@@ -448,35 +722,89 @@ class OnlineEnvTrainer:
             return recorder.running or not label_queue.empty()
 
         while _should_run():
-            try:
-                record = label_queue.get(timeout=1.0)
-            except Empty:
+            # === Collect and run one batch ===
+            batch_rollouts = []
+            pending_samples = []
+            step_start = None
+
+            queue_task = asyncio.create_task(get_from_queue())
+
+            # Phase 1: Submit rollouts as samples arrive (up to batch_size)
+            while len(batch_rollouts) < batch_size:
+                if not _should_run():
+                    break
+
+                wait_tasks = {queue_task} | set(batch_rollouts)
+                done, _ = await asyncio.wait(wait_tasks, return_when=asyncio.FIRST_COMPLETED)
+
+                for task in done:
+                    if task is queue_task:
+                        record = task.result()
+                        if record is None:
+                            queue_task = None
+                            break
+
+                        buffer.append(record)
+                        print(f"[train] buffer size: {len(buffer)}/{min_required}")
+
+                        if len(buffer) >= min_required:
+                            pending_samples.append(
+                                make_sample(buffer, past_len, future_len, num_imgs_per_sample)
+                            )
+
+                        queue_task = asyncio.create_task(get_from_queue())
+
+                while pending_samples and len(batch_rollouts) < batch_size:
+                    sample = pending_samples.pop(0)
+                    if step_start is None:
+                        step_start = time.time()
+                    idx = len(batch_rollouts) + 1
+                    print(f"[train] step {self._step}: rollout {idx}/{batch_size}...")
+                    rollout_task = asyncio.create_task(self._rollout_one_sample(sample))
+                    batch_rollouts.append(rollout_task)
+
+                if queue_task is None:
+                    break
+
+            # Cancel queue task while we finish this batch
+            if queue_task and not queue_task.done():
+                queue_task.cancel()
+                try:
+                    await queue_task
+                except asyncio.CancelledError:
+                    pass
+
+            # Phase 2: Wait for all rollouts to complete
+            if not batch_rollouts:
                 continue
 
-            buffer.append(record)
-            print(f"[train] buffer size: {len(buffer)}/{min_required}")
+            results = await asyncio.gather(*batch_rollouts, return_exceptions=True)
 
-            if len(buffer) < min_required:
+            traj_groups = []
+            samples_for_batch = []
+            for r in results:
+                if isinstance(r, Exception):
+                    logger.error(f"Rollout failed: {r}")
+                    continue
+                traj_group, sample = r
+                traj_groups.append(traj_group)
+                samples_for_batch.append(sample)
+
+            if not traj_groups:
                 continue
 
-            # Create sample from sliding window
-            sample = make_sample(buffer, past_len, future_len, num_imgs_per_sample)
+            # Phase 3: Batched training (1-2 forward_backward calls instead of N)
+            print(f"[train] step {self._step}: batched training on {len(traj_groups)} groups...")
+            if self.loss_mode == "logprob_elbo":
+                fwdbwd_future, extra_metrics = self._train_batch_elbo(traj_groups, samples_for_batch)
+            else:
+                fwdbwd_future, extra_metrics = self._train_batch_llm_judge(traj_groups, samples_for_batch)
 
-            if step_start is None:
-                step_start = time.time()
+            fwdbwd_futures = [fwdbwd_future] if fwdbwd_future is not None else []
+            extra_metrics_list = [extra_metrics] if extra_metrics else []
 
-            # Rollout + forward_backward for this sample
-            print(f"[train] step {self._step}: micro-batch {micro_count + 1}/{batch_size} — rollout + forward_backward...")
-            traj_group, fwdbwd_future = asyncio.run(self._process_one_sample(sample))
-
-            trajectory_groups.append(traj_group)
-            if fwdbwd_future is not None:
-                fwdbwd_futures.append(fwdbwd_future)
-                micro_count += 1
-
-            # Optimizer step when batch_size micro-batches accumulated
-            if micro_count >= batch_size:
-                self._finish_step(fwdbwd_futures, trajectory_groups, step_start)
+            if fwdbwd_futures:
+                await self._finish_step(fwdbwd_futures, traj_groups, step_start or time.time(), extra_metrics_list)
                 steps_completed += 1
 
                 if wandb and wandb.run is not None:
@@ -485,82 +813,102 @@ class OnlineEnvTrainer:
                         "pipeline/batches_yielded": steps_completed,
                     })
 
-                # Reset accumulators
-                micro_count = 0
-                fwdbwd_futures = []
-                trajectory_groups = []
-                step_start = None
-
-        # Handle leftover micro-batches (skip if forced shutdown)
-        if micro_count > 0 and fwdbwd_futures and not (shutdown_event and shutdown_event.is_set()):
-            logger.info(f"Recorder stopped with {micro_count} pending micro-batches. Finishing partial step.")
-            self._finish_step(fwdbwd_futures, trajectory_groups, step_start or time.time())
-
 
 
 def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active):
-    """Label incoming screen recordings and add to retriever."""
+    """Label incoming screen recordings with concurrent async LLM calls."""
+    asyncio.run(_async_label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active))
 
+
+async def _async_label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active):
+    """Async label loop: fires off up to MAX_CONCURRENT labeling requests,
+    drains results in submission order to preserve chronological ordering."""
+    from PIL import Image
+    from collections import deque
+
+    MAX_CONCURRENT = 4
     label_count = 0
     skip_count = 0
-    last_hash = None
-    dedupe_threshold = 1
+    loop = asyncio.get_running_loop()
 
-    import imagehash
-    from PIL import Image, ImageFile
-    ImageFile.LOAD_TRUNCATED_IMAGES = True
+    agg_iter = iter(recorder.iter_aggregations())
 
-    for agg in recorder.iter_aggregations():
-        # pack-style sanitization: skip if no screenshot
-        screenshot_path = agg.request.screenshot_path
-        if not screenshot_path or not Path(screenshot_path).exists():
-            skip_count += 1
-            continue
+    async def get_next_agg():
+        return await loop.run_in_executor(None, lambda: next(agg_iter, None))
 
-        # pack-style image dedup: skip if screenshot too similar to previous
-        try:
-            curr_hash = imagehash.phash(Image.open(screenshot_path))
-            if last_hash is not None and (curr_hash - last_hash) <= dedupe_threshold:
-                skip_count += 1
-                print(f"[label] dedup skip (hamming={curr_hash - last_hash}, total skipped={skip_count})")
-                continue
-            last_hash = curr_hash
-        except Exception:
-            pass
+    pending = deque()  # deque of (asyncio.Task, submit_time)
+    fetching = True
+    fetch_task = None
 
-        t0 = time.time()
-        labeled = labeler.label(agg)
-        latency = time.time() - t0
-        label_count += 1
-        print(f"[label] labeled action #{label_count}: {labeled['text'][:80]}... ({latency:.2f}s)")
+    while fetching or pending:
+        # Start a fetch if we have room and aren't already fetching
+        if fetching and fetch_task is None and len(pending) < MAX_CONCURRENT:
+            fetch_task = asyncio.create_task(get_next_agg())
 
+        # Build wait set: oldest pending label + fetch task
+        wait_set = set()
+        if fetch_task is not None:
+            wait_set.add(fetch_task)
+        if pending:
+            wait_set.add(pending[0][0])
 
-        # always add to inference buffer
-        inference_buffer.append(labeled)
+        if not wait_set:
+            break
 
-        # only feed training data when sleepwalk is NOT active
-        if not sleepwalk_active.is_set():
-            ts = datetime.strptime(labeled["start_time"], "%Y-%m-%d_%H-%M-%S-%f")
-            retriever.add(
-                labeled["text"],
-                event_ts=int(ts.timestamp()),
-                namespace="train",
-            )
-            label_queue.put(labeled)
+        done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED)
 
-        if wandb and wandb.run is not None:
-            log = {
-                "pipeline/labels_total": label_count,
-                "pipeline/label_latency_s": latency,
-                "pipeline/label_text": wandb.Html(f"<pre>{labeled['text']}</pre>"),
-            }
-
-            if label_count % 10 == 1 and labeled.get("img") and Path(labeled["img"]).exists():
-                log["pipeline/label_image"] = wandb.Image(
-                    labeled["img"], caption=labeled["text"][:200],
+        # Handle fetch completion
+        if fetch_task in done:
+            agg = fetch_task.result()
+            fetch_task = None
+            if agg is None:
+                fetching = False
+            else:
+                has_screenshot = (
+                    agg.screenshot is not None or
+                    (agg.request.screenshot_path and Path(agg.request.screenshot_path).exists())
                 )
+                if has_screenshot:
+                    task = asyncio.create_task(labeler.alabel(agg))
+                    pending.append((task, time.time()))
+                else:
+                    skip_count += 1
 
-            wandb.log(log)
+        # Drain completed tasks from the front (preserves chronological order)
+        while pending and pending[0][0].done():
+            task, t0 = pending.popleft()
+            try:
+                labeled = task.result()
+            except Exception as e:
+                logger.error(f"Labeling failed: {e}")
+                continue
+
+            latency = time.time() - t0
+            label_count += 1
+            print(f"[label] labeled action #{label_count}: {labeled['text'][:80]}... ({latency:.2f}s, in-flight={len(pending)})")
+
+            # always add to inference buffer
+            inference_buffer.append(labeled)
+
+            # only feed training data when sleepwalk is NOT active
+            if not sleepwalk_active.is_set():
+                label_queue.put(labeled)
+
+            if wandb and wandb.run is not None:
+                log = {
+                    "pipeline/labels_total": label_count,
+                    "pipeline/label_latency_s": latency,
+                    "pipeline/label_text": wandb.Html(f"<pre>{labeled['text']}</pre>"),
+                }
+
+                if label_count % 10 == 1 and labeled.get("img") is not None:
+                    img = labeled["img"]
+                    if isinstance(img, Image.Image) or (isinstance(img, str) and Path(img).exists()):
+                        log["pipeline/label_image"] = wandb.Image(
+                            img, caption=labeled["text"][:200],
+                        )
+
+                wandb.log(log)
 
 
 def inference_loop(predictor, inference_buffer, trainer, recorder,
@@ -676,6 +1024,8 @@ def main():
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--buffer-seconds", type=int, default=12)
     parser.add_argument("--precision", type=str, choices=["accurate", "rough"], default="accurate")
+    parser.add_argument("--save-screenshots", action="store_true",
+                        help="Save screenshots to disk (disabled by default)")
 
     # Labeler
     parser.add_argument("--label-model", type=str, default="gemini/gemini-2.0-flash")
@@ -686,8 +1036,13 @@ def main():
     parser.add_argument("--num-generations", type=int, default=8)
     parser.add_argument("--learning-rate", type=float, default=1e-5)
     parser.add_argument("--max-completion-length", type=int, default=512)
-    parser.add_argument("--num-imgs-per-sample", type=int, default=2, 
+    parser.add_argument("--num-imgs-per-sample", type=int, default=2,
                         help="Number of images to include per sample (0 = text only)")
+    parser.add_argument("--loss-mode", type=str, choices=["llm_judge", "logprob_elbo"],
+                        default="llm_judge",
+                        help="Loss formulation: LLM judge reward or logprob ELBO (paper 2601.04436)")
+    parser.add_argument("--eval-with-llm-judge", action="store_true",
+                        help="When using logprob_elbo, also compute LLM judge reward for comparison")
 
     # Pipeline
     parser.add_argument("--past-len", type=int, default=8)
@@ -715,6 +1070,8 @@ def main():
     # Checkpointing
     parser.add_argument("--checkpoint-every-n-steps", type=int, default=0)
     parser.add_argument("--resume-from-checkpoint", type=str, default=None)
+    parser.add_argument("--sampler-ttl-seconds", type=int, default=60,
+                        help="TTL in seconds for sampler checkpoints (default: 60, use 0 for no expiry)")
 
     args = parser.parse_args()
 
@@ -741,6 +1098,7 @@ def main():
         fps=args.fps,
         buffer_seconds=args.buffer_seconds,
         log_dir=args.log_dir,
+        save_screenshots=args.save_screenshots,
     )
 
     # Stage 2: Labeler
@@ -760,6 +1118,9 @@ def main():
         wandb_run_name=args.wandb_run_name,
         checkpoint_every_n_steps=args.checkpoint_every_n_steps,
         resume_from_checkpoint=args.resume_from_checkpoint,
+        sampler_ttl_seconds=args.sampler_ttl_seconds or None,
+        loss_mode=args.loss_mode,
+        eval_with_llm_judge=args.eval_with_llm_judge,
     )
 
     # Stage 4: Predictor (shares retriever with trainer)
