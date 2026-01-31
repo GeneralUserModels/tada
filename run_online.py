@@ -120,13 +120,19 @@ def make_sample(
         image_content = []
         for i in range(past_len):
             if i >= (past_len - num_imgs_per_sample):
-                img_path = past[i].get("img")
-                if img_path and Path(img_path).exists():
+                img = past[i].get("img")
+                if img is not None:
                     try:
-                        img = Image.open(img_path).convert("RGB")  # Convert to RGB for consistency
-                        image_content.append({"type": "image", "image": img})
+                        # Handle both PIL Image (in-memory) and file path
+                        if isinstance(img, Image.Image):
+                            pil_img = img.convert("RGB")
+                        elif isinstance(img, str) and Path(img).exists():
+                            pil_img = Image.open(img).convert("RGB")
+                        else:
+                            continue
+                        image_content.append({"type": "image", "image": pil_img})
                     except Exception as e:
-                        logger.warning(f"Failed to load image {img_path}: {e}")
+                        logger.warning(f"Failed to load image: {e}")
         
         if image_content:
             content = image_content + [
@@ -570,6 +576,7 @@ class OnlineEnvTrainer:
 
 def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active):
     """Label incoming screen recordings and add to retriever."""
+    from PIL import Image
 
     label_count = 0
     skip_count = 0
@@ -611,10 +618,13 @@ def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, slee
                 "pipeline/label_text": wandb.Html(f"<pre>{labeled['text']}</pre>"),
             }
 
-            if label_count % 10 == 1 and labeled.get("img") and Path(labeled["img"]).exists():
-                log["pipeline/label_image"] = wandb.Image(
-                    labeled["img"], caption=labeled["text"][:200],
-                )
+            if label_count % 10 == 1 and labeled.get("img") is not None:
+                img = labeled["img"]
+                # Handle both PIL Image and file path
+                if isinstance(img, Image.Image) or (isinstance(img, str) and Path(img).exists()):
+                    log["pipeline/label_image"] = wandb.Image(
+                        img, caption=labeled["text"][:200],
+                    )
 
             wandb.log(log)
 
