@@ -206,6 +206,7 @@ class OnlineEnvTrainer:
         )
         self.num_imgs_per_sample = num_imgs_per_sample
         self._last_checkpoint_path: Optional[str] = None
+        self._last_retriever_checkpoint_path: Optional[str] = None
         
         # Get tokenizer and renderer
         self.tokenizer = get_tokenizer(model_name)
@@ -286,6 +287,20 @@ class OnlineEnvTrainer:
         logger.warning("No valid checkpoints found in checkpoints.jsonl")
         return None
 
+    def _get_retriever_path_for_checkpoint(self, state_path):
+        """Look up the retriever path for a given state_path from checkpoints.jsonl."""
+        ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
+        if not ckpt_file.exists():
+            return None
+        for line in ckpt_file.read_text().strip().splitlines():
+            try:
+                entry = json.loads(line)
+                if entry.get("state_path") == state_path:
+                    return entry.get("retriever_path")
+            except json.JSONDecodeError:
+                continue
+        return None
+
     def _load_checkpoint(self, checkpoint_path):
         """Load a checkpoint. Supports 'auto' to pick the latest."""
         resolved = self._resolve_checkpoint(checkpoint_path)
@@ -302,30 +317,53 @@ class OnlineEnvTrainer:
         self.sampling_client = self.service_client.create_sampling_client(
             model_path=self.latest_sampler_path
         )
+        
+        # Load retriever checkpoint
+        retriever_path = self._get_retriever_path_for_checkpoint(resolved)
+        if retriever_path and Path(retriever_path).exists():
+            self.retriever.load_checkpoint(retriever_path)
+            logger.info(f"Loaded retriever checkpoint from {retriever_path}")
+        else:
+            logger.warning(f"No retriever checkpoint found for {resolved}")
+        
         logger.info(f"Successfully loaded checkpoint from {resolved}")
 
-    def _save_checkpoint(self, step):
+    async def _save_checkpoint(self, step):
         """Save a checkpoint and record it to checkpoints.jsonl. Deletes previous checkpoint."""
         checkpoint_name = f"{self.run_name}.checkpoint_step_{step:06d}"
         save_result = self.training_client.save_state(name=checkpoint_name).result()
         state_path = save_result.path
         logger.info(f"Saved checkpoint at step {step}: {state_path}")
 
-        # Delete previous checkpoint to only keep the latest
+        # Save retriever checkpoint
+        retriever_path = Path(self.log_dir) / f"retriever_step_{step:06d}.json.gz"
+        self.retriever.save_checkpoint(str(retriever_path))
+        logger.info(f"Saved retriever checkpoint at step {step}: {retriever_path}")
+
+        # Delete previous model checkpoint to only keep the latest
         if self._last_checkpoint_path:
             try:
-                self.rest_client.delete_checkpoint_from_tinker_path(
+                await self.rest_client.delete_checkpoint_from_tinker_path_async(
                     self._last_checkpoint_path
-                ).result()
+                )
                 logger.info(f"Deleted previous checkpoint: {self._last_checkpoint_path}")
             except Exception as e:
                 logger.warning(f"Failed to delete previous checkpoint: {e}")
+
+        # Delete previous retriever checkpoint to only keep the latest
+        if self._last_retriever_checkpoint_path:
+            try:
+                Path(self._last_retriever_checkpoint_path).unlink()
+                logger.info(f"Deleted previous retriever checkpoint: {self._last_retriever_checkpoint_path}")
+            except Exception as e:
+                logger.warning(f"Failed to delete previous retriever checkpoint: {e}")
         
         self._last_checkpoint_path = state_path
+        self._last_retriever_checkpoint_path = str(retriever_path)
 
         ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
         ckpt_file.parent.mkdir(parents=True, exist_ok=True)
-        entry = {"name": checkpoint_name, "step": step, "state_path": state_path}
+        entry = {"name": checkpoint_name, "step": step, "state_path": state_path, "retriever_path": str(retriever_path)}
         with open(ckpt_file, "a") as f:
             f.write(json.dumps(entry) + "\n")
 
@@ -448,7 +486,7 @@ class OnlineEnvTrainer:
 
         # Checkpoint
         if self.checkpoint_every_n_steps > 0 and (self._step + 1) % self.checkpoint_every_n_steps == 0:
-            self._save_checkpoint(self._step + 1)
+            await self._save_checkpoint(self._step + 1)
         
         self._step += 1
         return metrics
@@ -466,9 +504,12 @@ def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, slee
     skip_count = 0
 
     for agg in recorder.iter_aggregations():
-        # skip if no screenshot
-        screenshot_path = agg.request.screenshot_path
-        if not screenshot_path or not Path(screenshot_path).exists():
+        # skip if no screenshot (check both in-memory and file)
+        has_screenshot = (
+            agg.screenshot is not None or
+            (agg.request.screenshot_path and Path(agg.request.screenshot_path).exists())
+        )
+        if not has_screenshot:
             skip_count += 1
             continue
 

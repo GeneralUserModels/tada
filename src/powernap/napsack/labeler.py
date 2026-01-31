@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 import re
 from datetime import datetime
@@ -6,6 +7,37 @@ from pathlib import Path
 
 from litellm import completion as litellm_completion
 from label.models import Aggregation as LabelAggregation
+
+
+def _screenshot_to_base64(processed_agg) -> tuple[str, str]:
+    """
+    Convert screenshot to base64, preferring in-memory over file.
+    
+    Returns (base64_string, mime_type) or (None, None) if no screenshot.
+    """
+    # Try in-memory screenshot first (numpy array)
+    if processed_agg.screenshot is not None:
+        try:
+            from PIL import Image
+            img_array = processed_agg.screenshot.screenshot
+            img = Image.fromarray(img_array)
+            buffer = io.BytesIO()
+            img.save(buffer, format="PNG")
+            buffer.seek(0)
+            return base64.b64encode(buffer.getvalue()).decode(), "image/png"
+        except Exception:
+            pass  # Fall through to file-based
+    
+    # Fall back to file path
+    screenshot_path = processed_agg.request.screenshot_path
+    if screenshot_path and Path(screenshot_path).exists():
+        b64 = base64.b64encode(Path(screenshot_path).read_bytes()).decode()
+        # Detect mime type from extension
+        ext = Path(screenshot_path).suffix.lower()
+        mime = "image/png" if ext == ".png" else "image/jpeg"
+        return b64, mime
+    
+    return None, None
 
 
 LABEL_PROMPT = """You are an expert at describing user actions from a screenshot and input event logs.
@@ -58,12 +90,11 @@ class Labeler:
         prompt = LABEL_PROMPT.replace("{{LOGS}}", events_text)
 
         content = []
-        screenshot_path = processed_agg.request.screenshot_path
-        if screenshot_path and Path(screenshot_path).exists():
-            b64 = base64.b64encode(Path(screenshot_path).read_bytes()).decode()
+        b64, mime = _screenshot_to_base64(processed_agg)
+        if b64:
             content.append({
                 "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+                "image_url": {"url": f"data:{mime};base64,{b64}"}
             })
         content.append({"type": "text", "text": prompt})
 
@@ -80,7 +111,7 @@ class Labeler:
         result = {
             "text": captions[0]["caption"] if captions else "",
             "start_time": start_time,
-            "img": screenshot_path,
+            "img": processed_agg.request.screenshot_path,
             "raw_events": processed_agg.events,
         }
 
