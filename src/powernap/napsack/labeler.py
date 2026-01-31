@@ -108,10 +108,21 @@ class Labeler:
         ts = processed_agg.request.timestamp
         start_time = datetime.fromtimestamp(ts).strftime("%Y-%m-%d_%H-%M-%S-%f")
 
+        # Get image - prefer in-memory, fall back to path
+        img = None
+        if processed_agg.screenshot is not None:
+            try:
+                from PIL import Image
+                img = Image.fromarray(processed_agg.screenshot.screenshot)
+            except Exception:
+                pass
+        if img is None:
+            img = processed_agg.request.screenshot_path  # Keep path as fallback
+
         result = {
             "text": captions[0]["caption"] if captions else "",
             "start_time": start_time,
-            "img": processed_agg.request.screenshot_path,
+            "img": img,
             "raw_events": processed_agg.events,
         }
 
