@@ -40,10 +40,11 @@ def _load_heavy_imports():
     from tinker_cookbook import model_info, renderers
     from tinker_cookbook.completers import TinkerTokenCompleter
     from tinker_cookbook.renderers.qwen3 import Qwen3VLInstructRenderer
-    from tinker_cookbook.rl.data_processing import assemble_training_data, compute_advantages
+    from tinker_cookbook.rl.data_processing import assemble_training_data, compute_advantages, trajectory_to_data
     from tinker_cookbook.rl.train import _remove_mask
     from tinker_cookbook.rl.rollouts import do_group_rollout
-    from tinker_cookbook.rl.types import TrajectoryGroup
+    from tinker_cookbook.rl.types import TrajectoryGroup, Trajectory
+    from tinker_cookbook.supervised.common import datum_from_model_input_weights
     from tinker_cookbook.image_processing_utils import get_image_processor
     from tinker_cookbook.tokenizer_utils import get_tokenizer
     from powernap.napsack import OnlineRecorder, Labeler
@@ -69,8 +70,10 @@ def _load_heavy_imports():
         "TinkerTokenCompleter": TinkerTokenCompleter,
         "Qwen3VLInstructRenderer": Qwen3VLInstructRenderer,
         "assemble_training_data": assemble_training_data,
-        "compute_advantages": compute_advantages, "_remove_mask": _remove_mask,
+        "compute_advantages": compute_advantages, "trajectory_to_data": trajectory_to_data,
+        "_remove_mask": _remove_mask,
         "do_group_rollout": do_group_rollout, "TrajectoryGroup": TrajectoryGroup,
+        "Trajectory": Trajectory, "datum_from_model_input_weights": datum_from_model_input_weights,
         "get_image_processor": get_image_processor, "get_tokenizer": get_tokenizer,
         "OnlineRecorder": OnlineRecorder, "Labeler": Labeler,
         "LongNAPEnvGroupBuilder": LongNAPEnvGroupBuilder,
@@ -191,10 +194,14 @@ class OnlineEnvTrainer:
         wandb_run_name: str = "longnap-online",
         checkpoint_every_n_steps: int = 0,
         resume_from_checkpoint: Optional[str] = None,
-        sampler_ttl_seconds: Optional[int] = 60,
+        loss_mode: str = "llm_judge",
+        eval_with_llm_judge: bool = False,
+        sft_weight: float = 1.0,
     ):
         self.model_name = model_name
-        self.sampler_ttl_seconds = sampler_ttl_seconds
+        self.loss_mode = loss_mode
+        self.eval_with_llm_judge = eval_with_llm_judge
+        self.sft_weight = sft_weight
         self.num_generations = num_generations
         self.learning_rate = learning_rate
         self.max_tokens = max_tokens
@@ -257,7 +264,12 @@ class OnlineEnvTrainer:
         )
         
         # Create reward scorer
-        self.reward_scorer = create_reward_scorer(reward_llm=reward_llm)
+        if self.loss_mode == "logprob_elbo" and not self.eval_with_llm_judge:
+            async def _dummy_scorer(actions, ground_truth):
+                return 0.0
+            self.reward_scorer = _dummy_scorer
+        else:
+            self.reward_scorer = create_reward_scorer(reward_llm=reward_llm)
         
         # Retrieval parameters
         self.retrieval_top_k = retrieval_top_k
@@ -431,8 +443,12 @@ class OnlineEnvTrainer:
         """Process a single sample: rollout + forward_backward (micro-batch = 1).
 
         Returns:
-            (TrajectoryGroup, fwdbwd_future) — future is None if no training data produced.
+            (TrajectoryGroup, fwdbwd_future, extra_metrics) — future is None if no
+            training data produced.
         """
+        if self.loss_mode == "logprob_elbo":
+            return await self._process_one_sample_elbo(sample)
+
         builder = LongNAPEnvGroupBuilder(
             input_data=sample,
             renderer=self.renderer,
@@ -460,16 +476,135 @@ class OnlineEnvTrainer:
 
         if not data_D:
             logger.warning("No training data for sample")
-            return traj_group, None
+            return traj_group, None, {}
 
         # Forward-backward — gradients accumulate until optim_step
         fwdbwd_future = self.training_client.forward_backward(
             [_remove_mask(d) for d in data_D],
             loss_fn="importance_sampling",
         )
-        return traj_group, fwdbwd_future
+        return traj_group, fwdbwd_future, {}
 
-    async def _finish_step(self, fwdbwd_futures: list, trajectory_groups: list, step_start: float) -> Dict[str, float]:
+    async def _process_one_sample_elbo(self, sample: Dict[str, Any]) -> tuple:
+        """Process a single sample with ELBO loss (logprob reward + SFT on GT).
+
+        Two gradient terms accumulate:
+        1. SFT: cross-entropy on ground truth actions conditioned on sampled CoT
+        2. RL: importance_sampling on CoT tokens with logprob-based reward
+
+        Returns:
+            (TrajectoryGroup, rl_fwdbwd_future_or_None, extra_metrics)
+        """
+        import torch
+
+
+        # 1. Rollout — same 3-phase env (Think → Retrieve → Revise → Actions)
+        builder = LongNAPEnvGroupBuilder(
+            input_data=sample,
+            renderer=self.renderer,
+            tokenizer=self.tokenizer,
+            retriever=self.retriever,
+            reward_scorer=self.reward_scorer,
+            num_envs=self.num_generations,
+            retrieval_top_k=self.retrieval_top_k,
+            retrieval_mmr_k=self.retrieval_mmr_k,
+            retrieval_mmr_alpha=self.retrieval_mmr_alpha,
+            retrieval_time_decay_lambda=self.retrieval_time_decay_lambda,
+        )
+
+        policy = TinkerTokenCompleter(
+            self.sampling_client,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+        )
+
+        traj_group = await do_group_rollout(builder, policy)
+
+        # 2. Build SFT data — one Datum per trajectory
+        #    transition_2.ob = full rendered prompt:
+        #      [context + think_response + revise_prompt + revise_response + actions_instruction]
+        #    We append tokenized ground truth so the SFT target is:
+        #      [full_prompt_including_actions_instruction | ground_truth_action_tokens]
+        ground_truth = sample["solution"]
+        gt_tokens = self.tokenizer.encode(ground_truth, add_special_tokens=False)
+
+        num_trajs = len(traj_group.trajectories_G)
+        sft_data = []
+        for traj in traj_group.trajectories_G:
+            actions_ob = traj.transitions[2].ob  # Full prompt through Actions instruction
+            full_chunks = list(actions_ob.chunks) + [tinker.EncodedTextChunk(tokens=gt_tokens)]
+            prompt_len = actions_ob.length
+            weights = torch.zeros(prompt_len + len(gt_tokens))
+            # Average over group and tokens: sft_weight/(G * T_y) gives scaled per-token mean NLL
+            weights[prompt_len:] = self.sft_weight / (num_trajs * len(gt_tokens))
+            model_input = tinker.ModelInput(chunks=full_chunks)
+            sft_datum = datum_from_model_input_weights(model_input, weights)
+            sft_data.append(sft_datum)
+
+        # 3. SFT forward_backward — BLOCKING (need logprobs to compute reward)
+        logger.info(f"ELBO: SFT forward_backward on {len(sft_data)} trajectories")
+        sft_result = self.training_client.forward_backward(
+            sft_data, loss_fn="cross_entropy"
+        ).result()
+
+        # 4. Extract rewards from GT logprobs
+        rewards = []
+        for i in range(len(traj_group.trajectories_G)):
+            logprobs = sft_result.loss_fn_outputs[i]["logprobs"].to_torch()
+            w = sft_data[i].loss_fn_inputs["weights"].to_torch()
+            gt_mask = w > 0
+            gt_logprobs = logprobs[gt_mask]
+            reward = torch.clamp(gt_logprobs, min=-5.0).mean().item()
+            rewards.append(reward)
+
+        # 5. GRPO normalize rewards across group
+        rewards_t = torch.tensor(rewards)
+        advantages_G = rewards_t - rewards_t.mean()
+
+        logger.info(
+            f"ELBO rewards: mean={rewards_t.mean().item():.4f}, "
+            f"std={rewards_t.std().item() if len(rewards) > 1 else 0:.4f}"
+        )
+
+        # 6. Build RL data — CoT-only trajectories (transitions 0,1 = Think + Revise)
+        rl_data = []
+        for traj, adv in zip(traj_group.trajectories_G, advantages_G):
+            cot_traj = Trajectory(
+                transitions=traj.transitions[:2],
+                final_ob=traj.transitions[2].ob,
+            )
+            new_data = trajectory_to_data(cot_traj, float(adv))
+            rl_data.extend(new_data)
+
+        rl_fwdbwd_future = None
+        if rl_data:
+            logger.info(f"ELBO: RL forward_backward on {len(rl_data)} datums (CoT tokens)")
+            rl_fwdbwd_future = self.training_client.forward_backward(
+                [_remove_mask(d) for d in rl_data],
+                loss_fn="importance_sampling",
+            )
+
+        extra_metrics = {
+            "sft_loss": sft_result.metrics.get("loss:sum", 0.0),  # already per-token mean NLL (weights = 1/G*T_y)
+            "logprob_reward_mean": rewards_t.mean().item(),
+            "logprob_reward_std": rewards_t.std().item() if len(rewards) > 1 else 0.0,
+        }
+
+        # Log LLM judge reward for comparison if eval_with_llm_judge is enabled
+        if self.eval_with_llm_judge:
+            judge_rewards = traj_group.get_total_rewards()
+            extra_metrics["llm_judge_reward_mean"] = sum(judge_rewards) / len(judge_rewards)
+
+        return traj_group, rl_fwdbwd_future, extra_metrics
+
+    async def _finish_step(
+        self,
+        fwdbwd_futures: list,
+        trajectory_groups: list,
+        step_start: float,
+        extra_metrics_list: Optional[List[Dict[str, float]]] = None,
+    ) -> Dict[str, float]:
+
         """Complete one optimizer step on accumulated gradients.
 
         Runs optim_step, waits for results, updates sampler, logs metrics, checkpoints.
@@ -522,6 +657,21 @@ class OnlineEnvTrainer:
             "train/retriever_size": self.retriever.N,
         }
 
+        # Aggregate extra metrics from ELBO mode
+        if extra_metrics_list:
+            sft_losses = [m["sft_loss"] for m in extra_metrics_list if "sft_loss" in m]
+            if sft_losses:
+                metrics["train/sft_loss"] = sum(sft_losses) / len(sft_losses)
+            lp_rewards = [m["logprob_reward_mean"] for m in extra_metrics_list if "logprob_reward_mean" in m]
+            if lp_rewards:
+                metrics["train/logprob_reward_mean"] = sum(lp_rewards) / len(lp_rewards)
+                metrics["train/logprob_reward_std"] = (
+                    sum(m.get("logprob_reward_std", 0) for m in extra_metrics_list) / len(lp_rewards)
+                )
+            judge_rewards = [m["llm_judge_reward_mean"] for m in extra_metrics_list if "llm_judge_reward_mean" in m]
+            if judge_rewards:
+                metrics["train/llm_judge_reward_mean"] = sum(judge_rewards) / len(judge_rewards)
+
         if self.log_to_wandb and wandb.run is not None:
             wandb.log(metrics)
 
@@ -564,6 +714,11 @@ class OnlineEnvTrainer:
         """
         min_required = past_len + future_len
         buffer = []
+        micro_count = 0
+        fwdbwd_futures = []
+        trajectory_groups = []
+        extra_metrics_list = []
+        step_start = None
         steps_completed = 0
 
         loop = asyncio.get_running_loop()
@@ -650,16 +805,20 @@ class OnlineEnvTrainer:
             trajectory_groups = []
             fwdbwd_futures = []
 
-            done, _ = await asyncio.wait(batch_rollouts)
-            for task in done:
-                traj_group, fwdbwd_future = task.result()
-                trajectory_groups.append(traj_group)
-                if fwdbwd_future is not None:
-                    fwdbwd_futures.append(fwdbwd_future)
+            # Rollout + forward_backward for this sample
+            print(f"[train] step {self._step}: micro-batch {micro_count + 1}/{batch_size} — rollout + forward_backward...")
+            traj_group, fwdbwd_future, extra_metrics = asyncio.run(self._process_one_sample(sample))
 
-            # Phase 3: Optimizer step (all rollouts used same weights)
-            if fwdbwd_futures:
-                await self._finish_step(fwdbwd_futures, trajectory_groups, step_start or time.time())
+            trajectory_groups.append(traj_group)
+            if extra_metrics:
+                extra_metrics_list.append(extra_metrics)
+            if fwdbwd_future is not None:
+                fwdbwd_futures.append(fwdbwd_future)
+                micro_count += 1
+
+            # Optimizer step when batch_size micro-batches accumulated
+            if micro_count >= batch_size:
+                self._finish_step(fwdbwd_futures, trajectory_groups, step_start, extra_metrics_list)
                 steps_completed += 1
 
                 if wandb and wandb.run is not None:
@@ -667,6 +826,18 @@ class OnlineEnvTrainer:
                         "pipeline/buffer_size": len(buffer),
                         "pipeline/batches_yielded": steps_completed,
                     })
+
+                # Reset accumulators
+                micro_count = 0
+                fwdbwd_futures = []
+                trajectory_groups = []
+                extra_metrics_list = []
+                step_start = None
+
+        # Handle leftover micro-batches (skip if forced shutdown)
+        if micro_count > 0 and fwdbwd_futures and not (shutdown_event and shutdown_event.is_set()):
+            logger.info(f"Recorder stopped with {micro_count} pending micro-batches. Finishing partial step.")
+            self._finish_step(fwdbwd_futures, trajectory_groups, step_start or time.time(), extra_metrics_list)
 
 
 
@@ -844,8 +1015,15 @@ def main():
     parser.add_argument("--num-generations", type=int, default=8)
     parser.add_argument("--learning-rate", type=float, default=1e-5)
     parser.add_argument("--max-completion-length", type=int, default=512)
-    parser.add_argument("--num-imgs-per-sample", type=int, default=2, 
+    parser.add_argument("--num-imgs-per-sample", type=int, default=2,
                         help="Number of images to include per sample (0 = text only)")
+    parser.add_argument("--loss-mode", type=str, choices=["llm_judge", "logprob_elbo"],
+                        default="llm_judge",
+                        help="Loss formulation: LLM judge reward or logprob ELBO (paper 2601.04436)")
+    parser.add_argument("--eval-with-llm-judge", action="store_true",
+                        help="When using logprob_elbo, also compute LLM judge reward for comparison")
+    parser.add_argument("--sft-weight", type=float, default=1.0,
+                        help="Coefficient for SFT loss term in logprob_elbo mode")
 
     # Pipeline
     parser.add_argument("--past-len", type=int, default=8)
@@ -922,6 +1100,9 @@ def main():
         checkpoint_every_n_steps=args.checkpoint_every_n_steps,
         resume_from_checkpoint=args.resume_from_checkpoint,
         sampler_ttl_seconds=args.sampler_ttl_seconds or None,
+        loss_mode=args.loss_mode,
+        eval_with_llm_judge=args.eval_with_llm_judge,
+        sft_weight=args.sft_weight,
     )
 
     # Stage 4: Predictor (shares retriever with trainer)
