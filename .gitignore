@@ -3,6 +3,7 @@ pack/
 data/
 grpo_trainer.py
 
+*.pdf
 *.parquet
 *.backup
 uv.lock
