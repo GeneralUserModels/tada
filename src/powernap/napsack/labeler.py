@@ -100,12 +100,22 @@ class Labeler:
             })
         content.append({"type": "text", "text": prompt})
 
-        response = litellm_completion(
-            model=self.model,
-            messages=[{"role": "user", "content": content}],
-        )
+        try:
+            response = litellm_completion(
+                model=self.model,
+                messages=[{"role": "user", "content": content}],
+            )
+            response_text = response.choices[0].message.content
+        except Exception as e:
+            raise ValueError(f"LLM call failed: {e}") from e
 
-        captions = self._parse_response(response.choices[0].message.content)
+        if not response_text:
+            raise ValueError("Empty LLM response")
+
+        captions = self._parse_response(response_text)
+
+        if not captions or not captions[0].get("caption", "").strip():
+            raise ValueError(f"No valid captions parsed from: {response_text[:200]}")
 
         ts = processed_agg.request.timestamp
         start_time = datetime.fromtimestamp(ts).strftime("%Y-%m-%d_%H-%M-%S-%f")
@@ -122,7 +132,7 @@ class Labeler:
             img = processed_agg.request.screenshot_path  # Keep path as fallback
 
         result = {
-            "text": captions[0]["caption"] if captions else "",
+            "text": captions[0]["caption"],
             "start_time": start_time,
             "img": img,
             "raw_events": processed_agg.events,
@@ -159,12 +169,22 @@ class Labeler:
             })
         content.append({"type": "text", "text": prompt})
 
-        response = await litellm_acompletion(
-            model=self.model,
-            messages=[{"role": "user", "content": content}],
-        )
+        try:
+            response = await litellm_acompletion(
+                model=self.model,
+                messages=[{"role": "user", "content": content}],
+            )
+            response_text = response.choices[0].message.content
+        except Exception as e:
+            raise ValueError(f"LLM call failed: {e}") from e
 
-        captions = self._parse_response(response.choices[0].message.content)
+        if not response_text:
+            raise ValueError("Empty LLM response")
+
+        captions = self._parse_response(response_text)
+
+        if not captions or not captions[0].get("caption", "").strip():
+            raise ValueError(f"No valid captions parsed from: {response_text[:200]}")
 
         ts = processed_agg.request.timestamp
         start_time = datetime.fromtimestamp(ts).strftime("%Y-%m-%d_%H-%M-%S-%f")
@@ -180,7 +200,7 @@ class Labeler:
             img = processed_agg.request.screenshot_path
 
         result = {
-            "text": captions[0]["caption"] if captions else "",
+            "text": captions[0]["caption"],
             "start_time": start_time,
             "img": img,
             "raw_events": processed_agg.events,

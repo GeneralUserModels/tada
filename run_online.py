@@ -214,6 +214,7 @@ def main():
             args=(predictor, inference_buffer, trainer, recorder,
                   args.past_len, args.future_len, tokenizer,
                   args.predict_every_n_seconds, args.reward_llm, overlay, walker),
+            kwargs={"num_imgs_per_sample": args.num_imgs_per_sample},
             daemon=True,
         )
         inference_thread.start()

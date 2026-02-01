@@ -8,7 +8,7 @@ from openai import OpenAI
 from litellm import completion as litellm_completion
 
 from powernap.longnap.trainer_utils import (
-    TASK_DESCRIPTION, build_actions_block,
+    TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block,
     build_think_user_message, build_revise_user_message, build_actions_user_message,
 )
 from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams, mmr_select
@@ -125,18 +125,59 @@ class Predictor:
     def add_to_retriever(self, text, event_ts, namespace="train"):
         self.retriever.add(text, event_ts=event_ts, namespace=namespace)
 
-    def predict_from_buffer(self, buffer, past_len, future_len, processor, model_path_override=None):
+    def predict_from_buffer(self, buffer, past_len, future_len, processor, model_path_override=None,
+                             num_imgs_per_sample=0):
         """Build messages from buffer and run prediction."""
         past = buffer[-past_len:]
-        return self.predict_from_snapshot(past, future_len, model_path_override=model_path_override)
+        return self.predict_from_snapshot(past, future_len, model_path_override=model_path_override,
+                                          num_imgs_per_sample=num_imgs_per_sample)
 
-    def predict_from_snapshot(self, past, future_len, model_path_override=None):
+    @staticmethod
+    def _img_to_base64(img):
+        """Convert PIL Image or file path to base64 PNG string."""
+        import base64
+        import io
+        from PIL import Image
+        try:
+            if isinstance(img, str):
+                img = Image.open(img)
+            if isinstance(img, Image.Image):
+                buf = io.BytesIO()
+                img.convert("RGB").save(buf, format="PNG")
+                return base64.b64encode(buf.getvalue()).decode()
+        except Exception:
+            pass
+        return None
+
+    def predict_from_snapshot(self, past, future_len, model_path_override=None,
+                              num_imgs_per_sample=0):
         """Run prediction from a pre-sliced list of past actions."""
         past_actions_block = build_actions_block(past)
 
+        if num_imgs_per_sample > 0:
+            image_parts = []
+            for i in range(len(past)):
+                if i >= (len(past) - num_imgs_per_sample):
+                    img = past[i].get("img")
+                    if img is not None:
+                        b64 = self._img_to_base64(img)
+                        if b64:
+                            image_parts.append({
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{b64}"},
+                            })
+            if image_parts:
+                content = image_parts + [
+                    {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + past_actions_block}
+                ]
+            else:
+                content = TASK_DESCRIPTION + "\n\n" + past_actions_block
+        else:
+            content = TASK_DESCRIPTION + "\n\n" + past_actions_block
+
         messages = [{
             "role": "user",
-            "content": TASK_DESCRIPTION + "\n\n" + past_actions_block,
+            "content": content,
         }]
 
         ts = datetime.strptime(past[0]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()

@@ -9,6 +9,7 @@ tmp_images/
 *.backup
 uv.lock
 logs/
+logs-elbo/
 wandb/
 # Byte-compiled / optimized / DLL files
 __pycache__/
