@@ -6,6 +6,7 @@ import tempfile
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from importlib.resources import files
 from pathlib import Path
 from typing import List, Optional
 
@@ -116,31 +117,8 @@ class Labeler:
             self.labels_file = log_path / "labels.jsonl"
 
     def _load_prompt(self) -> str:
-        """Load the default prompt from pack."""
-        prompt_path = Path(__file__).parent.parent.parent.parent / "pack" / "src" / "label" / "prompts" / "default.txt"
-        if prompt_path.exists():
-            return prompt_path.read_text()
-        
-        # Fallback: try relative to label module
-        try:
-            import label
-            label_dir = Path(label.__file__).parent
-            prompt_path = label_dir / "prompts" / "default.txt"
-            if prompt_path.exists():
-                return prompt_path.read_text()
-        except Exception:
-            pass
-        
-        # Final fallback: embedded prompt
-        return """You are an expert video analyst. Describe user actions from the screen recording.
-
-Here are the user input events:
-
-{{LOGS}}
-
-Output a JSON array:
-[{"start": "MM:SS", "end": "MM:SS", "caption": "..."}]
-"""
+        """Load the default prompt from pack's label module."""
+        return (files("label") / "prompts" / "default.txt").read_text()
 
     def label_chunk(self, aggregations: List) -> List[dict]:
         """Label a chunk of aggregations via video.
