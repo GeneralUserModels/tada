@@ -51,13 +51,13 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
             buffer_pos = cur_buffer_len
             prediction_seq += 1
 
-            model_path = predictor.model_path
+            sampling_client = trainer.sampling_client
             buffer_snapshot = list(inference_buffer[-past_len:])
 
             future = executor.submit(
                 predictor.predict_from_snapshot,
                 buffer_snapshot, future_len,
-                model_path_override=model_path,
+                sampling_client=sampling_client,
                 num_imgs_per_sample=num_imgs_per_sample,
             )
             prediction_submitted = True

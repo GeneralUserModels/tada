@@ -156,9 +156,10 @@ def main():
         eval_with_llm_judge=args.eval_with_llm_judge,
     )
 
-    # Stage 4: Predictor (shares retriever with trainer)
+    # Stage 4: Predictor (shares retriever, renderer, tokenizer with trainer)
     predictor = Predictor(
-        model_path=trainer.latest_sampler_path,
+        renderer=trainer.renderer,
+        tokenizer=trainer.tokenizer,
         max_tokens=args.max_completion_length,
         retriever=trainer.retriever,
         log_dir=recorder.session_dir,
