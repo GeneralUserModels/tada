@@ -762,4 +762,5 @@ class OnlineEnvTrainer:
                     wandb.log({
                         "pipeline/buffer_size": len(buffer),
                         "pipeline/batches_yielded": steps_completed,
+                        "pipeline/label_queue_size": label_queue.qsize(),
                     })
