@@ -31,6 +31,9 @@ def main():
     parser.add_argument("--precision", type=str, choices=["accurate", "rough"], default="accurate")
     parser.add_argument("--save-screenshots", action="store_true",
                         help="Save screenshots to disk (disabled by default)")
+    parser.add_argument("--disable-events", type=str, nargs="*", default=None,
+                        help="Event types to disable: move, scroll, click, key. "
+                             "Default: ['move']. Use --disable-events (no args) to enable all.")
 
     # Labeler
     parser.add_argument("--label-model", type=str, default="gemini/gemini-2.0-flash")
@@ -108,11 +111,17 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
 
     # Stage 1: Recorder
+    # Handle --disable-events: None means use default, [] means enable all
+    disable_events = args.disable_events
+    if disable_events is not None and len(disable_events) == 0:
+        disable_events = []  # Explicitly enable all events
+    
     recorder = OnlineRecorder(
         fps=args.fps,
         buffer_seconds=args.buffer_seconds,
         log_dir=args.log_dir,
         save_screenshots=args.save_screenshots,
+        disable=disable_events,
     )
 
     # Stage 2: Labeler
