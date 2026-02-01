@@ -763,3 +763,6 @@ class OnlineEnvTrainer:
                         "pipeline/buffer_size": len(buffer),
                         "pipeline/batches_yielded": steps_completed,
                     })
+
+                if len(buffer) > min_required:
+                    buffer = buffer[-min_required:]
