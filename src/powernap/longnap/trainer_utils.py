@@ -21,19 +21,14 @@ TASK_DESCRIPTION_WITH_IMAGES = (
 
 THINK_INSTRUCTION = (
     "Task: Predict the user's likely next steps.\n\n"
-    "Look at the images and past actions. Consider:\n"
-    "1) Person-based factors (traits, goals, preferences, habits, relationships, capabilities, etc.).\n"
-    "2) Situation-based factors (constraints, incentives, risks, social norms, environment, time of day, etc.).\n\n"
-    "Explain how person and situation-based factors contribute to the prediction, "
-    "and how they interact to produce the likely next steps.\n\n"
+    "Look at the images and past actions. Think about what the user is likely to do next.\n\n"
     "Output ONLY a <rationale>...</rationale> block with your rationale."
 )
 
 REVISE_INSTRUCTION = (
-    "Re-evaluate your reasoning using this context.\n\n"
-    "Explain how person-based and situation-based factors contribute to the updated prediction, "
-    "and how their interaction changes (or confirms) the likely next steps.\n\n"
-    "Output ONLY a <revise>...</revise> block with your revised rationale."
+    "Re-evaluate your rationale using this context.\n\n"
+    "Consider how this context changes (or confirms) the likely next steps.\n\n"
+    "Output ONLY a <revise>...</revise> block with your final, revised rationale."
 )
 
 
