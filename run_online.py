@@ -26,14 +26,22 @@ def main():
     )
 
     # Recorder
-    parser.add_argument("--fps", type=int, default=30)
+    parser.add_argument("--fps", type=int, default=5)
     parser.add_argument("--buffer-seconds", type=int, default=12)
     parser.add_argument("--precision", type=str, choices=["accurate", "rough"], default="accurate")
     parser.add_argument("--save-screenshots", action="store_true",
                         help="Save screenshots to disk (disabled by default)")
+    parser.add_argument("--disable-events", type=str, nargs="*", default=None,
+                        help="Event types to disable: move, scroll, click, key. "
+                             "Default: ['move']. Use --disable-events (no args) to enable all.")
 
-    # Labeler
-    parser.add_argument("--label-model", type=str, default="gemini/gemini-2.0-flash")
+    # Labeler (video chunk-based)
+    parser.add_argument("--chunk-size", type=int, default=60,
+                        help="Number of screenshots per video chunk for labeling")
+    parser.add_argument("--chunk-fps", type=int, default=1,
+                        help="Video encoding framerate for labeling (1 = one frame per second)")
+    parser.add_argument("--chunk-workers", type=int, default=4,
+                        help="Number of parallel chunk processors")
 
     # Trainer
     parser.add_argument("--model", type=str, default="Qwen/Qwen3-VL-30B-A3B-Instruct")
@@ -108,15 +116,26 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
 
     # Stage 1: Recorder
+    # Handle --disable-events: None means use default, [] means enable all
+    disable_events = args.disable_events
+    if disable_events is not None and len(disable_events) == 0:
+        disable_events = []  # Explicitly enable all events
+    
     recorder = OnlineRecorder(
         fps=args.fps,
         buffer_seconds=args.buffer_seconds,
         log_dir=args.log_dir,
         save_screenshots=args.save_screenshots,
+        disable=disable_events,
     )
 
-    # Stage 2: Labeler
-    labeler = Labeler(model=args.label_model, log_dir=recorder.session_dir)
+    # Stage 2: Labeler (video chunk-based)
+    labeler = Labeler(
+        chunk_size=args.chunk_size,
+        fps=args.chunk_fps,
+        max_workers=args.chunk_workers,
+        log_dir=recorder.session_dir,
+    )
 
     # Stage 3: Trainer (using Env abstraction)
     trainer = OnlineEnvTrainer(
