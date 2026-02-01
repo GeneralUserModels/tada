@@ -23,14 +23,13 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
     pending_predictions = []  # (future, buffer_pos, seq)
 
     last_path = None
-    last_buffer_len = 0
-    last_submit_time = 0
     prediction_count = 0
     prediction_seq = 0
     latest_completed_seq = 0
     eval_count = 0
     pending_evals = []
     buffer_trim_offset = 0  # total items trimmed from front of inference_buffer
+    prediction_submitted = False  # single-shot: reset when overlay hides
 
     while recorder.running:
         # Pick up new checkpoint
@@ -40,15 +39,15 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
             last_path = path
             print(f"[inference] using checkpoint: {path}")
 
-
-        # submit new prediction when buffer has grown and enough time has passed
+        # Single-shot prediction: fire once when overlay becomes visible
         cur_buffer_len = buffer_trim_offset + len(inference_buffer)
-        now = time.time()
-        if (overlay and overlay._visible and predictor.model_path
-                and cur_buffer_len >= past_len
-                and cur_buffer_len > last_buffer_len
-                and now - last_submit_time >= predict_interval):
-            last_buffer_len = cur_buffer_len
+        is_visible = overlay._visible if overlay else False
+
+        if not is_visible:
+            prediction_submitted = False  # reset so next show triggers a new prediction
+
+        if (is_visible and not prediction_submitted and predictor.model_path
+                and cur_buffer_len >= past_len):
             buffer_pos = cur_buffer_len
             prediction_seq += 1
 
@@ -61,7 +60,7 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
                 model_path_override=model_path,
                 num_imgs_per_sample=num_imgs_per_sample,
             )
-            last_submit_time = now
+            prediction_submitted = True
             pending_predictions.append((future, buffer_pos, prediction_seq))
             print(f"[inference] submitted prediction seq {prediction_seq} (buffer={buffer_pos}, in-flight={len(pending_predictions)})")
 
