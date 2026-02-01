@@ -26,7 +26,7 @@ def main():
     )
 
     # Recorder
-    parser.add_argument("--fps", type=int, default=30)
+    parser.add_argument("--fps", type=int, default=5)
     parser.add_argument("--buffer-seconds", type=int, default=12)
     parser.add_argument("--precision", type=str, choices=["accurate", "rough"], default="accurate")
     parser.add_argument("--save-screenshots", action="store_true",
@@ -35,8 +35,13 @@ def main():
                         help="Event types to disable: move, scroll, click, key. "
                              "Default: ['move']. Use --disable-events (no args) to enable all.")
 
-    # Labeler
-    parser.add_argument("--label-model", type=str, default="gemini/gemini-2.0-flash")
+    # Labeler (video chunk-based)
+    parser.add_argument("--chunk-size", type=int, default=60,
+                        help="Number of screenshots per video chunk for labeling")
+    parser.add_argument("--chunk-fps", type=int, default=1,
+                        help="Video encoding framerate for labeling (1 = one frame per second)")
+    parser.add_argument("--chunk-workers", type=int, default=4,
+                        help="Number of parallel chunk processors")
 
     # Trainer
     parser.add_argument("--model", type=str, default="Qwen/Qwen3-VL-30B-A3B-Instruct")
@@ -124,8 +129,13 @@ def main():
         disable=disable_events,
     )
 
-    # Stage 2: Labeler
-    labeler = Labeler(model=args.label_model, log_dir=recorder.session_dir)
+    # Stage 2: Labeler (video chunk-based)
+    labeler = Labeler(
+        chunk_size=args.chunk_size,
+        fps=args.chunk_fps,
+        max_workers=args.chunk_workers,
+        log_dir=recorder.session_dir,
+    )
 
     # Stage 3: Trainer (using Env abstraction)
     trainer = OnlineEnvTrainer(
