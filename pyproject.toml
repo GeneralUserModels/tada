@@ -25,14 +25,12 @@ dependencies = [
     "torch",
     "transformers",
     "trl",
+    "wandb",
 ]
 
 [tool.uv.sources]
 pack = { path = "./pack", editable = true }
 tinker-cookbook = { path = "./tinker-cookbook", editable = true }
-
-[project.optional-dependencies]
-wandb = ["wandb"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
