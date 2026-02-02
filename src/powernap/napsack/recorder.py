@@ -2,15 +2,63 @@ import asyncio
 from pathlib import Path
 from datetime import datetime
 from queue import Queue, Empty
+from typing import List, Optional
 
-from record.__main__ import ScreenRecorder
+from record.__main__ import ScreenRecorder, get_monitor_dpis, calculate_monitor_scales
+
+
+# Default DPI for screenshot rescaling (lower = smaller images, fewer tokens)
+DEFAULT_TARGET_DPI = 100
+
+# Default event types to disable for online recording (mouse move is too noisy)
+DEFAULT_DISABLE = ["move"]
 
 
 class OnlineRecorder(ScreenRecorder):
 
     DEFAULT_LOG_DIR = Path(__file__).resolve().parents[4] / "logs"
 
-    def __init__(self, *args, queue_maxsize=0, log_dir=None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        queue_maxsize=0,
+        log_dir=None,
+        target_dpi=DEFAULT_TARGET_DPI,
+        lossless=True,
+        save_screenshots=False,
+        disable: Optional[List[str]] = None,
+        **kwargs
+    ):
+        """
+        Initialize the online recorder.
+
+        Args:
+            queue_maxsize: Max size of aggregation queue (0 = unlimited)
+            log_dir: Directory to save logs to
+            target_dpi: Target DPI for screenshots (lower = smaller images)
+            lossless: If True, save screenshots as PNG
+            save_screenshots: If True, save screenshots to disk
+            disable: List of event types to disable. Defaults to ["move"].
+                     Valid values: "move", "scroll", "click", "key"
+                     Pass empty list [] to enable all event types.
+        """
+        # Calculate scale from target DPI if not explicitly provided
+        if "scale" not in kwargs and target_dpi is not None:
+            monitor_dpis = get_monitor_dpis()
+            if monitor_dpis:
+                kwargs["scale"] = calculate_monitor_scales(target_dpi, monitor_dpis)
+        
+        # Default to lossless (PNG) saving
+        kwargs.setdefault("lossless", lossless)
+        
+        # Default to NOT saving screenshots (for tinker usage)
+        kwargs.setdefault("save_screenshots", save_screenshots)
+        
+        # Default to disabling mouse move events (too noisy for online training)
+        if disable is None:
+            disable = DEFAULT_DISABLE
+        kwargs["disable"] = disable
+        
         super().__init__(*args, **kwargs)
         self.aggregation_queue = Queue(maxsize=queue_maxsize)
 

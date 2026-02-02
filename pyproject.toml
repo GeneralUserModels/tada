@@ -11,7 +11,6 @@ requires-python = ">=3.12,<3.14"
 dependencies = [
     "accelerate",
     "datasets",
-    "imagehash",
     "litellm",
     "numpy",
     "pack",
@@ -20,19 +19,18 @@ dependencies = [
     "pillow",
     "python-dotenv",
     "rich",
+    "screeninfo",
     "tinker",
     "tinker-cookbook",
     "torch",
     "transformers",
     "trl",
+    "wandb",
 ]
 
 [tool.uv.sources]
 pack = { path = "./pack", editable = true }
 tinker-cookbook = { path = "./tinker-cookbook", editable = true }
-
-[project.optional-dependencies]
-wandb = ["wandb"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
