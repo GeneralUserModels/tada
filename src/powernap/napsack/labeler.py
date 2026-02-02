@@ -78,6 +78,7 @@ class Labeler:
         max_workers: int = 4,
         log_dir: Optional[str] = None,
         save_screenshots: bool = True,
+        model: Optional[str] = None,
     ):
         """
         Args:
@@ -86,11 +87,12 @@ class Labeler:
             max_workers: Number of parallel chunk processors.
             log_dir: Directory to save labels.jsonl and screenshots.
             save_screenshots: If True, save screenshots for labeled samples.
+            model: Gemini model name for labeling (default: gemini-2.5-flash).
         """
         self.chunk_size = chunk_size
         self.fps = fps
         self.max_workers = max_workers
-        self.client = GeminiClient()
+        self.client = GeminiClient(model_name=model) if model else GeminiClient()
         self.prompt = self._load_prompt()
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.save_screenshots = save_screenshots
