@@ -9,7 +9,6 @@ import json
 import logging
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -187,25 +186,10 @@ class RewardScorer:
         if json_match:
             text = json_match.group(1).strip()
 
-        try:
-            parsed = json.loads(text)
-        except Exception as e:
-            logger.warning(f"Failed to parse judge response: {e}")
-            logger.warning(f"Response text: {text[:500]}")
-            return scores
-
-        if parsed is None:
-            logger.warning(f"Could not parse judge response. Full response:\n{response_text[:1000]}")
-            return scores
-
-        try:
-            candidates = parsed["candidates"]
-            scores = [c["score"] for c in candidates]
-            logger.info(f"Judge scores: {scores}")
-        except (KeyError, TypeError) as e:
-            logger.warning(f"Failed to extract scores from parsed response: {e}")
-            logger.warning(f"Parsed object: {parsed}")
-
+        parsed = json.loads(text)
+        candidates = parsed["candidates"]
+        scores = [c["score"] for c in candidates]
+        logger.info(f"Judge scores: {scores}")
         return scores
     
     def _call_judge_sync(self, action_text: str, ground_truth: str) -> float:
@@ -233,17 +217,13 @@ class RewardScorer:
         )
         
         # Call the LLM
-        try:
-            response = litellm_completion(
-                model=self.reward_llm,
-                messages=[{"role": "user", "content": verifier_prompt}],
-            )
-            response_text = response.choices[0].message.content
-            scores = self._parse_judge_response(response_text, num_candidates=1)
-            score = scores[0] if scores else 0.0
-        except Exception as e:
-            logger.error(f"Error calling judge LLM: {e}")
-            score = 0.0
+        response = litellm_completion(
+            model=self.reward_llm,
+            messages=[{"role": "user", "content": verifier_prompt}],
+        )
+        response_text = response.choices[0].message.content
+        scores = self._parse_judge_response(response_text, num_candidates=1)
+        score = scores[0]
         
         # Apply penalty from normalization
         final_score = max(0.0, score + normalized.penalty_score)
@@ -271,74 +251,6 @@ class RewardScorer:
             ground_truth
         )
         return score
-    
-    # =========================================================================
-    # Batch Scoring (for legacy trainer compatibility)
-    # =========================================================================
-    
-    def score_batch_sync(
-        self,
-        actions_texts: List[List[str]],
-        ground_truth_actions: List[str],
-    ) -> List[List[float]]:
-        """
-        Score multiple groups of action predictions against their ground truths.
-        
-        This is used by the legacy trainer for batch scoring with ThreadPoolExecutor.
-        
-        Args:
-            actions_texts: List of groups, where each group is a list of candidate texts
-            ground_truth_actions: List of ground truth texts, one per group
-            
-        Returns:
-            List of score lists, one per group
-        """
-        def process_single_group(action_group: List[str], solution: str) -> List[float]:
-            # Normalize all candidates
-            normalized_texts = [
-                self.normalize_and_validate(a).text_for_judge
-                for a in action_group
-            ]
-            
-            # Build the prompt
-            candidates_block = self._build_candidates_block(normalized_texts)
-            verifier_prompt = self.verifier_prompt_template.format(
-                ground_truth=solution,
-                candidates=candidates_block
-            )
-            
-            # Call the LLM
-            try:
-                response = litellm_completion(
-                    model=self.reward_llm,
-                    messages=[{"role": "user", "content": verifier_prompt}],
-                )
-                response_text = response.choices[0].message.content
-                scores = self._parse_judge_response(response_text, len(action_group))
-            except Exception as e:
-                logger.error(f"Error calling judge LLM: {e}")
-                scores = [0.0] * len(action_group)
-            
-            return scores
-        
-        # Process groups in parallel
-        scores = [None] * len(actions_texts)
-        with ThreadPoolExecutor() as executor:
-            from concurrent.futures import as_completed
-            
-            future_map = {
-                executor.submit(process_single_group, action_group, ground_truth_actions[idx]): idx
-                for idx, action_group in enumerate(actions_texts)
-            }
-            for future in as_completed(future_map):
-                idx = future_map[future]
-                try:
-                    scores[idx] = future.result()
-                except Exception as e:
-                    logger.error(f"Error processing group {idx}: {e}")
-                    scores[idx] = [0.0] * len(actions_texts[idx])
-        
-        return scores
 
 
 def create_reward_scorer(reward_llm: str = "gemini/gemini-3-flash-preview") -> RewardScorer:
