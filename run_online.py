@@ -29,8 +29,6 @@ def main():
     parser.add_argument("--fps", type=int, default=5)
     parser.add_argument("--buffer-seconds", type=int, default=12)
     parser.add_argument("--precision", type=str, choices=["accurate", "rough"], default="accurate")
-    parser.add_argument("--save-screenshots", action="store_true",
-                        help="Save screenshots to disk (disabled by default)")
     parser.add_argument("--disable-events", type=str, nargs="*", default=None,
                         help="Event types to disable: move, scroll, click, key. "
                              "Default: ['move']. Use --disable-events (no args) to enable all.")
@@ -42,6 +40,8 @@ def main():
                         help="Video encoding framerate for labeling (1 = one frame per second)")
     parser.add_argument("--chunk-workers", type=int, default=4,
                         help="Number of parallel chunk processors")
+    parser.add_argument("--no-save-screenshots", action="store_true",
+                        help="Don't save labeled screenshots to disk (saves disk space)")
 
     # Trainer
     parser.add_argument("--model", type=str, default="Qwen/Qwen3-VL-30B-A3B-Instruct")
@@ -125,7 +125,6 @@ def main():
         fps=args.fps,
         buffer_seconds=args.buffer_seconds,
         log_dir=args.log_dir,
-        save_screenshots=args.save_screenshots,
         disable=disable_events,
     )
 
@@ -135,6 +134,7 @@ def main():
         fps=args.chunk_fps,
         max_workers=args.chunk_workers,
         log_dir=recorder.session_dir,
+        save_screenshots=not args.no_save_screenshots,
     )
 
     # Stage 3: Trainer (using Env abstraction)
