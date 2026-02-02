@@ -58,7 +58,7 @@ def make_sample(
 
     Returns a dict with 'messages' for the renderer.
     """
-    from PIL import Image, ImageFile
+    from PIL import ImageFile
     ImageFile.LOAD_TRUNCATED_IMAGES = True
 
     window = buffer[-(past_len + future_len):]
@@ -76,17 +76,7 @@ def make_sample(
             if i >= (past_len - num_imgs_per_sample):
                 img = past[i].get("img")
                 if img is not None:
-                    try:
-                        # Handle both PIL Image (in-memory) and file path
-                        if isinstance(img, Image.Image):
-                            pil_img = img.convert("RGB")
-                        elif isinstance(img, str) and Path(img).exists():
-                            pil_img = Image.open(img).convert("RGB")
-                        else:
-                            continue
-                        image_content.append({"type": "image", "image": pil_img})
-                    except Exception as e:
-                        logger.warning(f"Failed to load image: {e}")
+                    image_content.append({"type": "image", "image": img.convert("RGB")})
 
         if image_content:
             content = image_content + [
@@ -286,12 +276,9 @@ class OnlineEnvTrainer:
         if not ckpt_file.exists():
             return None
         for line in ckpt_file.read_text().strip().splitlines():
-            try:
-                entry = json.loads(line)
-                if entry.get("state_path") == state_path:
-                    return entry
-            except json.JSONDecodeError:
-                continue
+            entry = json.loads(line)
+            if entry.get("state_path") == state_path:
+                return entry
         return None
 
     def _get_retriever_path_for_checkpoint(self, state_path):
@@ -319,41 +306,6 @@ class OnlineEnvTrainer:
             logger.warning(f"No checkpoint entry found for {checkpoint_path}, starting from step 0")
 
         logger.info(f"Successfully restored checkpoint metadata from {checkpoint_path}")
-
-    def _load_checkpoint(self, checkpoint_path):
-        """Load a checkpoint. Supports 'auto' to pick the latest."""
-        resolved = self._resolve_checkpoint(checkpoint_path)
-        if not resolved:
-            logger.warning("No checkpoint to load")
-            return
-        logger.info(f"Loading checkpoint from {resolved}...")
-        self.training_client.load_state(resolved).result()
-        save_result = self.training_client.save_weights_for_sampler(
-            name=f'{self.run_name}.model-resumed',
-            ttl_seconds=self.sampler_ttl_seconds,
-        ).result()
-        self.latest_sampler_path = save_result.path
-        self.sampling_client = self.service_client.create_sampling_client(
-            model_path=self.latest_sampler_path
-        )
-
-        # Restore step counter and checkpoint paths from the checkpoint entry
-        entry = self._get_checkpoint_entry(resolved)
-        if entry:
-            self._step = entry.get("step", 0)
-            self._last_checkpoint_path = resolved
-            retriever_path = entry.get("retriever_path")
-            if retriever_path and Path(retriever_path).exists():
-                self.retriever.load_checkpoint(retriever_path)
-                self._last_retriever_checkpoint_path = retriever_path
-                logger.info(f"Loaded retriever checkpoint from {retriever_path}")
-            else:
-                logger.warning(f"No retriever checkpoint found for {resolved}")
-            logger.info(f"Resumed from step {self._step}")
-        else:
-            logger.warning(f"No checkpoint entry found for {resolved}, starting from step 0")
-
-        logger.info(f"Successfully loaded checkpoint from {resolved}")
 
     async def _save_checkpoint(self, step):
         """Save a checkpoint and record it to checkpoints.jsonl. Deletes previous checkpoint."""

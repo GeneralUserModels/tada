@@ -1,4 +1,3 @@
-import asyncio
 from pathlib import Path
 from datetime import datetime
 from queue import Queue, Empty
@@ -100,14 +99,5 @@ class OnlineRecorder(ScreenRecorder):
         while self.running:
             try:
                 yield self.aggregation_queue.get(timeout=1.0)
-            except Empty:
-                continue
-
-    async def async_iter_aggregations(self):
-        loop = asyncio.get_event_loop()
-        while self.running:
-            try:
-                agg = await loop.run_in_executor(None, self.aggregation_queue.get, True, 1.0)
-                yield agg
             except Empty:
                 continue

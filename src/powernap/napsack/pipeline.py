@@ -4,14 +4,11 @@ import asyncio
 import logging
 import time
 from collections import deque
-from pathlib import Path
 
 try:
     import wandb
 except ImportError:
     wandb = None
-
-from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -81,11 +78,7 @@ async def _async_label_loop(recorder, labeler, retriever, label_queue, inference
             if agg is None:
                 fetching = False
             else:
-                has_screenshot = (
-                    agg.screenshot is not None or
-                    (agg.request.screenshot_path and Path(agg.request.screenshot_path).exists())
-                )
-                if has_screenshot:
+                if agg.screenshot is not None:
                     chunk_buffer.append(agg)
                     
                     # Check if chunk is full
@@ -101,13 +94,7 @@ async def _async_label_loop(recorder, labeler, retriever, label_queue, inference
         # Drain completed chunks from the front (preserves order)
         while pending_chunks and pending_chunks[0][0].done():
             task, chunk_aggs, t0 = pending_chunks.popleft()
-            
-            try:
-                labeled_list = task.result()
-            except Exception as e:
-                logger.error(f"Chunk labeling failed: {e}")
-                continue
-            
+            labeled_list = task.result()
             latency = time.time() - t0
             
             # Emit each label
@@ -135,11 +122,9 @@ async def _async_label_loop(recorder, labeler, retriever, label_queue, inference
                     }
                     
                     if label_count % 10 == 1 and labeled.get("img") is not None:
-                        img = labeled["img"]
-                        if isinstance(img, Image.Image) or (isinstance(img, str) and Path(img).exists()):
-                            log["pipeline/label_image"] = wandb.Image(
-                                img, caption=labeled["text"][:200],
-                            )
+                        log["pipeline/label_image"] = wandb.Image(
+                            labeled["img"], caption=labeled["text"][:200],
+                        )
                     
                     wandb.log(log)
     

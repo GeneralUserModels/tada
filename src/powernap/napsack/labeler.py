@@ -24,38 +24,17 @@ logger = logging.getLogger(__name__)
 
 def _parse_mmss(time_str: str) -> int:
     """Parse MM:SS format to seconds."""
-    try:
-        parts = time_str.split(":")
-        if len(parts) == 2:
-            return int(parts[0]) * 60 + int(parts[1])
-    except (ValueError, AttributeError):
-        pass
-    return 0
+    parts = time_str.split(":")
+    if len(parts) != 2:
+        raise ValueError(f"Invalid time format: {time_str}, expected MM:SS")
+    return int(parts[0]) * 60 + int(parts[1])
 
 
-def _extract_screenshot(processed_agg, output_path: Path) -> bool:
-    """Extract screenshot from aggregation to file. Returns True if successful."""
-    # Try in-memory screenshot first
-    if processed_agg.screenshot is not None:
-        try:
-            img_array = processed_agg.screenshot.screenshot
-            img = Image.fromarray(img_array)
-            img.save(output_path, format="JPEG", quality=85)
-            return True
-        except Exception:
-            pass
-    
-    # Fall back to copying from file path
-    screenshot_path = processed_agg.request.screenshot_path
-    if screenshot_path and Path(screenshot_path).exists():
-        try:
-            img = Image.open(screenshot_path)
-            img.save(output_path, format="JPEG", quality=85)
-            return True
-        except Exception:
-            pass
-    
-    return False
+def _get_pil_image(processed_agg) -> Optional[Image.Image]:
+    """Get PIL Image from ProcessedAggregation's in-memory BufferImage."""
+    if processed_agg.screenshot is None:
+        return None
+    return Image.fromarray(processed_agg.screenshot.data)
 
 
 def _agg_to_dict(processed_agg) -> dict:
@@ -87,6 +66,9 @@ class Labeler:
     
     Accumulates screenshots into video chunks and labels them via Gemini Files API
     for higher-quality temporal labels.
+    
+    Only saves screenshots for labels that make it into labels.jsonl (after Gemini
+    filtering), not at the aggregation level.
     """
 
     def __init__(
@@ -95,26 +77,35 @@ class Labeler:
         fps: int = 1,
         max_workers: int = 4,
         log_dir: Optional[str] = None,
+        save_screenshots: bool = True,
+        model: Optional[str] = None,
     ):
         """
         Args:
             chunk_size: Number of screenshots per video chunk (API param).
             fps: Video encoding framerate (1 = one frame per second).
             max_workers: Number of parallel chunk processors.
-            log_dir: Directory to save labels.jsonl.
+            log_dir: Directory to save labels.jsonl and screenshots.
+            save_screenshots: If True, save screenshots for labeled samples.
+            model: Gemini model name for labeling (default: gemini-2.5-flash).
         """
         self.chunk_size = chunk_size
         self.fps = fps
         self.max_workers = max_workers
-        self.client = GeminiClient()
+        self.client = GeminiClient(model_name=model) if model else GeminiClient()
         self.prompt = self._load_prompt()
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        self.save_screenshots = save_screenshots
         
         self.labels_file = None
+        self.screenshots_dir = None
         if log_dir:
             log_path = Path(log_dir)
             log_path.mkdir(parents=True, exist_ok=True)
             self.labels_file = log_path / "labels.jsonl"
+            if save_screenshots:
+                self.screenshots_dir = log_path / "labeled_screenshots"
+                self.screenshots_dir.mkdir(exist_ok=True)
 
     def _load_prompt(self) -> str:
         """Load the default prompt from pack's label module."""
@@ -142,8 +133,11 @@ class Labeler:
             agg_dicts = []
             image_paths = []
             for idx, agg in enumerate(aggregations):
-                img_path = screenshots_dir / f"{idx:06d}.jpg"
-                if _extract_screenshot(agg, img_path):
+                img = _get_pil_image(agg)
+                if img is not None:
+                    # Save to temp file for ffmpeg (create_video needs file paths)
+                    img_path = screenshots_dir / f"{idx:06d}.png"
+                    img.save(img_path, format="PNG")
                     valid_aggs.append(agg)
                     agg_dicts.append(_agg_to_dict(agg))
                     image_paths.append(img_path)
@@ -185,10 +179,7 @@ class Labeler:
                 captions = response.json if not callable(response.json) else response.json()
             finally:
                 # 6. Delete file from Gemini (cleanup quota)
-                try:
-                    self.client.client.files.delete(name=file_desc.name)
-                except Exception as e:
-                    logger.debug(f"Failed to delete Gemini file: {e}")
+                self.client.client.files.delete(name=file_desc.name)
             
             # 7. Match captions to aggregations (with sanitized events)
             return self._match_captions_to_aggs(captions, valid_aggs, sanitized_dicts)
@@ -231,15 +222,14 @@ class Labeler:
             ts = agg.request.timestamp
             start_time = datetime.fromtimestamp(ts).strftime("%Y-%m-%d_%H-%M-%S-%f")
             
-            # Get image from the final frame
-            img = None
-            if agg.screenshot is not None:
-                try:
-                    img = Image.fromarray(agg.screenshot.screenshot)
-                except Exception:
-                    pass
-            if img is None:
-                img = agg.request.screenshot_path
+            # Get PIL image from the final frame
+            img = _get_pil_image(agg)
+            
+            # Save screenshot to disk if enabled (only for labeled samples)
+            screenshot_path = None
+            if self.screenshots_dir and img is not None:
+                screenshot_path = self.screenshots_dir / f"{start_time}.png"
+                img.save(screenshot_path, format="PNG")
             
             # Combine events from ALL aggregations in the range
             combined_events = []
@@ -252,6 +242,7 @@ class Labeler:
                 "text": caption.get("caption", ""),
                 "start_time": start_time,
                 "img": img,
+                "screenshot_path": str(screenshot_path) if screenshot_path else None,
                 "raw_events": combined_events,
             }
             results.append(result)
@@ -259,8 +250,10 @@ class Labeler:
             # Log to file
             if self.labels_file:
                 serializable = {
-                    **result,
-                    "img": agg.request.screenshot_path,
+                    "text": result["text"],
+                    "start_time": result["start_time"],
+                    "screenshot_path": result["screenshot_path"],
+                    "raw_events": result["raw_events"],
                 }
                 with open(self.labels_file, "a") as f:
                     json.dump(serializable, f, default=str)
