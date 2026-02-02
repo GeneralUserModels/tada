@@ -15,7 +15,7 @@ uv run run_online.py \
     --reward-llm gemini/gemini-3-flash-preview \
     --num-imgs-per-sample 2 \
     --num-generations 8 \
-    --learning-rate 1e-5 \
+    --learning-rate 5e-5 \
     --max-completion-length 512 \
     --past-len 16 \
     --future-len 8 \
