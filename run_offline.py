@@ -61,6 +61,7 @@ class CLIConfig:
     eval_every: int = 20
     save_every: int = 20
     num_groups_to_log: int = 4
+    sampler_ttl_seconds: int | None = 60
 
 
 def build_config(cli_config: CLIConfig) -> train.Config:
@@ -122,6 +123,7 @@ def build_config(cli_config: CLIConfig) -> train.Config:
         wandb_project=cli_config.wandb_project,
         wandb_name=wandb_name,
         num_groups_to_log=cli_config.num_groups_to_log,
+        sampler_ttl_seconds=cli_config.sampler_ttl_seconds,
     )
 
 
