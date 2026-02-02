@@ -1,14 +1,15 @@
+import asyncio
+import copy
 import json
-import os
 import re
 from datetime import datetime
 from pathlib import Path
 
-from openai import OpenAI
+import tinker
 from litellm import completion as litellm_completion
 
 from powernap.longnap.trainer_utils import (
-    TASK_DESCRIPTION, build_actions_block,
+    TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block,
     build_think_user_message, build_revise_user_message, build_actions_user_message,
 )
 from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams, mmr_select
@@ -16,26 +17,20 @@ from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams, mm
 VERIFIER_PROMPT_PATH = Path(__file__).resolve().parents[1] / "longnap" / "verifier.txt"
 
 
-TINKER_OAI_URL = "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1"
-
-
 class Predictor:
 
-    def __init__(self, model_path=None, max_tokens=512, temperature=1.0,
+    def __init__(self, renderer=None, tokenizer=None, max_tokens=512, temperature=1.0,
                  retriever=None, retriever_checkpoint=None, log_dir=None,
                  top_k=10, mmr_k=10, mmr_alpha=0.5, time_decay_lambda=0.5):
-        self.model_path = model_path
+        self.renderer = renderer
+        self.tokenizer = tokenizer
+        self.model_path = None  # set by inference loop for logging
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.top_k = top_k
         self.mmr_k = mmr_k
         self.mmr_alpha = mmr_alpha
         self.time_decay_lambda = time_decay_lambda
-
-        self.client = OpenAI(
-            base_url=TINKER_OAI_URL,
-            api_key=os.getenv("TINKER_API_KEY"),
-        )
 
         if retriever:
             self.retriever = retriever
@@ -53,32 +48,41 @@ class Predictor:
             self.predictions_file = log_path / "predictions.jsonl"
 
 
-    def _sample(self, messages, stop, model_path=None):
-        response = self.client.chat.completions.create(
-            model=model_path or self.model_path,
-            messages=messages,
-            max_tokens=self.max_tokens,
-            temperature=self.temperature,
-            stop=stop,
-        )
-        return response.choices[0].message.content
+    def _sample(self, messages, stop, sampling_client):
+        model_input = self.renderer.build_generation_prompt(messages)
+        sample_result = asyncio.run(sampling_client.sample_async(
+            prompt=model_input,
+            num_samples=1,
+            sampling_params=tinker.SamplingParams(
+                stop=stop,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+            ),
+        ))
+        tokens = sample_result.sequences[0].tokens
+        return self.tokenizer.decode(tokens, skip_special_tokens=True)
 
-    def predict(self, messages, ts, future_len=4, past_actions="", model_path_override=None):
+    def predict(self, messages, ts, future_len=4, past_actions="", sampling_client=None):
         """
         Run the 3-step Think → Revise → Actions flow.
 
         Args:
-            messages: Initial conversation messages (user context)
+            messages: Initial conversation messages (user context).
+                      The last message must be role=user with list content.
             ts: Timestamp for retrieval cutoff
             future_len: Number of actions to predict
             past_actions: Past actions block for retrieval query
-            model_path_override: Freeze model path for thread-safe concurrent predictions
+            sampling_client: Tinker sampling client for this prediction
         """
-        model_path = model_path_override or self.model_path
+        # 1) Think - merge think instruction into last user message, then sample
+        #    Content is always a list (built by predict_from_snapshot), so just append a TextPart.
+        messages = copy.deepcopy(messages)
+        think_msg = build_think_user_message()
+        messages[-1]["content"].append(
+            {"type": "text", "text": "\n\n" + think_msg["content"]}
+        )
 
-        # 1) Think - add think instruction and sample
-        messages = messages + [build_think_user_message()]
-        think_text = self._sample(messages, stop=["</rationale>"], model_path=model_path)
+        think_text = self._sample(messages, stop=["</rationale>"], sampling_client=sampling_client)
         messages.append({"role": "assistant", "content": think_text})
 
         # 2) Retrieve using think output
@@ -98,13 +102,12 @@ class Predictor:
 
         # 3) Revise - add revise instruction with retrieved context and sample
         messages.append(build_revise_user_message(retrieved_text))
-        revise_text = self._sample(messages, stop=["</revise>"], model_path=model_path)
+        revise_text = self._sample(messages, stop=["</revise>"], sampling_client=sampling_client)
         messages.append({"role": "assistant", "content": revise_text})
 
         # 4) Actions - add actions instruction and sample
         messages.append(build_actions_user_message(future_len))
-        actions_text = self._sample(messages, stop=["</actions>"], model_path=model_path)
-
+        actions_text = self._sample(messages, stop=["</actions>"], sampling_client=sampling_client)
 
         result = {
             "think": think_text,
@@ -125,24 +128,44 @@ class Predictor:
     def add_to_retriever(self, text, event_ts, namespace="train"):
         self.retriever.add(text, event_ts=event_ts, namespace=namespace)
 
-    def predict_from_buffer(self, buffer, past_len, future_len, processor, model_path_override=None):
+    def predict_from_buffer(self, buffer, past_len, future_len, processor,
+                             sampling_client=None, num_imgs_per_sample=0):
         """Build messages from buffer and run prediction."""
         past = buffer[-past_len:]
-        return self.predict_from_snapshot(past, future_len, model_path_override=model_path_override)
+        return self.predict_from_snapshot(past, future_len, sampling_client=sampling_client,
+                                          num_imgs_per_sample=num_imgs_per_sample)
 
-    def predict_from_snapshot(self, past, future_len, model_path_override=None):
+    def predict_from_snapshot(self, past, future_len, sampling_client=None,
+                              num_imgs_per_sample=0):
         """Run prediction from a pre-sliced list of past actions."""
         past_actions_block = build_actions_block(past)
 
+        # Always build content as a list so predict() can append TextParts directly
+        if num_imgs_per_sample > 0:
+            image_content = []
+            for action in past[-num_imgs_per_sample:]:
+                img = action.get("img")
+                if img is not None:
+                    image_content.append({"type": "image", "image": img.convert("RGB")})
+
+            if image_content:
+                content = image_content + [
+                    {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + past_actions_block}
+                ]
+            else:
+                content = [{"type": "text", "text": TASK_DESCRIPTION + "\n\n" + past_actions_block}]
+        else:
+            content = [{"type": "text", "text": TASK_DESCRIPTION + "\n\n" + past_actions_block}]
+
         messages = [{
             "role": "user",
-            "content": TASK_DESCRIPTION + "\n\n" + past_actions_block,
+            "content": content,
         }]
 
         ts = datetime.strptime(past[0]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
 
         return self.predict(messages, ts, future_len=future_len, past_actions=past_actions_block,
-                            model_path_override=model_path_override)
+                            sampling_client=sampling_client)
 
     def score_prediction(self, predicted_actions, ground_truth_actions, reward_llm):
         if not re.search(r"<action>", predicted_actions):

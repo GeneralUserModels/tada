@@ -764,3 +764,6 @@ class OnlineEnvTrainer:
                         "pipeline/batches_yielded": steps_completed,
                         "pipeline/label_queue_size": label_queue.qsize(),
                     })
+
+                if len(buffer) > min_required:
+                    buffer = buffer[-min_required:]
