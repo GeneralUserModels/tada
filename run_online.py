@@ -34,6 +34,8 @@ def main():
                              "Default: ['move']. Use --disable-events (no args) to enable all.")
 
     # Labeler (video chunk-based)
+    parser.add_argument("--label-model", type=str, default="gemini-3-flash-preview",
+                        help="Gemini model for labeling (default: gemini-3-flash-preview)")
     parser.add_argument("--chunk-size", type=int, default=60,
                         help="Number of screenshots per video chunk for labeling")
     parser.add_argument("--chunk-fps", type=int, default=1,
@@ -135,6 +137,7 @@ def main():
         max_workers=args.chunk_workers,
         log_dir=recorder.session_dir,
         save_screenshots=not args.no_save_screenshots,
+        model=args.label_model,
     )
 
     # Stage 3: Trainer (using Env abstraction)
