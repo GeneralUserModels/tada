@@ -9,7 +9,7 @@ uv run run_online.py \
     --fps 5 \
     --buffer-seconds 120 \
     --precision accurate \
-    --disable-events \
+    --disable-events move \
     --label-model gemini-3-flash-preview \
     --model Qwen/Qwen3-VL-30B-A3B-Instruct \
     --reward-llm gemini/gemini-3-flash-preview \
