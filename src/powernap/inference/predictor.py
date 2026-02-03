@@ -21,7 +21,8 @@ class Predictor:
 
     def __init__(self, renderer=None, tokenizer=None, max_tokens=512, temperature=1.0,
                  retriever=None, retriever_checkpoint=None, log_dir=None,
-                 top_k=10, mmr_k=10, mmr_alpha=0.5, time_decay_lambda=0.5):
+                 top_k=10, mmr_k=10, mmr_alpha=0.5, time_decay_lambda=0.5,
+                 overlay=None):
         self.renderer = renderer
         self.tokenizer = tokenizer
         self.model_path = None  # set by inference loop for logging
@@ -31,6 +32,7 @@ class Predictor:
         self.mmr_k = mmr_k
         self.mmr_alpha = mmr_alpha
         self.time_decay_lambda = time_decay_lambda
+        self.overlay = overlay
 
         if retriever:
             self.retriever = retriever
@@ -76,6 +78,9 @@ class Predictor:
         """
         # 1) Think - merge think instruction into last user message, then sample
         #    Content is always a list (built by predict_from_snapshot), so just append a TextPart.
+        if self.overlay:
+            self.overlay.update_phase("Think")
+
         messages = copy.deepcopy(messages)
         think_msg = build_think_user_message()
         messages[-1]["content"].append(
@@ -86,6 +91,9 @@ class Predictor:
         messages.append({"role": "assistant", "content": think_text})
 
         # 2) Retrieve using think output
+        if self.overlay:
+            self.overlay.update_phase("Retrieve")
+
         query = think_text
         if past_actions:
             query = query + "\n\n" + past_actions
@@ -101,11 +109,17 @@ class Predictor:
         retrieved_text = "\n\n".join(h["text"] for h in hits)
 
         # 3) Revise - add revise instruction with retrieved context and sample
+        if self.overlay:
+            self.overlay.update_phase("Revise")
+
         messages.append(build_revise_user_message(retrieved_text))
         revise_text = self._sample(messages, stop=["</revise>"], sampling_client=sampling_client)
         messages.append({"role": "assistant", "content": revise_text})
 
         # 4) Actions - add actions instruction and sample
+        if self.overlay:
+            self.overlay.update_phase("Actions")
+
         messages.append(build_actions_user_message(future_len))
         actions_text = self._sample(messages, stop=["</actions>"], sampling_client=sampling_client)
 

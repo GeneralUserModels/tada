@@ -166,6 +166,7 @@ def main():
         max_tokens=args.max_completion_length,
         retriever=trainer.retriever,
         log_dir=recorder.session_dir,
+        overlay=overlay,
     )
 
     # sleepwalk
