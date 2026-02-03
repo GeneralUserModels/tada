@@ -13,12 +13,15 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active):
+def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active,
+               flush_request=None, flush_complete=None):
     """Label incoming screen recordings by accumulating into video chunks."""
-    asyncio.run(_async_label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active))
+    asyncio.run(_async_label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active,
+                                   flush_request, flush_complete))
 
 
-async def _async_label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active):
+async def _async_label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active,
+                            flush_request=None, flush_complete=None):
     """Async label loop: accumulates aggregations into chunks, labels via video.
     
     Uses parallel chunk processing while preserving chronological output order.
@@ -41,6 +44,9 @@ async def _async_label_loop(recorder, labeler, retriever, label_queue, inference
     
     fetching = True
     fetch_task = None
+    
+    # Track flush task specifically for signaling completion
+    flush_task = None
     
     while fetching or pending_chunks or chunk_buffer:
         # Start a fetch if we aren't already fetching
@@ -70,6 +76,22 @@ async def _async_label_loop(recorder, labeler, retriever, label_queue, inference
         except asyncio.CancelledError:
             break
         
+        # Handle flush request from inference
+        if flush_request is not None and flush_request.is_set():
+            flush_request.clear()  # Clear immediately to avoid re-triggering
+            
+            if chunk_buffer:
+                # Submit partial chunk for immediate labeling
+                chunk_count += 1
+                print(f"[label] flush requested: submitting partial chunk #{chunk_count} with {len(chunk_buffer)} aggregations")
+                task = asyncio.create_task(labeler.alabel_chunk(chunk_buffer.copy()))
+                pending_chunks.append((task, chunk_buffer.copy(), time.time()))
+                flush_task = task  # Track this specific task
+                chunk_buffer.clear()
+            elif flush_complete is not None:
+                # Nothing to flush — signal complete immediately
+                flush_complete.set()
+        
         # Handle fetch completion
         if fetch_task in done:
             agg = fetch_task.result()
@@ -96,6 +118,12 @@ async def _async_label_loop(recorder, labeler, retriever, label_queue, inference
             task, chunk_aggs, t0 = pending_chunks.popleft()
             labeled_list = task.result()
             latency = time.time() - t0
+            
+            # Check if this was the flush task
+            if flush_task is not None and task is flush_task:
+                if flush_complete is not None:
+                    flush_complete.set()
+                flush_task = None  # Clear reference to avoid memory leak
             
             # Emit each label
             for labeled in labeled_list:
@@ -127,5 +155,9 @@ async def _async_label_loop(recorder, labeler, retriever, label_queue, inference
                         )
                     
                     wandb.log(log)
+    
+    # On loop exit, ensure any waiting inference thread is unblocked
+    if flush_complete is not None:
+        flush_complete.set()
     
     print(f"[label] finished: {label_count} labels, {chunk_count} chunks, {skip_count} skipped")

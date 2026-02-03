@@ -16,7 +16,7 @@ class ActionOverlay:
         self._scroll_view = None
         self._window = None
         self._app = None
-        self._visible = True
+        self._visible = False  # Start hidden, user toggles with Ctrl+H
         self._monitor = None
         self._screen_frame = None
         self._sleepwalk_callback = None
@@ -86,7 +86,8 @@ class ActionOverlay:
         attr_str = self._make_waiting_string()
         text_view.textStorage().setAttributedString_(attr_str)
 
-        window.orderFrontRegardless()
+        # Don't show window at startup - user toggles with Ctrl+H
+        # window.orderFrontRegardless()
 
         self._window = window
         self._scroll_view = scroll_view
@@ -125,7 +126,7 @@ class ActionOverlay:
 
     @staticmethod
     def _make_waiting_string():
-        """Build a styled 'waiting' message."""
+        """Build a styled 'not ready' message."""
         import AppKit
 
         font = AppKit.NSFont.systemFontOfSize_weight_(12, AppKit.NSFontWeightMedium)
@@ -137,8 +138,65 @@ class ActionOverlay:
             AppKit.NSForegroundColorAttributeName: color,
         }
         return AppKit.NSAttributedString.alloc().initWithString_attributes_(
-            "Waiting for predictions\u2026", attrs
+            "Still labeling data\u2026\nTry again in a moment.", attrs
         )
+
+    @staticmethod
+    def _build_flushing_string():
+        """Build a styled string showing data flush in progress."""
+        import AppKit
+
+        result = AppKit.NSMutableAttributedString.alloc().init()
+
+        # ── Header ──
+        header_font = AppKit.NSFont.systemFontOfSize_weight_(
+            13, AppKit.NSFontWeightBold
+        )
+        header_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+            0.55, 0.78, 0.95, 1.0  # blue
+        )
+        header_attrs = {
+            AppKit.NSFontAttributeName: header_font,
+            AppKit.NSForegroundColorAttributeName: header_color,
+        }
+        header = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+            "Syncing Data\u2026\n", header_attrs
+        )
+        result.appendAttributedString_(header)
+
+        # ── Separator ──
+        sep_font = AppKit.NSFont.systemFontOfSize_weight_(
+            6, AppKit.NSFontWeightRegular
+        )
+        sep_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+            1.0, 1.0, 1.0, 0.25
+        )
+        sep_attrs = {
+            AppKit.NSFontAttributeName: sep_font,
+            AppKit.NSForegroundColorAttributeName: sep_color,
+        }
+        separator = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+            "\u2500" * 46 + "\n\n", sep_attrs
+        )
+        result.appendAttributedString_(separator)
+
+        # ── Description ──
+        body_font = AppKit.NSFont.systemFontOfSize_weight_(
+            11.5, AppKit.NSFontWeightRegular
+        )
+        body_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+            1.0, 1.0, 1.0, 0.7
+        )
+        body_attrs = {
+            AppKit.NSFontAttributeName: body_font,
+            AppKit.NSForegroundColorAttributeName: body_color,
+        }
+        body = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+            "Labeling recent activity for fresh predictions\u2026", body_attrs
+        )
+        result.appendAttributedString_(body)
+
+        return result
 
     @staticmethod
     def _build_attributed_string(text):
@@ -375,6 +433,18 @@ class ActionOverlay:
         if self._text_view is None:
             return
         attr_str = self._build_attributed_string(text)
+        from PyObjCTools import AppHelper
+
+        def _on_main():
+            self._do_update(attr_str)
+
+        AppHelper.callAfter(_on_main)
+
+    def update_flushing(self):
+        """Update overlay to show data flush in progress."""
+        if self._text_view is None:
+            return
+        attr_str = self._build_flushing_string()
         from PyObjCTools import AppHelper
 
         def _on_main():
