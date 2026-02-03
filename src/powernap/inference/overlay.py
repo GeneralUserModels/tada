@@ -129,17 +129,57 @@ class ActionOverlay:
         """Build a styled 'not ready' message."""
         import AppKit
 
-        font = AppKit.NSFont.systemFontOfSize_weight_(12, AppKit.NSFontWeightMedium)
-        color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+        result = AppKit.NSMutableAttributedString.alloc().init()
+
+        # ── Header ──
+        header_font = AppKit.NSFont.systemFontOfSize_weight_(
+            13, AppKit.NSFontWeightBold
+        )
+        header_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
             1.0, 1.0, 1.0, 0.5
         )
-        attrs = {
-            AppKit.NSFontAttributeName: font,
-            AppKit.NSForegroundColorAttributeName: color,
+        header_attrs = {
+            AppKit.NSFontAttributeName: header_font,
+            AppKit.NSForegroundColorAttributeName: header_color,
         }
-        return AppKit.NSAttributedString.alloc().initWithString_attributes_(
-            "Still labeling data\u2026\nTry again in a moment.", attrs
+        header = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+            "Not Ready\n", header_attrs
         )
+        result.appendAttributedString_(header)
+
+        # ── Separator ──
+        sep_font = AppKit.NSFont.systemFontOfSize_weight_(
+            6, AppKit.NSFontWeightRegular
+        )
+        sep_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+            1.0, 1.0, 1.0, 0.25
+        )
+        sep_attrs = {
+            AppKit.NSFontAttributeName: sep_font,
+            AppKit.NSForegroundColorAttributeName: sep_color,
+        }
+        separator = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+            "\u2500" * 46 + "\n\n", sep_attrs
+        )
+        result.appendAttributedString_(separator)
+
+        # ── Description ──
+        body_font = AppKit.NSFont.systemFontOfSize_weight_(
+            11.5, AppKit.NSFontWeightRegular
+        )
+        body_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+            1.0, 1.0, 1.0, 0.5
+        )
+        body_attrs = {
+            AppKit.NSFontAttributeName: body_font,
+            AppKit.NSForegroundColorAttributeName: body_color,
+        }
+        body = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+            "Still labeling data\u2026\nTry again in a moment.", body_attrs
+        )
+        result.appendAttributedString_(body)
+
+        return result
 
     @staticmethod
     def _build_flushing_string():
