@@ -198,6 +198,10 @@ def main():
 
     label_queue = Queue()
     shutdown_event = threading.Event()
+    
+    # Flush synchronization for real-time inference
+    flush_request = threading.Event()
+    flush_complete = threading.Event()
 
     def shutdown(sig, frame):
         if shutdown_event.is_set():
@@ -226,7 +230,8 @@ def main():
     # Label thread
     label_thread = threading.Thread(
         target=label_loop,
-        args=(recorder, labeler, trainer.retriever, label_queue, inference_buffer, sleepwalk_active),
+        args=(recorder, labeler, trainer.retriever, label_queue, inference_buffer, sleepwalk_active,
+              flush_request, flush_complete),
         daemon=True,
     )
     label_thread.start()
@@ -238,7 +243,11 @@ def main():
             args=(predictor, inference_buffer, trainer, recorder,
                   args.past_len, args.future_len, tokenizer,
                   args.predict_every_n_seconds, args.reward_llm, overlay, walker),
-            kwargs={"num_imgs_per_sample": args.num_imgs_per_sample},
+            kwargs={
+                "num_imgs_per_sample": args.num_imgs_per_sample,
+                "flush_request": flush_request,
+                "flush_complete": flush_complete,
+            },
             daemon=True,
         )
         inference_thread.start()

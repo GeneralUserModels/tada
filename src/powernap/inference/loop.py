@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 def inference_loop(predictor, inference_buffer, trainer, recorder,
                    past_len, future_len, processor, predict_interval,
-                   reward_llm, overlay, walker, num_imgs_per_sample=0):
+                   reward_llm, overlay, walker, num_imgs_per_sample=0,
+                   flush_request=None, flush_complete=None):
 
     executor = ThreadPoolExecutor(max_workers=8)
     pending_predictions = []  # (future, buffer_pos, seq)
@@ -48,6 +49,21 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
 
         if (is_visible and not prediction_submitted and predictor.model_path
                 and cur_buffer_len >= past_len):
+            
+            # Request flush of pending chunks for fresh data
+            if flush_request is not None and flush_complete is not None:
+                if overlay:
+                    overlay.update_flushing()
+                
+                flush_complete.clear()
+                flush_request.set()
+                
+                # Wait for flush to complete (with timeout)
+                if not flush_complete.wait(timeout=15.0):
+                    print("[inference] flush timed out, using stale buffer")
+            
+            # Re-check buffer length after flush (may have new items)
+            cur_buffer_len = buffer_trim_offset + len(inference_buffer)
             buffer_pos = cur_buffer_len
             prediction_seq += 1
 
