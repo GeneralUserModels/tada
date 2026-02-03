@@ -135,7 +135,7 @@ def build_config(cli_config: CLIConfig) -> train.Config:
         wandb_project=cli_config.wandb_project,
         wandb_name=wandb_name,
         num_groups_to_log=cli_config.num_groups_to_log,
-        sampler_ttl_seconds=cli_config.sampler_ttl_seconds,
+        ttl_seconds=cli_config.sampler_ttl_seconds,
     )
 
 

@@ -7,7 +7,7 @@ set -e
 
 uv run run_offline.py \
     model_name=Qwen/Qwen3-VL-30B-A3B-Instruct \
-    dataset_path=./data/train-00000-of-00001.parquet \
+    dataset_path=train-00000-of-00001.parquet \
     past_len=16 \
     future_len=8 \
     stride=4 \
