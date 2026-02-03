@@ -53,7 +53,11 @@ class CLIConfig:
     
     # Reward configuration
     reward_llm: str = "gemini/gemini-3-flash-preview"
-    
+
+    # Loss mode
+    loss_mode: str = "llm_judge"           # "llm_judge" or "logprob_elbo"
+    eval_with_llm_judge: bool = False      # when using logprob_elbo, also compute LLM judge reward
+
     # Logging and checkpointing
     log_path: str | None = None
     wandb_project: str | None = None
@@ -89,6 +93,13 @@ def build_config(cli_config: CLIConfig) -> train.Config:
     else:
         wandb_name = run_name
     
+    # Build reward scorer override for ELBO mode (skip LLM judge when not needed)
+    reward_scorer = None
+    if cli_config.loss_mode == "logprob_elbo" and not cli_config.eval_with_llm_judge:
+        async def _dummy_scorer(actions, ground_truth):
+            return 0.0
+        reward_scorer = _dummy_scorer
+
     # Build dataset builder
     dataset_builder = LongNAPDatasetBuilder(
         model_name=cli_config.model_name,
@@ -107,6 +118,7 @@ def build_config(cli_config: CLIConfig) -> train.Config:
         retrieval_time_decay_lambda=cli_config.retrieval_time_decay_lambda,
         dedup_threshold=cli_config.dedup_threshold,
         reward_llm=cli_config.reward_llm,
+        reward_scorer=reward_scorer,
     )
     
     # Build train config
@@ -136,7 +148,11 @@ def main():
     cli_utils.check_log_dir(config.log_path, behavior_if_exists="ask")
     
     # Run the training loop
-    asyncio.run(train.main(config))
+    if cli_config.loss_mode == "logprob_elbo":
+        from powernap.longnap.elbo import main_elbo
+        asyncio.run(main_elbo(config, cli_config.eval_with_llm_judge))
+    else:
+        asyncio.run(train.main(config))
 
 
 if __name__ == "__main__":
