@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
-# LongNAP Offline Training Pipeline
-# Trains on a pre-recorded parquet dataset using Env-based RL
+# LongNAP Offline ELBO Training Pipeline
+# Trains on a pre-recorded parquet dataset using 2-stage SFT→RL ELBO loss
+# Rewards come from logprobs of ground-truth tokens (no LLM judge needed)
 # Make sure .env is configured with GEMINI_API_KEY and TINKER_API_KEY
 
 uv run run_offline.py \
@@ -23,9 +24,12 @@ uv run run_offline.py \
     retrieval_mmr_alpha=0.5 \
     retrieval_time_decay_lambda=0.5 \
     dedup_threshold=0.8 \
-    reward_llm=gemini/gemini-3-flash-preview \
+    loss_mode=logprob_elbo \
     eval_every=20 \
     save_every=20 \
     num_groups_to_log=4 \
-    wandb_project=longnap-offline \
-    wandb_name="${USER:-longnap}-$(date +%Y%m%d-%H%M%S)"
+    wandb_project=longnap-offline-elbo \
+    wandb_name="${USER:-longnap}-elbo-$(date +%Y%m%d-%H%M%S)"
+
+    # add eval_with_llm_judge=true to also compute LLM judge reward for comparison
+    # (requires GEMINI_API_KEY; adds reward_llm= calls alongside logprob rewards)
