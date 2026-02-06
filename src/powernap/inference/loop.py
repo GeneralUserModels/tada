@@ -3,6 +3,7 @@
 import logging
 import re
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 
 from powernap.longnap.trainer_utils import build_actions_block
@@ -68,7 +69,11 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
         still_pending_preds = []
         for future, buf_pos, seq in pending_predictions:
             if future.done():
-                result = future.result()
+                try:
+                    result = future.result()
+                except Exception as e:
+                    logger.warning(f"Prediction failed: {e}. Skipping.")
+                    continue
                 prediction_count += 1
 
                 print(f"[inference] prediction #{prediction_count} (seq {seq}) complete:")
@@ -105,7 +110,11 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
             start = buf_pos - buffer_trim_offset
             if logical_len >= buf_pos + fl and start >= 0:
                 ground_truth = build_actions_block(inference_buffer[start:start + fl])
-                reward = predictor.score_prediction(result["actions"], ground_truth, reward_llm)
+                try:
+                    reward = predictor.score_prediction(result["actions"], ground_truth, reward_llm)
+                except Exception as e:
+                    logger.warning(f"Score prediction failed: {e}. Skipping eval.")
+                    continue
                 eval_count += 1
 
                 print(f"[inference] eval #{eval_count}: reward={reward:.2f}")
