@@ -4,6 +4,7 @@ import logging
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 from powernap.longnap.trainer_utils import build_actions_block
 
@@ -17,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 def inference_loop(predictor, inference_buffer, trainer, recorder,
                    past_len, future_len, processor, predict_interval,
-                   reward_llm, overlay, walker, num_imgs_per_sample=0):
+                   reward_llm, overlay, walker, num_imgs_per_sample=0,
+                   flush_request=None, flush_complete=None):
 
     executor = ThreadPoolExecutor(max_workers=8)
     pending_predictions = []  # (future, buffer_pos, seq)
@@ -48,11 +50,45 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
 
         if (is_visible and not prediction_submitted and predictor.model_path
                 and cur_buffer_len >= past_len):
+            
+            # Capture timestamp BEFORE flush - exclude events after hotkey press
+            # This prevents the Ctrl+H keypress from biasing the prediction
+            cutoff_ts = time.time()
+            
+            # Request flush of pending chunks for fresh data
+            if flush_request is not None and flush_complete is not None:
+                if overlay:
+                    overlay.update_flushing()
+                
+                flush_complete.clear()
+                flush_request.set()
+                
+                # Wait for flush to complete (with timeout)
+                if not flush_complete.wait(timeout=45.0):
+                    print("[inference] flush timed out, using stale buffer")
+            
+            # Re-check buffer length after flush (may have new items)
+            cur_buffer_len = buffer_trim_offset + len(inference_buffer)
             buffer_pos = cur_buffer_len
             prediction_seq += 1
 
             sampling_client = trainer.sampling_client
-            buffer_snapshot = list(inference_buffer[-past_len:])
+            
+            # Filter buffer to only include items BEFORE the hotkey was pressed
+            # This prevents the Ctrl+H keypress from biasing the prediction
+            filtered_buffer = [
+                item for item in inference_buffer
+                if datetime.strptime(item["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp() < cutoff_ts
+            ]
+            
+            # Skip if not enough context after filtering
+            if len(filtered_buffer) < past_len:
+                print(f"[inference] not enough pre-cutoff items ({len(filtered_buffer)}/{past_len}), skipping")
+                prediction_submitted = True  # Don't retry immediately
+                time.sleep(1)
+                continue
+            
+            buffer_snapshot = filtered_buffer[-past_len:]
 
             future = executor.submit(
                 predictor.predict_from_snapshot,
