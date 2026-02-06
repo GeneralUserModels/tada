@@ -4,6 +4,7 @@ import asyncio
 import json
 import tempfile
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from importlib.resources import files
@@ -173,13 +174,21 @@ class Labeler:
             # 4. Upload to Gemini
             file_desc = self.client.upload_file(str(video_path))
             
+            # 5. Generate captions (infinite retry on failure)
+            while True:
+                try:
+                    response = self.client.generate(full_prompt, file_desc, schema=CAPTION_SCHEMA)
+                    captions = response.json if not callable(response.json) else response.json()
+                    break
+                except Exception as e:
+                    logger.warning(f"Gemini generate failed: {e}. Retrying in 120s...")
+                    time.sleep(120)
+
+            # 6. Delete file from Gemini (cleanup quota)
             try:
-                # 5. Generate captions
-                response = self.client.generate(full_prompt, file_desc, schema=CAPTION_SCHEMA)
-                captions = response.json if not callable(response.json) else response.json()
-            finally:
-                # 6. Delete file from Gemini (cleanup quota)
                 self.client.client.files.delete(name=file_desc.name)
+            except Exception as e:
+                logger.warning(f"Failed to delete Gemini file: {e}")
             
             # 7. Match captions to aggregations (with sanitized events)
             return self._match_captions_to_aggs(captions, valid_aggs, sanitized_dicts)

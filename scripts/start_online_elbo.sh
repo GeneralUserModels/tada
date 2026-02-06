@@ -16,10 +16,10 @@ uv run run_online.py \
     --batch-size 8 \
     --predict-every-n-seconds 10 \
     --log-every-n-steps 1 \
-    --log-dir ./logs \
+    --log-dir ./logs-elbo \
     --log-to-wandb \
     --wandb-project longnap-online \
-    --wandb-run-name "${USER:-longnap}-$(date +%Y%m%d-%H%M%S)" \
+    --wandb-run-name "${USER:-longnap}-elbo-$(date +%Y%m%d-%H%M%S)" \
     --checkpoint-every-n-steps 2 \
     --resume-from-checkpoint auto \
     --loss-mode logprob_elbo --eval-with-llm-judge

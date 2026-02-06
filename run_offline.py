@@ -64,6 +64,7 @@ class CLIConfig:
     wandb_name: str | None = None
     eval_every: int = 20
     save_every: int = 20
+    log_every: int = 1  # Log to wandb every N batches
     num_groups_to_log: int = 4
     sampler_ttl_seconds: int | None = 60
 
@@ -144,13 +145,13 @@ def main():
     cli_config = chz.entrypoint(CLIConfig)
     config = build_config(cli_config)
     
-    # Check if log dir exists and ask user what to do
-    cli_utils.check_log_dir(config.log_path, behavior_if_exists="ask")
+    # Check if log dir exists - default to resume
+    cli_utils.check_log_dir(config.log_path, behavior_if_exists="resume")
     
     # Run the training loop
     if cli_config.loss_mode == "logprob_elbo":
         from powernap.longnap.elbo import main_elbo
-        asyncio.run(main_elbo(config, cli_config.eval_with_llm_judge))
+        asyncio.run(main_elbo(config, cli_config.eval_with_llm_judge, cli_config.log_every))
     else:
         asyncio.run(train.main(config))
 
