@@ -135,6 +135,7 @@ class OnlineEnvTrainer:
         wandb_run_name: str = "longnap-online",
         checkpoint_every_n_steps: int = 0,
         resume_from_checkpoint: Optional[str] = None,
+        retriever_checkpoint: Optional[str] = None,
         sampler_ttl_seconds: Optional[int] = 60,
         loss_mode: str = "llm_judge",
         eval_with_llm_judge: bool = False,
@@ -203,6 +204,12 @@ class OnlineEnvTrainer:
             dedup_threshold=dedup_threshold,
             dedup_sim_fn=dedup_fn,
         )
+
+        # Load retriever from explicit checkpoint path (e.g., from offline training)
+        if retriever_checkpoint:
+            self.retriever.load_checkpoint(retriever_checkpoint)
+            self._last_retriever_checkpoint_path = retriever_checkpoint
+            logger.info(f"Loaded retriever from {retriever_checkpoint} (N={self.retriever.N})")
 
         # Create reward scorer
         if self.loss_mode == "logprob_elbo" and not self.eval_with_llm_judge:
@@ -321,15 +328,21 @@ class OnlineEnvTrainer:
 
         # Delete previous model checkpoint to only keep the latest
         if self._last_checkpoint_path:
-            await self.rest_client.delete_checkpoint_from_tinker_path_async(
-                self._last_checkpoint_path
-            )
-            logger.info(f"Deleted previous checkpoint: {self._last_checkpoint_path}")
+            try:
+                await self.rest_client.delete_checkpoint_from_tinker_path_async(
+                    self._last_checkpoint_path
+                )
+                logger.info(f"Deleted previous checkpoint: {self._last_checkpoint_path}")
+            except Exception as e:
+                logger.warning(f"Failed to delete previous checkpoint: {e}")
 
         # Delete previous retriever checkpoint to only keep the latest
         if self._last_retriever_checkpoint_path:
-            Path(self._last_retriever_checkpoint_path).unlink()
-            logger.info(f"Deleted previous retriever checkpoint: {self._last_retriever_checkpoint_path}")
+            try:
+                Path(self._last_retriever_checkpoint_path).unlink()
+                logger.info(f"Deleted previous retriever checkpoint: {self._last_retriever_checkpoint_path}")
+            except Exception as e:
+                logger.warning(f"Failed to delete previous retriever checkpoint: {e}")
 
         self._last_checkpoint_path = state_path
         self._last_retriever_checkpoint_path = str(retriever_path)
@@ -418,9 +431,15 @@ class OnlineEnvTrainer:
 
         # --- 1 SFT forward_backward — BLOCKING (need logprobs for reward) ---
         logger.info(f"ELBO batch: SFT forward_backward on {len(all_sft_data)} datums")
-        sft_result = self.training_client.forward_backward(
-            all_sft_data, loss_fn="cross_entropy",
-        ).result()
+        while True:
+            try:
+                sft_result = self.training_client.forward_backward(
+                    all_sft_data, loss_fn="cross_entropy",
+                ).result()
+                break
+            except Exception as e:
+                logger.warning(f"ELBO SFT forward_backward failed: {e}. Retrying in 120s...")
+                time.sleep(120)
 
         # --- Extract rewards per trajectory, GRPO normalize per group ---
         all_rl_data = []
@@ -465,9 +484,15 @@ class OnlineEnvTrainer:
         rl_fwdbwd_future = None
         if all_rl_data:
             logger.info(f"ELBO batch: RL forward_backward on {len(all_rl_data)} datums (CoT tokens)")
-            rl_fwdbwd_future = self.training_client.forward_backward(
-                all_rl_data, loss_fn="importance_sampling",
-            )
+            while True:
+                try:
+                    rl_fwdbwd_future = self.training_client.forward_backward(
+                        all_rl_data, loss_fn="importance_sampling",
+                    )
+                    break
+                except Exception as e:
+                    logger.warning(f"ELBO RL forward_backward failed: {e}. Retrying in 120s...")
+                    time.sleep(120)
 
         total_sft_loss = sft_result.metrics.get("loss:sum", 0.0)
         rewards_all = torch.tensor(all_logprob_rewards)
@@ -504,25 +529,43 @@ class OnlineEnvTrainer:
 
         print(f"[train] step {self._step}: optim step...")
         optim_future = self.training_client.optim_step(
-            AdamParams(learning_rate=self.learning_rate)
+            AdamParams(learning_rate=self.learning_rate, beta1=0.9, beta2=0.95, eps=1e-8)
         )
 
-        # Wait for all forward_backward results
+        # Wait for all forward_backward results (infinite retry on failure)
         total_loss = 0.0
         for f in fwdbwd_futures:
-            result = f.result()
+            while True:
+                try:
+                    result = f.result()
+                    break
+                except Exception as e:
+                    logger.warning(f"forward_backward failed: {e}. Retrying in 120s...")
+                    time.sleep(120)
             total_loss += result.metrics.get("loss:sum", 0.0)
-        optim_result = optim_future.result()
+        while True:
+            try:
+                optim_result = optim_future.result()
+                break
+            except Exception as e:
+                logger.warning(f"optim_step failed: {e}. Retrying in 120s...")
+                time.sleep(120)
 
-        # Update sampling client
-        save_result = self.training_client.save_weights_for_sampler(
-            name=f'{self.run_name}.model-step-{self._step}',
-            ttl_seconds=self.sampler_ttl_seconds,
-        ).result()
-        self.latest_sampler_path = save_result.path
-        self.sampling_client = self.service_client.create_sampling_client(
-            model_path=self.latest_sampler_path
-        )
+        # Update sampling client (infinite retry on failure)
+        while True:
+            try:
+                save_result = self.training_client.save_weights_for_sampler(
+                    name=f'{self.run_name}.model-step-{self._step}',
+                    ttl_seconds=self.sampler_ttl_seconds,
+                ).result()
+                self.latest_sampler_path = save_result.path
+                self.sampling_client = self.service_client.create_sampling_client(
+                    model_path=self.latest_sampler_path
+                )
+                break
+            except Exception as e:
+                logger.warning(f"save_weights_for_sampler failed: {e}. Retrying in 120s...")
+                time.sleep(120)
 
         # Compute metrics
         all_rewards = []

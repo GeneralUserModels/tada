@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -39,16 +40,20 @@ class RewardScorer:
         self,
         reward_llm: str = "gemini/gemini-3-flash-preview",
         verifier_prompt_path: Optional[str] = None,
+        retry_on_failure: bool = True,
     ):
         """
         Initialize the reward scorer.
-        
+
         Args:
             reward_llm: The LiteLLM model name for the reward model
             verifier_prompt_path: Path to the verifier prompt file. If None,
                                  uses the default verifier.txt in this directory.
+            retry_on_failure: If True, retry LLM calls with sleep on failure (online).
+                             If False, return 0.0 immediately on failure (offline).
         """
         self.reward_llm = reward_llm
+        self.retry_on_failure = retry_on_failure
         
         # Load verifier prompt
         if verifier_prompt_path is None:
@@ -186,11 +191,15 @@ class RewardScorer:
         if json_match:
             text = json_match.group(1).strip()
 
-        parsed = json.loads(text)
-        candidates = parsed["candidates"]
-        scores = [c["score"] for c in candidates]
-        logger.info(f"Judge scores: {scores}")
-        return scores
+        try:
+            parsed = json.loads(text)
+            candidates = parsed["candidates"]
+            scores = [c["score"] for c in candidates]
+            logger.info(f"Judge scores: {scores}")
+            return scores
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning(f"Failed to parse judge response: {e}. Returning default scores.")
+            return scores
     
     def _call_judge_sync(self, action_text: str, ground_truth: str) -> float:
         """
@@ -217,11 +226,21 @@ class RewardScorer:
         )
         
         # Call the LLM
-        response = litellm_completion(
-            model=self.reward_llm,
-            messages=[{"role": "user", "content": verifier_prompt}],
-        )
-        response_text = response.choices[0].message.content
+        while True:
+            try:
+                response = litellm_completion(
+                    model=self.reward_llm,
+                    messages=[{"role": "user", "content": verifier_prompt}],
+                )
+                response_text = response.choices[0].message.content
+                break
+            except Exception as e:
+                if self.retry_on_failure:
+                    logger.warning(f"Reward LLM call failed: {e}. Retrying in 120s...")
+                    time.sleep(120)
+                else:
+                    logger.warning(f"Reward LLM call failed: {e}. Returning default score 0.0")
+                    return 0.0
         scores = self._parse_judge_response(response_text, num_candidates=1)
         score = scores[0]
         
@@ -253,14 +272,19 @@ class RewardScorer:
         return score
 
 
-def create_reward_scorer(reward_llm: str = "gemini/gemini-3-flash-preview") -> RewardScorer:
+def create_reward_scorer(
+    reward_llm: str = "gemini/gemini-3-flash-preview",
+    retry_on_failure: bool = True,
+) -> RewardScorer:
     """
     Factory function to create a reward scorer.
-    
+
     Args:
         reward_llm: The LiteLLM model name for the reward model
-        
+        retry_on_failure: If True, retry LLM calls on failure (online).
+                         If False, return 0.0 immediately (offline).
+
     Returns:
         A RewardScorer instance
     """
-    return RewardScorer(reward_llm=reward_llm)
+    return RewardScorer(reward_llm=reward_llm, retry_on_failure=retry_on_failure)

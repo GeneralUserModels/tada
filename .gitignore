@@ -10,6 +10,7 @@ tmp_images/
 uv.lock
 logs/
 logs-elbo/
+logs*/
 wandb/
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -447,6 +447,7 @@ class ActionOverlay:
 
     def _toggle_visibility(self):
         import AppKit
+        from PyObjCTools import AppHelper
 
         if self._window is None:
             return
@@ -455,9 +456,13 @@ class ActionOverlay:
                 "orderOut:", None, False
             )
         else:
-            self._window.performSelectorOnMainThread_withObject_waitUntilDone_(
-                "orderFrontRegardless", None, False
-            )
+            attr_str = self._make_waiting_string()
+
+            def _reset_and_show():
+                self._do_update(attr_str)
+                self._window.orderFrontRegardless()
+
+            AppHelper.callAfter(_reset_and_show)
         self._visible = not self._visible
 
     # ------------------------------------------------------------------

@@ -1,8 +1,11 @@
+import logging
 import re
 import time
 import threading
 
 from litellm import completion as litellm_completion
+
+logger = logging.getLogger(__name__)
 
 from powernap.sleepwalk.computer import ComputerController
 from powernap.sleepwalk.tools import make_messages, parse_steps, run_step, is_done
@@ -73,7 +76,13 @@ class SleepWalker:
             messages = make_messages(action_text, screenshot_b64)
 
             print(f"[sleepwalk] iteration {i + 1}/{self.max_iterations}, calling {self.model}")
-            response = litellm_completion(model=self.model, messages=messages)
+            while True:
+                try:
+                    response = litellm_completion(model=self.model, messages=messages)
+                    break
+                except Exception as e:
+                    logger.warning(f"Sleepwalk LLM call failed: {e}. Retrying in 120s...")
+                    time.sleep(120)
 
             response_text = response.choices[0].message.content or ""
             print(f"[sleepwalk] response: {response_text[:500]}")
