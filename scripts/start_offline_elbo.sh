@@ -8,7 +8,8 @@ set -e
 
 uv run run_offline.py \
     model_name=Qwen/Qwen3-VL-30B-A3B-Instruct \
-    dataset_path=train-00000-of-00001.parquet \
+    dataset_path=logs/train-00000-of-00001.parquet \
+    log_path=logs-elbo \
     past_len=16 \
     future_len=8 \
     stride=4 \
@@ -28,8 +29,9 @@ uv run run_offline.py \
     eval_every=20 \
     save_every=20 \
     num_groups_to_log=4 \
-    wandb_project=longnap-offline-elbo \
-    wandb_name="${USER:-longnap}-elbo-$(date +%Y%m%d-%H%M%S)"
+    wandb_project=longnap-offline \
+    wandb_name="${USER:-longnap}-elbo-$(date +%Y%m%d-%H%M%S)" \
+    eval_with_llm_judge=true
 
     # add eval_with_llm_judge=true to also compute LLM judge reward for comparison
     # (requires GEMINI_API_KEY; adds reward_llm= calls alongside logprob rewards)

@@ -116,7 +116,11 @@ async def _async_label_loop(recorder, labeler, retriever, label_queue, inference
         # Drain completed chunks from the front (preserves order)
         while pending_chunks and pending_chunks[0][0].done():
             task, chunk_aggs, t0 = pending_chunks.popleft()
-            labeled_list = task.result()
+            try:
+                labeled_list = task.result()
+            except Exception as e:
+                logger.warning(f"Label chunk failed: {e}. Skipping chunk.")
+                continue
             latency = time.time() - t0
             
             # Check if this was the flush task

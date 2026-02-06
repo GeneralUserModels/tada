@@ -1,10 +1,11 @@
+import io
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Sequence
 
 import chz
 from datasets import load_dataset
-from PIL import ImageFile
+from PIL import Image, ImageFile
 from torch.utils.data import Dataset
 
 from tinker_cookbook import renderers
@@ -94,10 +95,13 @@ class NAPSack(Dataset):
 
             if self.num_imgs_per_sample > 0:
                 if self.num_imgs_per_sample is None or i >= (self.past_len - self.num_imgs_per_sample):
-                    # Load image from path
+                    # Load image - handle both PIL Image and bytes from parquet
                     img = sample["img"]
-                    image_content.append({"type": "image", "image": img})
-                    all_images.append(img)
+                    if img is not None:
+                        if isinstance(img, bytes):
+                            img = Image.open(io.BytesIO(img))
+                        image_content.append({"type": "image", "image": img})
+                        all_images.append(img)
 
             past_actions_list.append(self._fmt_text(sample))
 
@@ -376,10 +380,10 @@ class LongNAPDatasetBuilder(RLDatasetBuilder):
             include_timestamps=self.include_timestamps,
         )
         
-        # Create reward scorer if not provided
+        # Create reward scorer if not provided (offline mode: no retry on failure)
         reward_scorer = self.reward_scorer
         if reward_scorer is None:
-            reward_scorer = create_reward_scorer(reward_llm=self.reward_llm)
+            reward_scorer = create_reward_scorer(reward_llm=self.reward_llm, retry_on_failure=False)
         
         # Create train dataset
         train_dataset = None

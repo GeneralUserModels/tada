@@ -83,6 +83,8 @@ def main():
     # Checkpointing
     parser.add_argument("--checkpoint-every-n-steps", type=int, default=0)
     parser.add_argument("--resume-from-checkpoint", type=str, default=None)
+    parser.add_argument("--retriever-checkpoint", type=str, default=None,
+                        help="Path to retriever checkpoint (e.g., from offline training)")
     parser.add_argument("--sampler-ttl-seconds", type=int, default=60,
                         help="TTL in seconds for sampler checkpoints (default: 60, use 0 for no expiry)")
 
@@ -154,6 +156,7 @@ def main():
         wandb_run_name=args.wandb_run_name,
         checkpoint_every_n_steps=args.checkpoint_every_n_steps,
         resume_from_checkpoint=args.resume_from_checkpoint,
+        retriever_checkpoint=args.retriever_checkpoint,
         sampler_ttl_seconds=args.sampler_ttl_seconds or None,
         loss_mode=args.loss_mode,
         eval_with_llm_judge=args.eval_with_llm_judge,
@@ -203,15 +206,13 @@ def main():
     flush_complete = threading.Event()
 
     def shutdown(sig, frame):
-        if shutdown_event.is_set():
-            # Second Ctrl+C — force exit immediately
-            print("\n[shutdown] forced exit")
-            os._exit(1)
-        print("\n[shutdown] shutting down...")
+        print("\n[shutdown] shutting down immediately...")
         shutdown_event.set()
         recorder.stop()
         if overlay:
             overlay.close()
+        # Exit immediately - daemon threads will be killed
+        os._exit(0)
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
@@ -280,19 +281,9 @@ def main():
     else:
         train_thread.join()
 
-    # Cleanup
-    shutdown_event.set()
-    recorder.stop()
-    train_thread.join(timeout=5)
-
-    if args.log_to_wandb:
-        try:
-            if wandb and wandb.run is not None:
-                wandb.finish()
-        except Exception:
-            pass
-
+    # If we reach here (overlay closed or train finished), exit cleanly
     print("[shutdown] done")
+    os._exit(0)
 
 
 if __name__ == "__main__":
