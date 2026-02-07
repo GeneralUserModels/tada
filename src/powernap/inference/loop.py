@@ -47,6 +47,9 @@ def inference_loop(predictor, inference_buffer, trainer, recorder,
         if not is_visible:
             prediction_submitted = False  # reset so next show triggers a new prediction
 
+        if is_visible and not prediction_submitted and overlay:
+            overlay.show_waiting()
+
         if (is_visible and not prediction_submitted and predictor.model_path
                 and cur_buffer_len >= past_len):
             buffer_pos = cur_buffer_len
