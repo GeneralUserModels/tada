@@ -39,7 +39,8 @@ class RewardScorer:
     def __init__(
         self,
         reward_llm: str = "gemini/gemini-3-flash-preview",
-        verifier_prompt_path: Optional[str] = None,
+        accuracy_weight: float = 0.5,
+        formatting_weight: float = 0.5,
         retry_on_failure: bool = True,
     ):
         """
@@ -47,20 +48,26 @@ class RewardScorer:
 
         Args:
             reward_llm: The LiteLLM model name for the reward model
-            verifier_prompt_path: Path to the verifier prompt file. If None,
-                                 uses the default verifier.txt in this directory.
+            accuracy_weight: Weight for accuracy score in final reward (default: 0.5)
+            formatting_weight: Weight for formatting score in final reward (default: 0.5)
             retry_on_failure: If True, retry LLM calls with sleep on failure (online).
                              If False, return 0.0 immediately on failure (offline).
         """
         self.reward_llm = reward_llm
         self.retry_on_failure = retry_on_failure
+        self.accuracy_weight = accuracy_weight
+        self.formatting_weight = formatting_weight
         
-        # Load verifier prompt
-        if verifier_prompt_path is None:
-            verifier_prompt_path = os.path.join(os.path.dirname(__file__), "verifier.txt")
+        # Load verifier prompts
+        verifiers_dir = os.path.join(os.path.dirname(__file__), "verifiers")
         
-        with open(verifier_prompt_path, "r") as f:
-            self.verifier_prompt_template = f.read()
+        accuracy_path = os.path.join(verifiers_dir, "accuracy.txt")
+        with open(accuracy_path, "r") as f:
+            self.accuracy_prompt_template = f.read()
+        
+        formatting_path = os.path.join(verifiers_dir, "formatting.txt")
+        with open(formatting_path, "r") as f:
+            self.formatting_prompt_template = f.read()
     
     # =========================================================================
     # Normalization and Validation
@@ -177,11 +184,11 @@ class RewardScorer:
             out.append(f"- **Candidate {j + 1}**:\n{c}\n")
         return "".join(out)
     
-    def _parse_judge_response(self, response_text: str, num_candidates: int) -> List[float]:
-        """Parse the judge LLM response to extract scores."""
+    def _parse_accuracy_response(self, response_text: str, num_candidates: int) -> List[float]:
+        """Parse the accuracy verifier response to extract scores."""
         scores = [0.0] * num_candidates
         if not response_text:
-            logger.warning("Empty response from judge LLM")
+            logger.warning("Empty response from accuracy verifier")
             return scores
 
         text = response_text.strip()
@@ -195,22 +202,69 @@ class RewardScorer:
             parsed = json.loads(text)
             candidates = parsed["candidates"]
             scores = [c["score"] for c in candidates]
-            logger.info(f"Judge scores: {scores}")
+            logger.info(f"Accuracy scores: {scores}")
             return scores
         except (json.JSONDecodeError, KeyError) as e:
-            logger.warning(f"Failed to parse judge response: {e}. Returning default scores.")
+            logger.warning(f"Failed to parse accuracy response: {e}. Returning default scores.")
             return scores
+    
+    def _parse_formatting_response(self, response_text: str) -> float:
+        """Parse the formatting verifier response to extract score."""
+        if not response_text:
+            logger.warning("Empty response from formatting verifier")
+            return 0.0
+
+        text = response_text.strip()
+
+        # Extract JSON from markdown code blocks if present
+        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
+        if json_match:
+            text = json_match.group(1).strip()
+
+        try:
+            parsed = json.loads(text)
+            score = parsed["score"]
+            logger.info(f"Formatting score: {score}")
+            return score
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning(f"Failed to parse formatting response: {e}. Returning default score 0.0.")
+            return 0.0
+    
+    def _call_llm_with_retry(self, prompt: str) -> str:
+        """
+        Call the LLM with retry logic.
+
+        Args:
+            prompt: The prompt to send to the LLM
+
+        Returns:
+            Response text from the LLM, or empty string on failure
+        """
+        while True:
+            try:
+                response = litellm_completion(
+                    model=self.reward_llm,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                if self.retry_on_failure:
+                    logger.warning(f"Reward LLM call failed: {e}. Retrying in 120s...")
+                    time.sleep(120)
+                else:
+                    logger.warning(f"Reward LLM call failed: {e}. Returning empty response")
+                    return ""
     
     def _call_judge_sync(self, action_text: str, ground_truth: str) -> float:
         """
-        Synchronously call the judge LLM to score a single action prediction.
+        Synchronously call both accuracy and formatting verifiers in parallel.
 
         Args:
             action_text: The predicted actions text
             ground_truth: The ground truth actions
 
         Returns:
-            Score between 0.0 and 1.0
+            Weighted combined score between 0.0 and 1.0
         """
         if not action_text or not re.search(r"<action>", action_text):
             return 0.0
@@ -218,34 +272,56 @@ class RewardScorer:
         # Normalize the action text
         normalized = self.normalize_and_validate(action_text)
         
-        # Build the prompt
+        # Build the prompts
         candidates_block = self._build_candidates_block([normalized.text_for_judge])
-        verifier_prompt = self.verifier_prompt_template.format(
+        
+        # Accuracy prompt (needs ground truth)
+        accuracy_prompt = self.accuracy_prompt_template.format(
             ground_truth=ground_truth,
             candidates=candidates_block
         )
         
-        # Call the LLM
-        while True:
-            try:
-                response = litellm_completion(
-                    model=self.reward_llm,
-                    messages=[{"role": "user", "content": verifier_prompt}],
-                )
-                response_text = response.choices[0].message.content
-                break
-            except Exception as e:
-                if self.retry_on_failure:
-                    logger.warning(f"Reward LLM call failed: {e}. Retrying in 120s...")
-                    time.sleep(120)
-                else:
-                    logger.warning(f"Reward LLM call failed: {e}. Returning default score 0.0")
-                    return 0.0
-        scores = self._parse_judge_response(response_text, num_candidates=1)
-        score = scores[0]
+        # Formatting prompt (only needs prediction)
+        formatting_prompt = self.formatting_prompt_template.format(
+            prediction=normalized.text_for_judge
+        )
+        
+        # Call both verifiers in parallel using threads
+        from concurrent.futures import ThreadPoolExecutor
+        
+        accuracy_score = 0.0
+        formatting_score = 0.0
+        
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_accuracy = executor.submit(self._call_llm_with_retry, accuracy_prompt)
+            future_formatting = executor.submit(self._call_llm_with_retry, formatting_prompt)
+            
+            # Get accuracy result
+            accuracy_response = future_accuracy.result()
+            if accuracy_response:
+                scores = self._parse_accuracy_response(accuracy_response, num_candidates=1)
+                accuracy_score = scores[0] if scores else 0.0
+            
+            # Get formatting result
+            formatting_response = future_formatting.result()
+            if formatting_response:
+                formatting_score = self._parse_formatting_response(formatting_response)
+        
+        # Combine scores with weights
+        combined_score = (
+            self.accuracy_weight * accuracy_score +
+            self.formatting_weight * formatting_score
+        )
         
         # Apply penalty from normalization
-        final_score = max(0.0, score + normalized.penalty_score)
+        final_score = max(0.0, combined_score + normalized.penalty_score)
+        
+        logger.info(
+            f"Scores - Accuracy: {accuracy_score:.3f}, Formatting: {formatting_score:.3f}, "
+            f"Combined: {combined_score:.3f}, Penalty: {normalized.penalty_score:.3f}, "
+            f"Final: {final_score:.3f}"
+        )
+        
         return final_score
     
     async def __call__(self, action_text: str, ground_truth: str) -> float:
@@ -274,6 +350,8 @@ class RewardScorer:
 
 def create_reward_scorer(
     reward_llm: str = "gemini/gemini-3-flash-preview",
+    accuracy_weight: float = 0.5,
+    formatting_weight: float = 0.5,
     retry_on_failure: bool = True,
 ) -> RewardScorer:
     """
@@ -281,10 +359,17 @@ def create_reward_scorer(
 
     Args:
         reward_llm: The LiteLLM model name for the reward model
+        accuracy_weight: Weight for accuracy score in final reward (default: 0.5)
+        formatting_weight: Weight for formatting score in final reward (default: 0.5)
         retry_on_failure: If True, retry LLM calls on failure (online).
                          If False, return 0.0 immediately (offline).
 
     Returns:
         A RewardScorer instance
     """
-    return RewardScorer(reward_llm=reward_llm, retry_on_failure=retry_on_failure)
+    return RewardScorer(
+        reward_llm=reward_llm,
+        accuracy_weight=accuracy_weight,
+        formatting_weight=formatting_weight,
+        retry_on_failure=retry_on_failure
+    )
