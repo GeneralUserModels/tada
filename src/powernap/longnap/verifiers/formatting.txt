@@ -1,0 +1,211 @@
+You are an expert evaluator.
+
+Your task is to evaluate a **a sequence of actions** based purely on **formatting quality**.
+
+Each action is an event describing what the user did on a computer.
+
+---
+
+# Evaluation Dimensions
+
+Evaluate the prediction using the following two dimensions.
+
+### 1. Specificity
+- Are actions concrete and specific, or vague and generic?
+- Do actions include identifying details (filenames, link titles, query text, UI labels, numeric values)?
+- Generic actions receive severe penalties.
+
+Examples:
+- **Specific**: "Clicked on article titled `Fed Signals Interest Rate Cuts Could Begin in 2026`."
+- **Generic**: "Clicked on a post." ❌
+
+- **Specific**: "Downloaded the file `study_certificate.pdf`."
+- **Generic**: "Downloaded a file." ❌
+
+- **Specific**: "Ran command `time py -m fib_number 100000` in the terminal."
+- **Generic**: "Ran a Python command." ❌
+
+- **Specific**: "Switched to the Google Chrome browser on workspace 3."
+- **Slightly generic**: "Switched to the Chrome browser." (missing workspace)
+- **Very generic**: "Switched to a browser." ❌
+
+---
+
+### 2. Action Granularity (No Packing)
+- Each action should describe a single, atomic user operation.
+- Packing multiple distinct actions into a single line is a MAJOR formatting flaw.
+- Actions should not be compressed, merged, or combined.
+
+Examples of problematic packing:
+- "Opened Gmail and deleted spam emails." ❌ (Should be: "Opened Gmail." + "Deleted spam emails.")
+- "Navigated to Documents and opened project file." ❌ (Should be: "Navigated to Documents folder." + "Opened project file.")
+- "Searched for documentation and clicked first result." ❌ (Should be: "Searched for documentation." + "Clicked first result.")
+- "Composed and sent email to professor." ❌ (Should be: "Composed email to professor." + "Clicked Send button.")
+
+---
+
+### 3. Hedging & Ambiguity
+- Actions should be clear and definitive, not hedging or listing multiple possibilities.
+- Phrases like "clicked or scrolled" or "might have opened" are formatting flaws.
+
+Examples:
+- **Clear**: "Scrolled down the page."
+- **Hedging**: "Scrolled or clicked to move down the page." ❌
+
+- **Clear**: "Opened the Settings menu."
+- **Hedging**: "Opened Settings or Preferences." ❌
+
+---
+
+# Scoring Guidelines
+
+Assign a **single score between 0.0 and 1.0** to the prediction.
+
+Use **continuous values** (up to two decimal places).
+
+### Score Calibration
+
+- **0.90 – 1.00**  
+  Excellent formatting.  
+  All actions are highly specific with concrete details. Each action describes a single operation. No hedging or ambiguity.
+
+- **0.75 – 0.89**  
+  Good formatting.  
+  Most actions are specific and granular. Minor genericness in 1-2 actions or slight compression acceptable.
+
+- **0.50 – 0.74**  
+  Moderate formatting.  
+  Multiple generic actions OR several instances of action packing. Some specificity preserved but significant room for improvement.
+
+- **0.25 – 0.49**  
+  Poor formatting.  
+  Pervasive genericness (e.g., "clicked a link", "opened a file") and/or heavy action packing. Most actions lack necessary detail.
+
+- **0.00 – 0.24**  
+  Very poor formatting.  
+  Nearly all actions are generic or heavily compressed. Prediction provides minimal useful detail.
+
+---
+
+# Important Rules
+
+- **Penalize genericness severely**: Every instance of "a file", "a link", "a browser", "an email" without specifics should lower the score.
+- **Penalize action packing severely**: Each instance of multiple actions compressed into one should significantly lower the score.
+- **Reward specificity**: Filenames, link titles, exact commands, UI element labels, search queries should increase the score.
+- **Be strict**: These are formatting standards. High scores should be reserved for predictions that maintain both specificity and granularity throughout.
+
+---
+
+# Examples
+
+## Excellent Formatting (Score ≈ 0.95–1.00)
+
+Prediction:
+<action>Switched to the terminal application on workspace 4.</action>
+<action>Ran command `cd programming/code_puzzles` in the terminal.</action>
+<action>Activated python environment using conda command `conda activate cpuzzles`.</action>
+<action>Ran the command `time py -m fib_number 100000` in the terminal.</action>
+<action>Interrupted the running script using `CTRL + C`.</action>
+<action>Switched from the terminal to the Google Chrome browser on workspace 3.</action>
+<action>Entered `Fibonacci number dynamic programming` into Google search.</action>
+<action>Clicked on the link titled `GeeksforGeeks Fibonacci Sequence`.</action>
+
+Explanation:
+- Every action is highly specific with concrete details.
+- Commands, query text, and link titles are preserved.
+- Each action is atomic and properly separated.
+- No packing, no hedging, no genericness.
+
+---
+
+## Good Formatting (Score ≈ 0.80–0.88)
+
+Prediction:
+<action>Opened the Files application.</action>
+<action>Navigated to the directory `~/Documents/Thesis`.</action>
+<action>Opened the file `ProjectProposal.docx` in LibreOffice Writer.</action>
+<action>Edited the introduction paragraph.</action>
+<action>Inserted a citation.</action>
+<action>Saved the document as `ProjectProposal_v2.docx`.</action>
+<action>Opened Thunderbird email client.</action>
+<action>Composed an email to `professor@example.com`.</action>
+<action>Attached the updated proposal.</action>
+<action>Clicked the `Send` button.</action>
+
+Explanation:
+- Most actions are specific with filenames, paths, and email addresses.
+- Actions are properly granular and separated.
+- Minor issue: "Edited the introduction paragraph" is slightly generic (doesn't specify what edit), but acceptable.
+- Overall excellent formatting with concrete details.
+
+---
+
+## Moderate Formatting (Score ≈ 0.50–0.65)
+
+Prediction:
+<action>Switched to a web browser.</action>
+<action>Opened Gmail.</action>
+<action>Looked through inbox emails.</action>
+<action>Deleted a Terms of Service email from Figma.</action>
+<action>Opened university-related emails.</action>
+<action>Opened an email about a study certificate.</action>
+<action>Downloaded a certificate PDF.</action>
+
+Explanation:
+- Multiple generic actions: "a web browser" (not "Chrome"), "Looked through" (vague), "a certificate PDF" (no filename).
+- Some action packing: "Opened university-related emails" suggests multiple actions or a navigation step that's not granular.
+- "a Terms of Service email" loses the exact title.
+- Partial specificity (Gmail, Figma mentioned) but overall too generic.
+
+---
+
+## Poor Formatting (Score ≈ 0.30–0.45)
+
+Prediction:
+<action>Opened terminal and navigated to project directory.</action>
+<action>Ran some Python commands.</action>
+<action>Switched to browser and searched for documentation.</action>
+<action>Clicked a link and read the page.</action>
+<action>Went back to terminal.</action>
+<action>Edited a file and saved it.</action>
+
+Explanation:
+- Severe action packing: nearly every action combines 2+ operations.
+- Pervasive genericness: "some Python commands", "a link", "the page", "a file".
+- No concrete identifiers (filenames, search queries, link titles).
+- Formatting quality is very poor despite possibly describing correct actions.
+
+---
+
+## Very Poor Formatting (Score ≈ 0.10–0.20)
+
+Prediction:
+<action>Did some work in the terminal.</action>
+<action>Opened a browser and looked at websites.</action>
+<action>Checked email and responded to messages.</action>
+<action>Downloaded files and organized them.</action>
+
+Explanation:
+- Extreme genericness: no concrete details whatsoever.
+- Extreme action packing: each action represents multiple distinct operations.
+- Completely fails both formatting criteria.
+- Provides almost no useful information about what actually happened.
+
+---
+
+# Input Format
+
+## Prediction
+{prediction}
+
+---
+
+# Output Format
+
+Respond with JSON object:
+
+```json
+{{
+  "score": 0.72
+}}
+```
