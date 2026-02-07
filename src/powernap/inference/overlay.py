@@ -447,7 +447,6 @@ class ActionOverlay:
 
     def _toggle_visibility(self):
         import AppKit
-        from PyObjCTools import AppHelper
 
         if self._window is None:
             return
@@ -456,13 +455,9 @@ class ActionOverlay:
                 "orderOut:", None, False
             )
         else:
-            attr_str = self._make_waiting_string()
-
-            def _reset_and_show():
-                self._do_update(attr_str)
-                self._window.orderFrontRegardless()
-
-            AppHelper.callAfter(_reset_and_show)
+            self._window.performSelectorOnMainThread_withObject_waitUntilDone_(
+                "orderFrontRegardless", None, False
+            )
         self._visible = not self._visible
 
     # ------------------------------------------------------------------
@@ -473,6 +468,17 @@ class ActionOverlay:
         """Blocks on the AppKit run loop. Call from main thread."""
         if self._app:
             self._app.run()
+
+    def show_waiting(self):
+        if self._text_view is None:
+            return
+        attr_str = self._make_waiting_string()
+        from PyObjCTools import AppHelper
+
+        def _on_main():
+            self._do_update(attr_str)
+
+        AppHelper.callAfter(_on_main)
 
     def update(self, text):
         if self._text_view is None:
