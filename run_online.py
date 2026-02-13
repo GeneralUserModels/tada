@@ -17,7 +17,8 @@ from queue import Queue
 
 # ActionOverlay MUST be imported before torch/transformers/PIL —
 # PIL conflicts with AppKit's NSApplication on macOS.
-from powernap.inference import ActionOverlay
+# Import directly from module to avoid __init__.py pulling in Predictor → tinker → torch.
+from powernap.inference.overlay import ActionOverlay
 
 
 def main():

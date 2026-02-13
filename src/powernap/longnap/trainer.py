@@ -377,7 +377,7 @@ class OnlineEnvTrainer:
         )
 
         traj_group = await do_group_rollout(builder, policy)
-        return traj_group, sample
+        return traj_group, sample, builder
 
     def _train_batch_llm_judge(self, traj_groups: list, samples: list):
         """Compute advantages and one batched forward_backward for all groups.
@@ -400,7 +400,7 @@ class OnlineEnvTrainer:
         )
         return fwdbwd_future, {}
 
-    def _train_batch_elbo(self, traj_groups: list, samples: list):
+    def _train_batch_elbo(self, traj_groups: list, samples: list, builders: list = None):
         """Batched ELBO training: one SFT forward_backward (blocking) then one RL forward_backward.
 
         Returns:
@@ -447,7 +447,8 @@ class OnlineEnvTrainer:
         total_gt_tokens = 0
         all_logprob_rewards = []
 
-        for traj_group, sample in zip(traj_groups, samples):
+        _builders = builders or [None] * len(traj_groups)
+        for traj_group, sample, builder in zip(traj_groups, samples, _builders):
             gt_tokens = self.tokenizer.encode(sample["solution"], add_special_tokens=False)
             num_trajs = len(traj_group.trajectories_G)
             rewards = []
@@ -461,6 +462,10 @@ class OnlineEnvTrainer:
 
             total_gt_tokens += len(gt_tokens) * num_trajs
             all_logprob_rewards.extend(rewards)
+
+            # Add ELBO winner to retriever
+            if builder is not None:
+                builder.add_elbo_winner_to_retriever(rewards)
 
             # GRPO normalize within this group
             rewards_t = torch.tensor(rewards)
@@ -728,13 +733,15 @@ class OnlineEnvTrainer:
 
             traj_groups = []
             samples_for_batch = []
+            builders_for_batch = []
             for r in results:
                 if isinstance(r, Exception):
                     logger.error(f"Rollout failed: {r}")
                     continue
-                traj_group, sample = r
+                traj_group, sample, builder = r
                 traj_groups.append(traj_group)
                 samples_for_batch.append(sample)
+                builders_for_batch.append(builder)
 
             if not traj_groups:
                 continue
@@ -742,7 +749,7 @@ class OnlineEnvTrainer:
             # Phase 3: Batched training (1-2 forward_backward calls instead of N)
             print(f"[train] step {self._step}: batched training on {len(traj_groups)} groups...")
             if self.loss_mode == "logprob_elbo":
-                fwdbwd_future, extra_metrics = self._train_batch_elbo(traj_groups, samples_for_batch)
+                fwdbwd_future, extra_metrics = self._train_batch_elbo(traj_groups, samples_for_batch, builders_for_batch)
             else:
                 fwdbwd_future, extra_metrics = self._train_batch_llm_judge(traj_groups, samples_for_batch)
 
