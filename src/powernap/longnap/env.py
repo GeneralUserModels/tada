@@ -306,53 +306,51 @@ class LongNAPEnvGroupBuilder(EnvGroupBuilder):
         ]
     
     async def compute_group_rewards(
-        self, 
-        trajectory_group: List[Trajectory], 
+        self,
+        trajectory_group: List[Trajectory],
         env_group: Sequence[Env]
     ) -> List[tuple[float, Metrics]]:
         """
-        Compute group-level rewards (used for things like adding winners to retriever).
-        
+        Compute group-level rewards and save retriever candidates for later ELBO-based selection.
+
         The per-step rewards are already computed in env.step(), so we return 0 here.
-        The cookbook's training loop will use per-step rewards + these group rewards.
-        
-        This is also where we can add winning trajectories to the retriever.
+        Retriever winner selection is deferred to add_elbo_winner_to_retriever() which
+        is called from the training step after ELBO logprob rewards are computed.
         """
-        # Find the winner (highest total reward)
-        total_rewards = []
-        for traj in trajectory_group:
-            total_reward = sum(t.reward for t in traj.transitions)
-            total_rewards.append(total_reward)
-        
-        # Add winner to retriever if available
-        if self.retriever is not None and total_rewards:
-            winner_idx = max(range(len(total_rewards)), key=lambda i: total_rewards[i])
-            winner_env = env_group[winner_idx]
-            
-            # Cast to LongNAPEnv to access revise_text
-            if isinstance(winner_env, LongNAPEnv) and winner_env.revise_text:
-                # Combine past actions + revise trace
-                past_actions = self.input_data.get("past_actions", "")
-                if past_actions:
-                    combined_text = past_actions.strip() + "\n\n<revise>\n" + winner_env.revise_text.strip()
+        # Save retriever candidates (don't add yet — wait for ELBO rewards)
+        if self.retriever is not None:
+            candidates = []
+            for env in env_group:
+                if isinstance(env, LongNAPEnv) and env.revise_text:
+                    past_actions = self.input_data.get("past_actions", "")
+                    if past_actions:
+                        text = past_actions.strip() + "\n\n<revise>\n" + env.revise_text.strip()
+                    else:
+                        text = "<revise>\n" + env.revise_text.strip()
+                    candidates.append({"text": text, "ts": env.ts, "end_ts": env.end_ts})
                 else:
-                    combined_text = "<revise>\n" + winner_env.revise_text.strip()
-                
-                if combined_text.strip():
-                    self.retriever.add(
-                        text=combined_text,
-                        event_ts=winner_env.ts,
-                        visible_after_ts=winner_env.ts + 1,
-                        namespace="train",
-                        metadata={
-                            "utility": total_rewards[winner_idx],
-                            "end_ts": winner_env.end_ts,
-                        },
-                    )
-        
+                    candidates.append(None)
+            object.__setattr__(self, '_retriever_candidates', candidates)
+
         # Return zero group reward (per-step rewards already computed)
         return [(0.0, {}) for _ in trajectory_group]
-    
+
+    def add_elbo_winner_to_retriever(self, rewards: list):
+        """Add the trajectory with the highest ELBO reward to the retriever."""
+        candidates = getattr(self, '_retriever_candidates', None)
+        if not self.retriever or not candidates:
+            return
+        winner_idx = max(range(len(rewards)), key=lambda i: rewards[i])
+        candidate = candidates[winner_idx]
+        if candidate and candidate["text"].strip():
+            self.retriever.add(
+                text=candidate["text"],
+                event_ts=candidate["ts"],
+                visible_after_ts=candidate["ts"] + 1,
+                namespace="train",
+                metadata={"utility": rewards[winner_idx], "end_ts": candidate["end_ts"]},
+            )
+
     def logging_tags(self) -> List[str]:
         """Return tags for logging aggregation."""
         return ["longnap"]
