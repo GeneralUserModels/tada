@@ -101,6 +101,9 @@ async def elbo_train_step(
         total_gt_tokens += len(gt_tokens) * num_trajs
         all_logprob_rewards.extend(rewards)
 
+        # Add ELBO winner to retriever
+        builder.add_elbo_winner_to_retriever(rewards)
+
         # GRPO normalize within this group
         rewards_t = torch.tensor(rewards)
         advantages_G = rewards_t - rewards_t.mean()
