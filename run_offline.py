@@ -98,7 +98,7 @@ def build_config(cli_config: CLIConfig) -> train.Config:
     reward_scorer = None
     if cli_config.loss_mode == "logprob_elbo" and not cli_config.eval_with_llm_judge:
         async def _dummy_scorer(actions, ground_truth):
-            return 0.0
+            return {"reward": 0.0, "accuracy": 0.0, "formatting": 0.0, "penalty": 0.0}
         reward_scorer = _dummy_scorer
 
     # Build dataset builder

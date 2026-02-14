@@ -101,6 +101,9 @@ class LongNAPEnv(Env):
         self.revise_text: str = ""
         self.actions_text: str = ""
         
+        # Score components (populated after scoring)
+        self.score_components: dict = {"accuracy": 0.0, "formatting": 0.0, "penalty": 0.0}
+        
     @property
     def stop_condition(self) -> StopCondition:
         """Get stop condition based on current phase."""
@@ -250,7 +253,13 @@ class LongNAPEnv(Env):
             self.messages.append({"role": "assistant", "content": self.actions_text})
             
             # Score the actions
-            reward = await self.reward_scorer(self.actions_text, self.ground_truth)
+            score_result = await self.reward_scorer(self.actions_text, self.ground_truth)
+            reward = score_result["reward"]
+            self.score_components = {
+                "accuracy": score_result["accuracy"],
+                "formatting": score_result["formatting"],
+                "penalty": score_result["penalty"],
+            }
             
             # Return final observation (not used, but required by interface)
             final_prompt = self.renderer.build_generation_prompt(self.messages)
@@ -264,6 +273,9 @@ class LongNAPEnv(Env):
                     "phase": "actions",
                     "actions_len": len(action),
                     "reward": reward,
+                    "accuracy": score_result["accuracy"],
+                    "formatting": score_result["formatting"],
+                    "penalty": score_result["penalty"],
                 },
             )
 
@@ -317,6 +329,15 @@ class LongNAPEnvGroupBuilder(EnvGroupBuilder):
         Retriever winner selection is deferred to add_elbo_winner_to_retriever() which
         is called from the training step after ELBO logprob rewards are computed.
         """
+        # Collect per-env score components for wandb logging
+        all_score_components = []
+        for env in env_group:
+            if isinstance(env, LongNAPEnv):
+                all_score_components.append(env.score_components)
+            else:
+                all_score_components.append({"accuracy": 0.0, "formatting": 0.0, "penalty": 0.0})
+        object.__setattr__(self, '_score_components', all_score_components)
+
         # Save retriever candidates (don't add yet — wait for ELBO rewards)
         if self.retriever is not None:
             candidates = []
