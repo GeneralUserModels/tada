@@ -33,10 +33,8 @@ from powernap.longnap.trainer_utils import (
     TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block,
 )
 
-try:
-    import wandb
-except ImportError:
-    wandb = None
+import wandb
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -515,12 +513,59 @@ class OnlineEnvTrainer:
 
         return rl_fwdbwd_future, extra_metrics
 
+    def _log_rollouts_to_wandb(self, trajectory_groups: list, samples: list):
+        """Log rollouts to wandb as a table."""
+        if not self.log_to_wandb or wandb is None or wandb.run is None or pd is None:
+            return
+        
+        table_data = {
+            "step": [],
+            "prompt": [],
+            "think": [],
+            "revise": [],
+            "actions": [],
+            "reward": [],
+        }
+        
+        for traj_group, sample in zip(trajectory_groups, samples):
+            # Get prompt from sample
+            prompt = sample.get("past_actions", "")
+            
+            # Get completions and rewards from each trajectory
+            for traj in traj_group.trajectories_G:
+                # Each trajectory has 3 transitions: Think, Revise, Actions
+                # Decode each action to get the text
+                think_text = ""
+                revise_text = ""
+                actions_text = ""
+                
+                if len(traj.transitions) > 0:
+                    think_text = self.tokenizer.decode(traj.transitions[0].ac.tokens, skip_special_tokens=True)
+                if len(traj.transitions) > 1:
+                    revise_text = self.tokenizer.decode(traj.transitions[1].ac.tokens, skip_special_tokens=True)
+                if len(traj.transitions) > 2:
+                    actions_text = self.tokenizer.decode(traj.transitions[2].ac.tokens, skip_special_tokens=True)
+                
+                # Get total reward (only from the final actions phase)
+                reward = sum(trans.reward for trans in traj.transitions)
+                
+                table_data["step"].append(self._step)
+                table_data["prompt"].append(prompt)
+                table_data["think"].append(think_text)
+                table_data["revise"].append(revise_text)
+                table_data["actions"].append(actions_text)
+                table_data["reward"].append(reward)
+        
+        df = pd.DataFrame(table_data)
+        wandb.log({"rollouts": wandb.Table(dataframe=df)})
+
     async def _finish_step(
         self,
         fwdbwd_futures: list,
         trajectory_groups: list,
         step_start: float,
         extra_metrics_list: Optional[List[Dict[str, float]]] = None,
+        samples: Optional[list] = None,
     ) -> Dict[str, float]:
 
         """Complete one optimizer step after batched forward_backward.
@@ -610,7 +655,11 @@ class OnlineEnvTrainer:
 
         if self.log_to_wandb and wandb.run is not None:
             wandb.log(metrics)
-
+            
+            # Log rollouts table to wandb
+            if samples:
+                self._log_rollouts_to_wandb(trajectory_groups, samples)
+        
         logger.info(
             f"Step {self._step}: loss={metrics['train/loss']:.4f}, "
             f"reward={reward_mean:.4f}±{reward_std:.4f}, "
@@ -757,7 +806,7 @@ class OnlineEnvTrainer:
             extra_metrics_list = [extra_metrics] if extra_metrics else []
 
             if fwdbwd_futures:
-                await self._finish_step(fwdbwd_futures, traj_groups, step_start or time.time(), extra_metrics_list)
+                await self._finish_step(fwdbwd_futures, traj_groups, step_start or time.time(), extra_metrics_list, samples_for_batch)
                 steps_completed += 1
 
                 if wandb and wandb.run is not None:
