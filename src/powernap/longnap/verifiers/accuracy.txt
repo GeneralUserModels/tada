@@ -1,0 +1,240 @@
+You are an expert evaluator.
+
+Your task is to compare a **ground truth sequence of actions** with several **candidate predicted sequences of actions**, and assign a **quality score** to each candidate based purely on **accuracy**.
+
+Each action is an event describing what the user did on a computer.
+
+Your goal is to evaluate **how accurately each candidate reproduces the ground truth trajectory** in terms of correctness, order, and semantic fidelity.
+
+---
+
+# Evaluation Dimensions
+
+Evaluate candidates holistically using the following dimensions.
+
+### 1. Action Correctness
+- Do predicted actions correspond to real actions in the ground truth?
+- Are there hallucinated actions not present in the ground truth?
+- Are important ground truth actions missing?
+
+Minor extra or missing actions may be acceptable if the overall trajectory is preserved.
+
+---
+
+### 2. Order & Temporal Consistency
+- Are actions in the correct order relative to the ground truth?
+- Small local reordering is acceptable if it does not change task meaning.
+- Major reordering that changes the task flow should be heavily penalized.
+
+---
+
+### 3. Semantic Fidelity
+- Even if wording differs, does the candidate describe the same intent as the ground truth?
+- Clear paraphrases count as matches.
+- Actions describing different user intent should be penalized.
+- If an action in the candidate maps to a different action in the ground truth, this is incorrect.
+
+---
+
+# Scoring Guidelines
+
+Assign a **single score between 0.0 and 1.0** to each candidate.
+
+Use **continuous values** (up to two decimal places), and distribute scores meaningfully across candidates.
+
+### Score Calibration
+
+- **0.90 – 1.00**  
+  Near-perfect or perfect match.  
+  All actions are present, correct, and in the right order. Minor wording differences are acceptable.
+
+- **0.75 – 0.89**  
+  Largely correct trajectory.  
+  Most actions match in intent and order, with minor missing details or small ordering issues.
+
+- **0.50 – 0.74**  
+  Partial match.  
+  Key actions are correct, but multiple missing steps or incorrect ordering.
+
+- **0.25 – 0.49**  
+  Weak match.  
+  Minimal overlap with the ground truth; many hallucinated or incorrect actions.
+
+- **0.00 – 0.24**  
+  No meaningful overlap.  
+  The candidate does not resemble the ground truth trajectory.
+
+---
+
+# Important Rules
+
+- Always **rank candidates relative to each other**.
+- Do NOT assign identical scores unless candidates are truly equivalent.
+- If one candidate is even slightly better than another, their scores must reflect that difference.
+- Avoid over-penalizing minor flaws: assess the **overall severity** of errors rather than subtracting for every issue.
+- Hallucinated actions and missing core steps should lower the score proportionally to how much they distort the trajectory.
+
+---
+
+# Examples
+
+## Perfect Accuracy (Score ≈ 0.95–1.00)
+
+Ground Truth:
+<action>Switched to the terminal application on workspace 4.</action>
+<action>Ran command `cd programming/code_puzzles` in the terminal.</action>
+<action>Activated python environment using conda command `conda activate cpuzzles`.</action>
+<action>Ran the command `time py -m fib_number 100000` in the terminal.</action>
+<action>Interrupted the running script using `CTRL + C`.</action>
+<action>Switched from the terminal to the Google Chrome browser on workspace 3.</action>
+<action>Entered `Fibonacci number dynamic programming` into Google search.</action>
+<action>Clicked on the link titled `GeeksforGeeks Fibonacci Sequence`.</action>
+
+Candidate:
+<action>Switched to the terminal application on workspace 4.</action>
+<action>Ran command `cd programming/code_puzzles` in the terminal.</action>
+<action>Activated python environment using conda command `conda activate cpuzzles`.</action>
+<action>Ran the command `time py -m fib_number 100000` in the terminal.</action>
+<action>Interrupted the running script using `CTRL + C`.</action>
+<action>Switched from the terminal to the Google Chrome browser on workspace 3.</action>
+<action>Entered `Fibonacci number dynamic programming` into Google search.</action>
+<action>Clicked on the link titled `GeeksforGeeks Fibonacci Sequence`.</action>
+
+Explanation:
+- All actions are present and in correct order.
+- Each action correctly maps to a ground truth action.
+- Perfect semantic match with identical or near-identical wording.
+- No hallucinated or missing steps.
+
+---
+
+## Good Accuracy (Score ≈ 0.80–0.90)
+
+Ground Truth:
+<action>Switched to the Google Chrome browser on workspace 2.</action>
+<action>Clicked on the `Gmail` bookmark in the Chrome bookmarks bar.</action>
+<action>Scrolled through emails in the Gmail inbox.</action>
+<action>Clicked the `Delete` button on the email titled `We've updated our Terms of Service` from sender `Figma`.</action>
+<action>Clicked on the Gmail label `university`.</action>
+<action>Scrolled through emails under the `university` label.</action>
+<action>Opened the email titled `Updated certificate of study`.</action>
+<action>Clicked the download button for the attached file `study_certificate.pdf`.</action>
+
+Candidate:
+<action>Switched to the Google Chrome browser on workspace 2.</action>
+<action>Typed `gmail.com` into the address bar and pressed Enter.</action>
+<action>Scrolled through emails in the Gmail inbox.</action>
+<action>Clicked the `Delete` button on the email titled `We've updated our Terms of Service` from sender `Figma`.</action>
+<action>Clicked on the Gmail label `university`.</action>
+<action>Scrolled through emails under the `university` label.</action>
+<action>Opened the email titled `Updated certificate of study`.</action>
+<action>Clicked the download button for the attached file `study_certificate.pdf`.</action>
+
+Explanation:
+- 7 out of 8 actions are correctly identified and ordered.
+- Action 2 is semantically equivalent (navigating to Gmail) but uses a different method (typing URL vs clicking bookmark).
+- All other actions match exactly.
+- Very high accuracy with only one minor method difference.
+
+---
+
+## Partial Accuracy (Score ≈ 0.55–0.70)
+
+Ground Truth:
+<action>Opened the Files application.</action>
+<action>Navigated to the directory `~/Documents/Thesis`.</action>
+<action>Opened the file `ProjectProposal.docx` in LibreOffice Writer.</action>
+<action>Edited the introduction paragraph and inserted a citation.</action>
+<action>Saved the document as `ProjectProposal_v2.docx`.</action>
+<action>Opened Thunderbird email client.</action>
+<action>Composed an email to `professor@example.com` with the updated proposal attached.</action>
+<action>Clicked the `Send` button.</action>
+
+Candidate:
+<action>Opened the Files application.</action>
+<action>Opened the file `ProjectProposal.docx` in LibreOffice Writer.</action>
+<action>Edited the introduction paragraph and inserted a citation.</action>
+<action>Saved the document using `Ctrl+S`.</action>
+<action>Opened Thunderbird email client.</action>
+<action>Composed an email to `professor@example.com` with the updated proposal attached.</action>
+<action>Clicked the `Send` button.</action>
+
+Explanation:
+- Missing navigation to directory `~/Documents/Thesis` (action 2 in ground truth).
+- Action 4 shows regular save (`Ctrl+S`) instead of "Save As" with new filename `ProjectProposal_v2.docx`.
+- 5 out of 8 ground truth actions are correctly captured.
+- Overall trajectory is recognizable but with missing steps and one incorrect action.
+
+---
+
+## Weak Accuracy (Score ≈ 0.25–0.45)
+
+Ground Truth:
+<action>Opened the Files application.</action>
+<action>Navigated to the directory `~/Documents/Thesis`.</action>
+<action>Opened the file `ProjectProposal.docx` in LibreOffice Writer.</action>
+<action>Edited the introduction paragraph and inserted a citation.</action>
+<action>Saved the document as `ProjectProposal_v2.docx`.</action>
+<action>Opened Thunderbird email client.</action>
+<action>Composed an email to `professor@example.com` with the updated proposal attached.</action>
+<action>Clicked the `Send` button.</action>
+
+Candidate:
+<action>Opened the terminal application.</action>
+<action>Ran command `git pull origin main` in the terminal.</action>
+<action>Opened Visual Studio Code from the application launcher.</action>
+<action>Opened the file `main.py` in Visual Studio Code.</action>
+<action>Edited the `calculate_metrics()` function.</action>
+<action>Saved the file `main.py` using `Ctrl+S`.</action>
+<action>Opened Thunderbird email client.</action>
+<action>Clicked the `Send` button on a draft email.</action>
+
+Explanation:
+- Most actions are incorrect: terminal, git command, VS Code, and Python file instead of Files, navigation, LibreOffice, and Word document.
+- Only 2 out of 8 ground truth actions match: "Opened Thunderbird email client" and partially "Clicked the `Send` button".
+- Missing email composition action entirely.
+- Wrong application context for most of the sequence.
+
+---
+
+## Complete Mismatch (Score ≈ 0.00–0.15)
+
+Ground Truth:
+<action>Opened the Files application.</action>
+<action>Renamed `budget_2025.xlsx` to `budget_2025_final.xlsx`.</action>
+<action>Uploaded the file to Google Drive.</action>
+
+Candidate:
+<action>Opened Spotify application from the dock.</action>
+<action>Searched for the playlist `Chill Vibes 2026`.</action>
+<action>Clicked the play button on the first track.</action>
+
+Explanation:
+- No shared applications, intent, or actions.
+- All actions are specific but describe entirely unrelated user behavior.
+- Completely different task domain (music playback vs file management).
+
+---
+
+# Input Format
+
+## Ground Truth
+{ground_truth}
+
+## Candidates
+{candidates}
+
+---
+
+# Output Format
+
+Respond with JSON object:
+
+```json
+{{
+  "candidates": [
+    {{ "id": 1, "score": 0.85 }},
+    {{ "id": 2, "score": 0.72 }}
+  ]
+}}
+```
