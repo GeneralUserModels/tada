@@ -232,7 +232,7 @@ class RewardScorer:
         normalized = self.validate(action_text, expected_count=expected_count)
         
         if normalized.errors:
-            logger.warning(f"Validation errors: {normalized.errors}")
+            logger.warning(f"Validation errors: {normalized.errors}\nPrediction: {action_text}")
         
         # Build the prompts
         candidates_block = self._build_candidates_block([normalized.text_for_judge])
