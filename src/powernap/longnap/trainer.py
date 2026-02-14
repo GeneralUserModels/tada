@@ -212,7 +212,7 @@ class OnlineEnvTrainer:
         # Create reward scorer
         if self.loss_mode == "logprob_elbo" and not self.eval_with_llm_judge:
             async def _dummy_scorer(actions, ground_truth):
-                return 0.0
+                return {"reward": 0.0, "accuracy": 0.0, "formatting": 0.0, "penalty": 0.0}
             self.reward_scorer = _dummy_scorer
         else:
             self.reward_scorer = create_reward_scorer(reward_llm=reward_llm)
@@ -513,7 +513,7 @@ class OnlineEnvTrainer:
 
         return rl_fwdbwd_future, extra_metrics
 
-    def _log_rollouts_to_wandb(self, trajectory_groups: list, samples: list):
+    def _log_rollouts_to_wandb(self, trajectory_groups: list, samples: list, builders: list = None):
         """Log rollouts to wandb as a table."""
         if not self.log_to_wandb or wandb is None or wandb.run is None or pd is None:
             return
@@ -525,14 +525,21 @@ class OnlineEnvTrainer:
             "revise": [],
             "actions": [],
             "reward": [],
+            "accuracy": [],
+            "formatting": [],
+            "penalty": [],
         }
         
-        for traj_group, sample in zip(trajectory_groups, samples):
+        _builders = builders or [None] * len(trajectory_groups)
+        for traj_group, sample, builder in zip(trajectory_groups, samples, _builders):
             # Get prompt from sample
             prompt = sample.get("past_actions", "")
             
+            # Get per-env score components from builder
+            score_components_list = getattr(builder, '_score_components', None) if builder else None
+            
             # Get completions and rewards from each trajectory
-            for traj in traj_group.trajectories_G:
+            for i, traj in enumerate(traj_group.trajectories_G):
                 # Each trajectory has 3 transitions: Think, Revise, Actions
                 # Decode each action to get the text
                 think_text = ""
@@ -549,12 +556,19 @@ class OnlineEnvTrainer:
                 # Get total reward (only from the final actions phase)
                 reward = sum(trans.reward for trans in traj.transitions)
                 
+                # Get score components for this trajectory
+                sc = (score_components_list[i] if score_components_list and i < len(score_components_list)
+                      else {"accuracy": 0.0, "formatting": 0.0, "penalty": 0.0})
+                
                 table_data["step"].append(self._step)
                 table_data["prompt"].append(prompt)
                 table_data["think"].append(think_text)
                 table_data["revise"].append(revise_text)
                 table_data["actions"].append(actions_text)
                 table_data["reward"].append(reward)
+                table_data["accuracy"].append(sc["accuracy"])
+                table_data["formatting"].append(sc["formatting"])
+                table_data["penalty"].append(sc["penalty"])
         
         df = pd.DataFrame(table_data)
         wandb.log({"rollouts": wandb.Table(dataframe=df)})
@@ -566,6 +580,7 @@ class OnlineEnvTrainer:
         step_start: float,
         extra_metrics_list: Optional[List[Dict[str, float]]] = None,
         samples: Optional[list] = None,
+        builders: Optional[list] = None,
     ) -> Dict[str, float]:
 
         """Complete one optimizer step after batched forward_backward.
@@ -638,6 +653,21 @@ class OnlineEnvTrainer:
             "train/retriever_size": self.retriever.N,
         }
 
+        # Aggregate score components from builders
+        _builders = builders or []
+        all_accuracy = []
+        all_formatting = []
+        all_penalty = []
+        for builder in _builders:
+            for sc in getattr(builder, '_score_components', []):
+                all_accuracy.append(sc["accuracy"])
+                all_formatting.append(sc["formatting"])
+                all_penalty.append(sc["penalty"])
+        if all_accuracy:
+            metrics["train/accuracy_mean"] = sum(all_accuracy) / len(all_accuracy)
+            metrics["train/formatting_mean"] = sum(all_formatting) / len(all_formatting)
+            metrics["train/penalty_mean"] = sum(all_penalty) / len(all_penalty)
+
         # Aggregate extra metrics from ELBO mode
         if extra_metrics_list:
             sft_losses = [m["sft_loss"] for m in extra_metrics_list if "sft_loss" in m]
@@ -658,7 +688,7 @@ class OnlineEnvTrainer:
             
             # Log rollouts table to wandb
             if samples:
-                self._log_rollouts_to_wandb(trajectory_groups, samples)
+                self._log_rollouts_to_wandb(trajectory_groups, samples, builders=builders)
         
         logger.info(
             f"Step {self._step}: loss={metrics['train/loss']:.4f}, "
@@ -806,7 +836,7 @@ class OnlineEnvTrainer:
             extra_metrics_list = [extra_metrics] if extra_metrics else []
 
             if fwdbwd_futures:
-                await self._finish_step(fwdbwd_futures, traj_groups, step_start or time.time(), extra_metrics_list, samples_for_batch)
+                await self._finish_step(fwdbwd_futures, traj_groups, step_start or time.time(), extra_metrics_list, samples_for_batch, builders=builders_for_batch)
                 steps_completed += 1
 
                 if wandb and wandb.run is not None:

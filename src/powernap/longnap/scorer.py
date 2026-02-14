@@ -109,20 +109,19 @@ class RewardScorer:
                 penalty_score=penalty
             )
 
-        # Penalize action count mismatch
+        # Validate action count
         if expected_count is not None:
             actual_count = len(re.findall(r"<action>.*?</action>", action_text, re.DOTALL))
             if actual_count != expected_count:
-                diff = abs(actual_count - expected_count)
-                # Scale penalty: -0.1 per extra/missing action, capped at -0.5
-                count_penalty = min(diff * 0.1, 0.5)
-                penalty -= count_penalty
                 errors.append(
                     f"Action count mismatch: expected {expected_count}, got {actual_count}."
                 )
-
-        # Clamp penalty to [-0.5, 0]
-        penalty = max(-0.5, penalty)
+                return NormalizedCandidate(
+                    text_for_judge=action_text,
+                    is_valid=False,
+                    errors=errors,
+                    penalty_score=-0.5
+                )
 
         return NormalizedCandidate(
             text_for_judge=action_text,
@@ -213,7 +212,11 @@ class RewardScorer:
                     logger.warning(f"Reward LLM call failed: {e}. Returning empty response")
                     return ""
     
-    def _call_judge_sync(self, action_text: str, ground_truth: str) -> float:
+    @staticmethod
+    def _zero_result() -> dict:
+        return {"reward": 0.0, "accuracy": 0.0, "formatting": 0.0, "penalty": 0.0}
+
+    def _call_judge_sync(self, action_text: str, ground_truth: str) -> dict:
         """
         Synchronously call both accuracy and formatting verifiers in parallel.
 
@@ -222,17 +225,18 @@ class RewardScorer:
             ground_truth: The ground truth actions
 
         Returns:
-            Weighted combined score between 0.0 and 1.0
+            Dict with 'reward', 'accuracy', 'formatting', 'penalty' keys.
         """
         if not action_text or not re.search(r"<action>", action_text):
-            return 0.0
+            return self._zero_result()
 
         # Validate the action text (count expected actions from ground truth)
         expected_count = len(re.findall(r"<action>.*?</action>", ground_truth, re.DOTALL))
         normalized = self.validate(action_text, expected_count=expected_count)
         
-        if normalized.errors:
-            logger.warning(f"Validation errors: {normalized.errors}\nPrediction: {action_text}")
+        if not normalized.is_valid:
+            logger.warning(f"Validation failed: {normalized.errors}\nPrediction: {action_text}")
+            return self._zero_result()
         
         # Build the prompts
         candidates_block = self._build_candidates_block([normalized.text_for_judge])
@@ -276,17 +280,23 @@ class RewardScorer:
         )
         
         # Apply penalty from normalization
-        final_score = max(0.0, combined_score + normalized.penalty_score)
+        penalty = normalized.penalty_score
+        final_score = max(0.0, combined_score + penalty)
         
         logger.info(
             f"Scores - Accuracy: {accuracy_score:.3f}, Formatting: {formatting_score:.3f}, "
-            f"Combined: {combined_score:.3f}, Penalty: {normalized.penalty_score:.3f}, "
+            f"Combined: {combined_score:.3f}, Penalty: {penalty:.3f}, "
             f"Final: {final_score:.3f}"
         )
         
-        return final_score
+        return {
+            "reward": final_score,
+            "accuracy": accuracy_score,
+            "formatting": formatting_score,
+            "penalty": penalty,
+        }
     
-    async def __call__(self, action_text: str, ground_truth: str) -> float:
+    async def __call__(self, action_text: str, ground_truth: str) -> dict:
         """
         Async interface for scoring a single action prediction.
         
@@ -297,17 +307,16 @@ class RewardScorer:
             ground_truth: The ground truth actions
             
         Returns:
-            Score between 0.0 and 1.0
+            Dict with 'reward', 'accuracy', 'formatting', 'penalty' keys.
         """
         # Run the sync call in a thread pool to avoid blocking
         loop = asyncio.get_event_loop()
-        score = await loop.run_in_executor(
+        return await loop.run_in_executor(
             None,  # Use default executor
             self._call_judge_sync,
             action_text,
             ground_truth
         )
-        return score
 
 
 def create_reward_scorer(
