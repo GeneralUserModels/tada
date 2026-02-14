@@ -535,11 +535,11 @@ class OnlineEnvTrainer:
                 actions_text = ""
                 
                 if len(traj.transitions) > 0:
-                    think_text = self.tokenizer.decode(traj.transitions[0].action, skip_special_tokens=True)
+                    think_text = self.tokenizer.decode(traj.transitions[0].ac.tokens, skip_special_tokens=True)
                 if len(traj.transitions) > 1:
-                    revise_text = self.tokenizer.decode(traj.transitions[1].action, skip_special_tokens=True)
+                    revise_text = self.tokenizer.decode(traj.transitions[1].ac.tokens, skip_special_tokens=True)
                 if len(traj.transitions) > 2:
-                    actions_text = self.tokenizer.decode(traj.transitions[2].action, skip_special_tokens=True)
+                    actions_text = self.tokenizer.decode(traj.transitions[2].ac.tokens, skip_special_tokens=True)
                 
                 # Get total reward (only from the final actions phase)
                 reward = sum(trans.reward for trans in traj.transitions)

@@ -70,36 +70,26 @@ class RewardScorer:
             self.formatting_prompt_template = f.read()
     
     # =========================================================================
-    # Normalization and Validation
+    # Validation
     # =========================================================================
     
-    def _needs_normalization(self, text: str) -> bool:
-        """Check if the text contains user/assistant blocks that need normalization."""
-        return bool(re.search(r"^\s*(?:assistant|user)\b", text, re.MULTILINE))
-    
-    def _extract_actions_block(self, text: str) -> str:
-        """Extract only the <actions>...</actions> block from the text."""
-        match = re.search(r"<actions>(.*?)</actions>", text, re.DOTALL)
-        if match:
-            return f"<actions>{match.group(1)}</actions>"
-        return text
-    
-    def normalize_and_validate(self, raw: Optional[str]) -> NormalizedCandidate:
+    def validate(self, action_text: Optional[str], expected_count: Optional[int] = None) -> NormalizedCandidate:
         """
-        Normalize by removing all 'user' blocks and keeping only 'assistant' blocks.
-        Extract the <actions> block for the judge.
-        Validate and apply penalties for missing or malformed blocks.
+        Validate an <actions> block. The input should already be just the
+        <actions>...</actions> block — the same thing passed to the judge.
         
         Args:
-            raw: The raw action text from the model
+            action_text: The <actions>...</actions> block from the model
+            expected_count: Expected number of <action> tags (from ground truth).
+                If provided, a penalty is applied when the count doesn't match.
             
         Returns:
-            NormalizedCandidate with the cleaned text and validation info
+            NormalizedCandidate with validation info and penalty
         """
         errors = []
         penalty = 0.0
 
-        if not raw:
+        if not action_text:
             errors.append("Empty or None completion.")
             penalty -= 0.5
             return NormalizedCandidate(
@@ -109,66 +99,34 @@ class RewardScorer:
                 penalty_score=penalty
             )
 
-        # Check if normalization is needed
-        if not self._needs_normalization(raw):
-            # No user/assistant blocks, just extract actions
-            actions_text = self._extract_actions_block(raw)
-            return NormalizedCandidate(
-                text_for_judge=actions_text,
-                is_valid=True,
-                errors=[],
-                penalty_score=0.0
-            )
-
-        # Ensure it starts with assistant block for parsing
-        if not raw.strip().startswith("assistant"):
-            raw = "assistant\n" + raw
-
-        # Keep ONLY assistant blocks; remove user blocks
-        assistant_blocks = re.findall(
-            r"(?mis)^\s*assistant\s*(.*?)(?=^\s*(?:assistant|user)\b|\Z)",
-            raw
-        )
-
-        if not assistant_blocks:
-            errors.append("No assistant blocks found.")
+        if "<actions>" not in action_text or "</actions>" not in action_text:
+            errors.append("Missing <actions> block.")
             penalty -= 0.5
             return NormalizedCandidate(
-                text_for_judge=raw.strip(),
+                text_for_judge=action_text,
                 is_valid=False,
                 errors=errors,
                 penalty_score=penalty
             )
 
-        # Join all assistant blocks
-        full_text = "\n\n".join(block.strip() for block in assistant_blocks).strip()
-
-        # Validate structure (optional - can be made stricter)
-        if len(assistant_blocks) >= 1 and not assistant_blocks[0].strip().endswith("</rationale>"):
-            errors.append("Missing or malformed </rationale> block.")
-            penalty -= 0.15
-
-        if len(assistant_blocks) >= 2 and not assistant_blocks[1].strip().endswith("</revise>"):
-            errors.append("Missing or malformed </revise> block.")
-            penalty -= 0.15
-
-        # Extract the <actions> block for the judge
-        actions_text = self._extract_actions_block(full_text)
-
-        # Check if actions block exists
-        if "<actions>" not in actions_text or "</actions>" not in actions_text:
-            errors.append("Missing <actions> block.")
-            penalty -= 0.2
-            is_valid = False
-        else:
-            is_valid = len(errors) == 0
+        # Penalize action count mismatch
+        if expected_count is not None:
+            actual_count = len(re.findall(r"<action>", action_text))
+            if actual_count != expected_count:
+                diff = abs(actual_count - expected_count)
+                # Scale penalty: -0.1 per extra/missing action, capped at -0.5
+                count_penalty = min(diff * 0.1, 0.5)
+                penalty -= count_penalty
+                errors.append(
+                    f"Action count mismatch: expected {expected_count}, got {actual_count}."
+                )
 
         # Clamp penalty to [-0.5, 0]
         penalty = max(-0.5, penalty)
 
         return NormalizedCandidate(
-            text_for_judge=actions_text,
-            is_valid=is_valid,
+            text_for_judge=action_text,
+            is_valid=True,
             errors=errors,
             penalty_score=penalty
         )
@@ -269,8 +227,12 @@ class RewardScorer:
         if not action_text or not re.search(r"<action>", action_text):
             return 0.0
 
-        # Normalize the action text
-        normalized = self.normalize_and_validate(action_text)
+        # Validate the action text (count expected actions from ground truth)
+        expected_count = len(re.findall(r"<action>", ground_truth))
+        normalized = self.validate(action_text, expected_count=expected_count)
+        
+        if normalized.errors:
+            logger.warning(f"Validation errors: {normalized.errors}")
         
         # Build the prompts
         candidates_block = self._build_candidates_block([normalized.text_for_judge])
