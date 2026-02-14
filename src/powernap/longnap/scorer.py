@@ -111,7 +111,7 @@ class RewardScorer:
 
         # Penalize action count mismatch
         if expected_count is not None:
-            actual_count = len(re.findall(r"<action>", action_text))
+            actual_count = len(re.findall(r"<action>.*?</action>", action_text, re.DOTALL))
             if actual_count != expected_count:
                 diff = abs(actual_count - expected_count)
                 # Scale penalty: -0.1 per extra/missing action, capped at -0.5
@@ -228,7 +228,7 @@ class RewardScorer:
             return 0.0
 
         # Validate the action text (count expected actions from ground truth)
-        expected_count = len(re.findall(r"<action>", ground_truth))
+        expected_count = len(re.findall(r"<action>.*?</action>", ground_truth, re.DOTALL))
         normalized = self.validate(action_text, expected_count=expected_count)
         
         if normalized.errors:
