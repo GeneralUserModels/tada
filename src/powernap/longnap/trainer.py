@@ -524,6 +524,7 @@ class OnlineEnvTrainer:
             "think": [],
             "revise": [],
             "actions": [],
+            "ground_truth": [],
             "reward": [],
             "accuracy": [],
             "formatting": [],
@@ -565,6 +566,7 @@ class OnlineEnvTrainer:
                 table_data["think"].append(think_text)
                 table_data["revise"].append(revise_text)
                 table_data["actions"].append(actions_text)
+                table_data["ground_truth"].append(sample.get("solution", ""))
                 table_data["reward"].append(reward)
                 table_data["accuracy"].append(sc["accuracy"])
                 table_data["formatting"].append(sc["formatting"])
