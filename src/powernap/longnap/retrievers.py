@@ -257,12 +257,13 @@ class InMemoryBM25Temporal:
         if not scores:
             return []
 
-        # optional time decay
+        # optional time decay (age measured in days)
         if time_decay_lambda:
             lam = float(time_decay_lambda)
             for doc_id, s in list(scores.items()):
-                age = max(0, cutoff_ts - self.docs[doc_id]["event_ts"])
-                scores[doc_id] = s * math.exp(-lam * age)
+                age_seconds = max(0, cutoff_ts - self.docs[doc_id]["event_ts"])
+                age_days = age_seconds / 86400.0
+                scores[doc_id] = s * math.exp(-lam * age_days)
 
         # top-k
         top = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:k]
