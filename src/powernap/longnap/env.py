@@ -55,7 +55,7 @@ class LongNAPEnv(Env):
         retriever: Optional[InMemoryBM25Temporal],
         reward_scorer: Callable,
         retrieval_top_k: int = 10,
-        retrieval_mmr_k: int = 10,
+        retrieval_mmr_k: int = 5,
         retrieval_mmr_alpha: float = 0.5,
         retrieval_time_decay_lambda: float = 0.5,
     ):
@@ -296,7 +296,7 @@ class LongNAPEnvGroupBuilder(EnvGroupBuilder):
     reward_scorer: Callable
     num_envs: int
     retrieval_top_k: int = 10
-    retrieval_mmr_k: int = 10
+    retrieval_mmr_k: int = 5
     retrieval_mmr_alpha: float = 0.5
     retrieval_time_decay_lambda: float = 0.5
     

@@ -260,7 +260,7 @@ class LongNAPRLDataset(RLDataset):
     batch_size: int
     group_size: int
     retrieval_top_k: int = 10
-    retrieval_mmr_k: int = 10
+    retrieval_mmr_k: int = 5
     retrieval_mmr_alpha: float = 0.5
     retrieval_time_decay_lambda: float = 0.5
     
@@ -332,7 +332,7 @@ class LongNAPDatasetBuilder(RLDatasetBuilder):
     
     # Retrieval configuration
     retrieval_top_k: int = 10
-    retrieval_mmr_k: int = 10
+    retrieval_mmr_k: int = 5
     retrieval_mmr_alpha: float = 0.5
     retrieval_time_decay_lambda: float = 0.5
     dedup_threshold: float = 0.8
