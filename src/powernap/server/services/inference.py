@@ -93,27 +93,36 @@ async def handle_prediction_request(state: Any):
     # Schedule background eval scoring
     actions_parsed = bool(re.search(r"<action>", result["actions"]))
     if actions_parsed:
+        # Logical position = trim offset + current buffer length
+        logical_pos = state.inference_buffer_trim_offset + len(inference_buffer)
         asyncio.create_task(_score_prediction(
-            state, result, len(inference_buffer), future_len
+            state, result, logical_pos, future_len
         ))
 
 
-async def _score_prediction(state: Any, result: dict, buffer_pos: int, future_len: int):
+async def _score_prediction(state: Any, result: dict, logical_pos: int, future_len: int):
     """Background task: wait for enough ground truth, then score the prediction."""
     from powernap.server.ws.handler import broadcast
     from powernap.longnap.trainer_utils import build_actions_block
 
     # Wait for enough future items to accumulate
     for _ in range(120):  # 2 minute timeout
-        if len(state.inference_buffer) >= buffer_pos + future_len:
+        logical_len = state.inference_buffer_trim_offset + len(state.inference_buffer)
+        if logical_len >= logical_pos + future_len:
             break
         await asyncio.sleep(1.0)
     else:
         logger.warning("Score timeout: not enough future items")
         return
 
+    # Convert logical position to current buffer index
+    start = logical_pos - state.inference_buffer_trim_offset
+    if start < 0:
+        logger.warning("Score eval: items trimmed away, skipping")
+        return
+
     ground_truth = build_actions_block(
-        state.inference_buffer[buffer_pos:buffer_pos + future_len]
+        state.inference_buffer[start:start + future_len]
     )
 
     config = state.config

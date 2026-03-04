@@ -87,7 +87,7 @@ function drawChart() {
   // Draw lines
   const series: {key: keyof typeof rewardHistory[0]; color: string}[] = [
     {key: "accuracy", color: "#5DA34E"},
-    {key: "formatting", color: "#84B179"},
+    {key: "formatting", color: "#C9944B"},
     {key: "combined", color: "#2C3A28"},
   ];
 
@@ -189,6 +189,7 @@ btnRecordStop.addEventListener("click", async () => {
 btnTrainStart.addEventListener("click", async () => {
   setControlState(btnTrainStart, btnTrainStop, trainingIndicator, tileTraining, "starting");
   await powernap.startTraining();
+  setControlState(btnTrainStart, btnTrainStop, trainingIndicator, tileTraining, "running");
 });
 btnTrainStop.addEventListener("click", async () => {
   setControlState(btnTrainStart, btnTrainStop, trainingIndicator, tileTraining, "stopping");

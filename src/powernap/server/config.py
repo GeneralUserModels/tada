@@ -14,7 +14,7 @@ class ServerConfig(BaseModel):
 
     # Recorder
     fps: int = 5
-    buffer_seconds: int = 12
+    buffer_seconds: int = 120
     precision: str = "accurate"
 
     # Labeler
@@ -27,14 +27,14 @@ class ServerConfig(BaseModel):
     model: str = "Qwen/Qwen3-VL-30B-A3B-Instruct"
     reward_llm: str = "gemini/gemini-3-flash-preview"
     num_generations: int = 8
-    learning_rate: float = 1e-5
+    learning_rate: float = 5e-5
     max_completion_length: int = 512
     num_imgs_per_sample: int = 2
     loss_mode: str = Field(default_factory=lambda: os.getenv("POWERNAP_LOSS_MODE", "llm_judge"))
     eval_with_llm_judge: bool = False
-    batch_size: int = 2
-    past_len: int = 8
-    future_len: int = 4
+    batch_size: int = 8
+    past_len: int = 16
+    future_len: int = 8
 
     # Inference
     predict_every_n_seconds: int = 10
@@ -49,7 +49,7 @@ class ServerConfig(BaseModel):
     save_recordings: bool = Field(default_factory=lambda: os.getenv("POWERNAP_SAVE_RECORDINGS", "") == "1")
 
     # Checkpointing
-    checkpoint_every_n_steps: int = 1
+    checkpoint_every_n_steps: int = 2
     resume_from_checkpoint: str | None = Field(default_factory=lambda: os.getenv("POWERNAP_RESUME_FROM_CHECKPOINT") or None)
     retriever_checkpoint: str | None = Field(default_factory=lambda: os.getenv("POWERNAP_RETRIEVER_CHECKPOINT") or None)
     sampler_ttl_seconds: int = 60
