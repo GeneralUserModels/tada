@@ -12,29 +12,51 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Sentinel returned on queue timeout to distinguish from end-of-stream (None)
+class _TimeoutSentinel:
+    screenshot = None
+_TIMEOUT_SENTINEL = _TimeoutSentinel()
+
 
 def label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active,
-               flush_request=None, flush_complete=None):
-    """Label incoming screen recordings by accumulating into video chunks."""
+               flush_request=None, flush_complete=None, agg_queue=None):
+    """Label incoming screen recordings by accumulating into video chunks.
+
+    Args:
+        recorder: OnlineRecorder instance (used when agg_queue is None).
+        agg_queue: Optional asyncio.Queue of aggregations (used by server).
+                   When provided, reads from the queue instead of recorder.iter_aggregations().
+                   A None sentinel signals end-of-stream.
+    """
     asyncio.run(_async_label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active,
-                                   flush_request, flush_complete))
+                                   flush_request, flush_complete, agg_queue=agg_queue))
 
 
 async def _async_label_loop(recorder, labeler, retriever, label_queue, inference_buffer, sleepwalk_active,
-                            flush_request=None, flush_complete=None):
+                            flush_request=None, flush_complete=None, agg_queue=None):
     """Async label loop: accumulates aggregations into chunks, labels via video.
-    
+
     Uses parallel chunk processing while preserving chronological output order.
+    Supports reading from either a recorder (blocking iter) or an asyncio.Queue.
     """
     label_count = 0
     chunk_count = 0
     skip_count = 0
     loop = asyncio.get_running_loop()
-    
-    agg_iter = iter(recorder.iter_aggregations())
-    
-    async def get_next_agg():
-        return await loop.run_in_executor(None, lambda: next(agg_iter, None))
+
+    # Set up aggregation source
+    if agg_queue is not None:
+        async def get_next_agg():
+            try:
+                return await asyncio.wait_for(agg_queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                # Return a sentinel-like object that isn't None (to keep fetching)
+                # but has no screenshot (will be skipped)
+                return _TIMEOUT_SENTINEL
+    else:
+        agg_iter = iter(recorder.iter_aggregations())
+        async def get_next_agg():
+            return await loop.run_in_executor(None, lambda: next(agg_iter, None))
     
     # Chunk accumulator
     chunk_buffer = []
@@ -96,9 +118,11 @@ async def _async_label_loop(recorder, labeler, retriever, label_queue, inference
         if fetch_task in done:
             agg = fetch_task.result()
             fetch_task = None
-            
+
             if agg is None:
                 fetching = False
+            elif agg is _TIMEOUT_SENTINEL:
+                pass  # Queue timeout — keep fetching
             else:
                 if agg.screenshot is not None:
                     chunk_buffer.append(agg)
