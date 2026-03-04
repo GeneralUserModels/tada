@@ -17,7 +17,7 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-_TIMEOUT = object()  # sentinel distinct from None (the shutdown signal)
+_TIMEOUT = object()  # sentinel for queue timeout
 
 
 class _AggregationAdapter:
@@ -57,11 +57,12 @@ class _AggregationAdapter:
 
 
 async def run_labeling_service(state: Any):
-    """Main labeling coroutine — runs until recording is stopped.
+    """Main labeling coroutine — runs until task cancellation (server shutdown).
 
-    Mirrors the logic from _async_label_loop() in pipeline.py:
-    accumulates aggregations into chunks, labels via Gemini video, and pushes
-    results to both label_queue and inference_buffer.
+    When recording_active is True: fetches from aggregation_queue, accumulates
+    chunks, labels via Gemini, pushes to label_queue + inference_buffer.
+    When recording_active is False (paused): drains pending chunks, then idles.
+    chunk_buffer and pending_chunks are preserved across pause/resume cycles.
     """
     from powernap.server.ws.handler import broadcast
 
@@ -86,105 +87,127 @@ async def run_labeling_service(state: Any):
 
     labeler = state.labeler
     agg_queue = state.aggregation_queue
+    max_inference_buf = config.past_len + config.future_len + 50  # generous margin for pending evals
 
     label_count = 0
     chunk_count = 0
     chunk_buffer = []
     pending_chunks: deque = deque()  # (asyncio.Task, list, submit_time)
 
-    running = True
-
-    while running or pending_chunks or chunk_buffer:
-        # Build wait set
-        wait_set = set()
-
-        # Try to get next aggregation from the queue
-        fetch_task = asyncio.create_task(_get_from_queue(agg_queue))
-        wait_set.add(fetch_task)
-
-        if pending_chunks:
-            wait_set.add(pending_chunks[0][0])
-
+    while True:
         try:
-            done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED, timeout=2.0)
-        except asyncio.CancelledError:
-            break
+            # When paused: drain pending_chunks but don't fetch new items
+            if not state.recording_active:
+                # Drain completed chunks
+                while pending_chunks and pending_chunks[0][0].done():
+                    task, chunk_aggs, t0 = pending_chunks.popleft()
+                    try:
+                        labeled_list = task.result()
+                    except Exception as e:
+                        logger.warning(f"Label chunk failed: {e}. Skipping chunk.")
+                        continue
+                    latency = time.time() - t0
+                    for labeled in labeled_list:
+                        if not labeled.get("text"):
+                            continue
+                        label_count += 1
+                        state.labels_processed = label_count
+                        text_preview = labeled["text"][:80]
+                        logger.info(f"Labeled action #{label_count}: {text_preview}... ({latency:.2f}s)")
+                        state.inference_buffer.append(labeled)
+                        if len(state.inference_buffer) > max_inference_buf:
+                            trim = len(state.inference_buffer) - max_inference_buf
+                            del state.inference_buffer[:trim]
+                            state.inference_buffer_trim_offset += trim
+                        await state.label_queue.put(labeled)
+                        state.untrained_batches = state.label_queue.qsize()
+                        await broadcast(state, "label", {
+                            "count": label_count,
+                            "text": labeled["text"][:200],
+                        })
 
-        # Handle fetch completion
-        if fetch_task in done:
-            agg_data = fetch_task.result()
-            if agg_data is _TIMEOUT:
-                pass  # normal timeout, keep looping
-            elif agg_data is None:
-                running = False  # actual shutdown sentinel
-            else:
-                adapted = _AggregationAdapter(agg_data)
-                if adapted.screenshot is not None:
-                    chunk_buffer.append(adapted)
-
-                    if len(chunk_buffer) >= labeler.chunk_size:
-                        chunk_count += 1
-                        logger.info(f"Submitting chunk #{chunk_count} with {len(chunk_buffer)} aggregations")
-                        task = asyncio.create_task(labeler.alabel_chunk(chunk_buffer.copy()))
-                        pending_chunks.append((task, chunk_buffer.copy(), time.time()))
-                        chunk_buffer.clear()
-        else:
-            fetch_task.cancel()
-            try:
-                await fetch_task
-            except asyncio.CancelledError:
-                pass
-
-        # If not running and buffer remains, flush it
-        if not running and chunk_buffer:
-            chunk_count += 1
-            logger.info(f"Flushing final chunk #{chunk_count} with {len(chunk_buffer)} aggregations")
-            task = asyncio.create_task(labeler.alabel_chunk(chunk_buffer.copy()))
-            pending_chunks.append((task, chunk_buffer.copy(), time.time()))
-            chunk_buffer.clear()
-
-        # Drain completed chunks from the front
-        while pending_chunks and pending_chunks[0][0].done():
-            task, chunk_aggs, t0 = pending_chunks.popleft()
-            try:
-                labeled_list = task.result()
-            except Exception as e:
-                logger.warning(f"Label chunk failed: {e}. Skipping chunk.")
+                await state.recording_resumed.wait()
                 continue
-            latency = time.time() - t0
 
-            for labeled in labeled_list:
-                if not labeled.get("text"):
+            # Active: fetch from aggregation queue
+            wait_set = set()
+            fetch_task = asyncio.create_task(_get_from_queue(agg_queue))
+            wait_set.add(fetch_task)
+
+            if pending_chunks:
+                wait_set.add(pending_chunks[0][0])
+
+            done, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED, timeout=2.0)
+
+            # Handle fetch completion
+            if fetch_task in done:
+                agg_data = fetch_task.result()
+                if agg_data is not _TIMEOUT and agg_data is not None:
+                    adapted = _AggregationAdapter(agg_data)
+                    if adapted.screenshot is not None:
+                        chunk_buffer.append(adapted)
+
+                        if len(chunk_buffer) >= labeler.chunk_size:
+                            chunk_count += 1
+                            logger.info(f"Submitting chunk #{chunk_count} with {len(chunk_buffer)} aggregations")
+                            task = asyncio.create_task(labeler.alabel_chunk(chunk_buffer.copy()))
+                            pending_chunks.append((task, chunk_buffer.copy(), time.time()))
+                            chunk_buffer.clear()
+            else:
+                fetch_task.cancel()
+                try:
+                    await fetch_task
+                except asyncio.CancelledError:
+                    pass
+
+            # Drain completed chunks from the front
+            while pending_chunks and pending_chunks[0][0].done():
+                task, chunk_aggs, t0 = pending_chunks.popleft()
+                try:
+                    labeled_list = task.result()
+                except Exception as e:
+                    logger.warning(f"Label chunk failed: {e}. Skipping chunk.")
                     continue
+                latency = time.time() - t0
 
-                label_count += 1
-                state.labels_processed = label_count
+                for labeled in labeled_list:
+                    if not labeled.get("text"):
+                        continue
 
-                text_preview = labeled["text"][:80]
-                logger.info(f"Labeled action #{label_count}: {text_preview}... ({latency:.2f}s)")
+                    label_count += 1
+                    state.labels_processed = label_count
 
-                # Push to both queues
-                state.inference_buffer.append(labeled)
-                await state.label_queue.put(labeled)
-                state.untrained_batches = state.label_queue.qsize()
+                    text_preview = labeled["text"][:80]
+                    logger.info(f"Labeled action #{label_count}: {text_preview}... ({latency:.2f}s)")
 
-                # Broadcast label event
-                await broadcast(state, "label", {
-                    "count": label_count,
-                    "text": labeled["text"][:200],
-                })
+                    # Push to both queues
+                    state.inference_buffer.append(labeled)
+                    if len(state.inference_buffer) > max_inference_buf:
+                        trim = len(state.inference_buffer) - max_inference_buf
+                        del state.inference_buffer[:trim]
+                        state.inference_buffer_trim_offset += trim
+                    await state.label_queue.put(labeled)
+                    state.untrained_batches = state.label_queue.qsize()
 
-        # Broadcast status update periodically
-        await broadcast(state, "status", {
-            "recording_active": state.recording_active,
-            "training_active": state.training_active,
-            "inference_active": state.inference_active,
-            "untrained_batches": state.label_queue.qsize(),
-            "labels_processed": label_count,
-            "inference_buffer_size": len(state.inference_buffer),
-        })
+                    # Broadcast label event
+                    await broadcast(state, "label", {
+                        "count": label_count,
+                        "text": labeled["text"][:200],
+                    })
 
-    logger.info(f"Labeling service finished: {label_count} labels, {chunk_count} chunks")
+            # Broadcast status update periodically
+            await broadcast(state, "status", {
+                "recording_active": state.recording_active,
+                "training_active": state.training_active,
+                "inference_active": state.inference_active,
+                "untrained_batches": state.label_queue.qsize(),
+                "labels_processed": label_count,
+                "inference_buffer_size": len(state.inference_buffer),
+            })
+
+        except asyncio.CancelledError:
+            logger.info(f"Labeling service cancelled: {label_count} labels, {chunk_count} chunks")
+            break
 
 
 async def _get_from_queue(queue: asyncio.Queue, timeout: float = 2.0):
