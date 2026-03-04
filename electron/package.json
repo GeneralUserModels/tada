@@ -1,0 +1,21 @@
+{
+  "name": "powernap",
+  "version": "0.1.0",
+  "description": "PowerNap — predict what you'll do next",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "copy-static": "cp -r src/renderer/*.html dist/renderer/ && cp -r src/renderer/styles dist/renderer/",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && npm run copy-static",
+    "start": "npm run build && electron dist/main/index.js",
+    "dev": "npm run build && electron dist/main/index.js"
+  },
+  "dependencies": {
+    "electron": "^33.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0"
+  }
+}

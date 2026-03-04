@@ -1,0 +1,144 @@
+/* Overlay — Tahoe liquid glass on dark */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --sage:  #84B179;
+  --fern:  #A2CB8B;
+  --mint:  #C7EABB;
+  --cream: #E8F5BD;
+}
+
+html, body {
+  background: transparent;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+}
+
+#overlay {
+  background: rgba(20, 24, 18, 0.72);
+  backdrop-filter: blur(50px) saturate(1.6);
+  -webkit-backdrop-filter: blur(50px) saturate(1.6);
+  border: 1px solid rgba(132,177,121,0.15);
+  border-radius: 16px;
+  padding: 16px 18px;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Helvetica Neue', sans-serif;
+  color: white;
+  min-height: 80px;
+  max-height: 500px;
+  overflow: hidden;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* ── Header ───────────────────────────────────────────── */
+
+#overlay-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 2px;
+}
+
+.header-icon {
+  font-size: 10px;
+  opacity: 0.5;
+  line-height: 1;
+}
+
+#overlay-title {
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: rgba(255,255,255,0.45);
+  transition: color 0.25s;
+}
+
+#overlay-title.predicted {
+  color: var(--mint);
+}
+
+#overlay-title.flushing {
+  color: var(--fern);
+}
+
+#overlay-title.sleepwalk-active {
+  color: var(--cream);
+}
+
+.header-icon.predicted { color: var(--mint); opacity: 0.9; }
+.header-icon.flushing  { color: var(--fern); opacity: 0.7; }
+.header-icon.sleepwalk-active { color: var(--cream); opacity: 0.9; }
+
+/* ── Divider ──────────────────────────────────────────── */
+
+#overlay-divider {
+  height: 1px;
+  background: linear-gradient(90deg,
+    rgba(132,177,121,0.25) 0%,
+    rgba(162,203,139,0.15) 50%,
+    transparent 100%
+  );
+  margin: 8px 0 12px;
+}
+
+/* ── Content ──────────────────────────────────────────── */
+
+#overlay-content {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.42);
+  line-height: 1.55;
+}
+
+#overlay-content.actions {
+  color: rgba(255,255,255,0.88);
+}
+
+.action-item {
+  margin-bottom: 10px;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.action-item:last-child {
+  margin-bottom: 0;
+}
+
+.action-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  font-size: 11px;
+  color: var(--sage);
+  flex-shrink: 0;
+  padding-top: 0.5px;
+}
+
+.action-text {
+  color: rgba(255,255,255,0.88);
+  line-height: 1.5;
+}
+
+/* ── Sleepwalk executing label ────────────────────────── */
+
+.sw-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cream);
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+
+.sw-action {
+  color: rgba(255,255,255,0.85);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
