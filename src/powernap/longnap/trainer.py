@@ -312,6 +312,18 @@ class OnlineEnvTrainer:
 
         logger.info(f"Successfully restored checkpoint metadata from {checkpoint_path}")
 
+    def refresh_sampler(self):
+        """Re-save weights and recreate sampling client (e.g. after pause/resume)."""
+        save_result = self.training_client.save_weights_for_sampler(
+            name=f'{self.run_name}.model',
+            ttl_seconds=self.sampler_ttl_seconds,
+        ).result()
+        self.latest_sampler_path = save_result.path
+        self.sampling_client = self.service_client.create_sampling_client(
+            model_path=self.latest_sampler_path
+        )
+        logger.info(f"Refreshed sampler: {self.latest_sampler_path}")
+
     async def _save_checkpoint(self, step):
         """Save a checkpoint and record it to checkpoints.jsonl. Deletes previous checkpoint."""
         checkpoint_name = f"{self.run_name}.checkpoint_step_{step:06d}"

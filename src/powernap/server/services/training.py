@@ -59,6 +59,11 @@ async def run_training_service(state: Any):
         except Exception:
             pass
 
+    else:
+        # Trainer already exists — refresh sampler (TTL may have expired while stopped)
+        logger.info("Refreshing sampler for existing trainer...")
+        await loop.run_in_executor(None, state.trainer.refresh_sampler)
+
     # Lazy-init predictor (shares components with trainer)
     if state.predictor is None:
         from powernap.inference import Predictor
@@ -86,28 +91,33 @@ async def run_training_service(state: Any):
     min_required = past_len + future_len
     buffer = []
 
-    while state.training_active:
-        # Collect enough labels for a sample
+    while True:
         try:
-            item = await asyncio.wait_for(label_queue.get(), timeout=2.0)
-        except asyncio.TimeoutError:
-            continue
+            # When paused: idle, preserve buffer
+            if not state.training_active:
+                await state.training_resumed.wait()
+                continue
 
-        if item is None:
-            break
+            # Collect enough labels for a sample
+            try:
+                item = await asyncio.wait_for(label_queue.get(), timeout=2.0)
+            except asyncio.TimeoutError:
+                continue
 
-        buffer.append(item)
-        state.untrained_batches = label_queue.qsize()
-        logger.info(f"Training buffer: {len(buffer)}/{min_required}")
+            if item is None:
+                continue  # ignore stale sentinels
 
-        if len(buffer) < min_required:
-            continue
+            buffer.append(item)
+            state.untrained_batches = label_queue.qsize()
+            logger.info(f"Training buffer: {len(buffer)}/{min_required}")
 
-        # Build sample and run one training step
-        step_start = time.time()
-        sample = make_sample(buffer, past_len, future_len, num_imgs_per_sample)
+            if len(buffer) < min_required:
+                continue
 
-        try:
+            # Build sample and run one training step
+            step_start = time.time()
+            sample = make_sample(buffer, past_len, future_len, num_imgs_per_sample)
+
             # Run batch_size rollouts concurrently
             rollout_tasks = []
             for i in range(batch_size):
@@ -179,13 +189,12 @@ async def run_training_service(state: Any):
                         "logprob_reward_std": metrics.get("train/logprob_reward_std", 0),
                     })
 
+            # Trim buffer
+            if len(buffer) > min_required:
+                buffer = buffer[-min_required:]
+
         except asyncio.CancelledError:
+            logger.info("Training service cancelled")
             break
         except Exception as e:
             logger.error(f"Training step failed: {e}", exc_info=True)
-
-        # Trim buffer
-        if len(buffer) > min_required:
-            buffer = buffer[-min_required:]
-
-    logger.info("Training service stopped")

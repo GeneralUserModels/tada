@@ -17,6 +17,10 @@ class ServerState:
     training_active: bool = False
     inference_active: bool = False
 
+    # Resume events (set when active, cleared when paused)
+    recording_resumed: asyncio.Event = field(default_factory=asyncio.Event)
+    training_resumed: asyncio.Event = field(default_factory=asyncio.Event)
+
     # Async queues (fed by HTTP endpoint, consumed by services)
     aggregation_queue: asyncio.Queue | None = None
     label_queue: asyncio.Queue | None = None
@@ -35,6 +39,9 @@ class ServerState:
     # Service tasks
     labeling_task: asyncio.Task | None = None
     training_task: asyncio.Task | None = None
+
+    # Inference buffer trimming (logical offset for absolute indexing)
+    inference_buffer_trim_offset: int = 0
 
     # Metrics
     step_count: int = 0
