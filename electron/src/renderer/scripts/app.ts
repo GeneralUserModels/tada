@@ -365,7 +365,7 @@ powernap.onStatusUpdate((data: any) => {
 
 // ── Initial fetch ────────────────────────────────────────────
 
-(async () => {
+powernap.onServerReady(async () => {
   try {
     const status = (await powernap.getStatus()) as any;
     if (status) {
@@ -411,4 +411,4 @@ powernap.onStatusUpdate((data: any) => {
   } catch {
     // Server not running yet
   }
-})();
+});
