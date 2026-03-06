@@ -17,6 +17,7 @@ interface PowerNapAPI {
   getTrainingHistory: () => Promise<unknown>;
 
   // Event listeners (main -> renderer)
+  onServerReady: (cb: () => void) => void;
   onStatusUpdate: (cb: (data: any) => void) => void;
   onPrediction: (cb: (data: any) => void) => void;
   onScore: (cb: (data: any) => void) => void;

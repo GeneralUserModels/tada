@@ -8,10 +8,90 @@ import {
   screen,
 } from "electron";
 import * as path from "path";
+import { spawn, ChildProcess } from "child_process";
 import { IPC } from "./ipc";
 import * as api from "./api";
 import * as ws from "./ws";
 import * as recorder from "./recorder";
+
+let serverProc: ChildProcess | null = null;
+
+// ── Server management ─────────────────────────────────────────
+
+function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const net = require("net");
+    const srv = net.createServer();
+    srv.listen(0, "127.0.0.1", () => {
+      const port = (srv.address() as { port: number }).port;
+      srv.close(() => resolve(port));
+    });
+    srv.on("error", reject);
+  });
+}
+
+function todayLogDir(projectRoot: string): string {
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return path.join(projectRoot, `logs-app-${now.getFullYear()}${mm}${dd}`);
+}
+
+function startServer(port: number): void {
+  const projectRoot = path.resolve(__dirname, "..", "..", "..");
+  const logDir = todayLogDir(projectRoot);
+
+  serverProc = spawn("uv", [
+    "run", "run_server.py",
+    "--port", String(port),
+    "--log-dir", logDir,
+    "--save-recordings",
+    "--resume-from-checkpoint", "auto",
+  ], { cwd: projectRoot });
+
+  serverProc.stdout?.on("data", (chunk: Buffer) => {
+    process.stdout.write(`[server] ${chunk}`);
+  });
+  serverProc.stderr?.on("data", (chunk: Buffer) => {
+    process.stderr.write(`[server] ${chunk}`);
+  });
+  serverProc.on("exit", (code) => {
+    console.log(`[server] exited with code ${code}`);
+    serverProc = null;
+  });
+
+  console.log(`[server] spawned on port ${port}, log-dir ${logDir}`);
+}
+
+function stopServer(): void {
+  if (serverProc) {
+    serverProc.kill("SIGTERM");
+    serverProc = null;
+  }
+}
+
+function waitForServer(url: string, timeoutMs = 30000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    function poll() {
+      import("http").then(({ get }) => {
+        const req = get(url, (res) => {
+          res.resume();
+          resolve();
+        });
+        req.on("error", () => {
+          if (Date.now() - start > timeoutMs) {
+            reject(new Error("Server did not start in time"));
+          } else {
+            setTimeout(poll, 500);
+          }
+        });
+        req.end();
+      });
+    }
+    poll();
+  });
+}
 
 let dashboardWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
@@ -171,12 +251,22 @@ function setupIpc() {
 
 // ── App lifecycle ────────────────────────────────────────────
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  app.dock?.show();
   createDashboard();
   createOverlay();
   setupIpc();
   setupWsForwarding();
-  ws.connect();
+
+  const port = await findFreePort();
+  api.setServerUrl(`http://127.0.0.1:${port}`);
+  startServer(port);
+
+  // Don't block window rendering — connect in background
+  waitForServer(`http://127.0.0.1:${port}/api/status`).then(() => {
+    ws.connect();
+    dashboardWindow?.webContents.send(IPC.SERVER_READY);
+  });
 
   // Global shortcuts
   globalShortcut.register("Control+H", toggleOverlay);
@@ -189,6 +279,7 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   recorder.stopRecording();
   ws.disconnect();
+  stopServer();
   app.quit();
 });
 
