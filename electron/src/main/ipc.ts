@@ -15,6 +15,7 @@ export const IPC = {
   GET_TRAINING_HISTORY: "get:training:history",
 
   // Main -> Dashboard
+  SERVER_READY: "server:ready",
   STATUS_UPDATE: "status:update",
   PREDICTION: "prediction",
   SCORE: "score",

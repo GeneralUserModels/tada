@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("powernap", {
   getTrainingHistory: () => ipcRenderer.invoke("get:training:history"),
 
   // Event listeners (main -> renderer)
+  onServerReady: (cb: () => void) =>
+    ipcRenderer.once("server:ready", () => cb()),
   onStatusUpdate: (cb: (data: unknown) => void) =>
     ipcRenderer.on("status:update", (_e, data) => cb(data)),
   onPrediction: (cb: (data: unknown) => void) =>
