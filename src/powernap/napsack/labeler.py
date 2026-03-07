@@ -110,7 +110,7 @@ class Labeler:
 
     def _load_prompt(self) -> str:
         """Load the default prompt from pack's label module."""
-        return (files("label") / "prompts" / "default.txt").read_text()
+        return (files("napsack.label") / "prompts" / "default.txt").read_text()
 
     def label_chunk(self, aggregations: List) -> List[dict]:
         """Label a chunk of aggregations via video.

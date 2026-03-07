@@ -180,6 +180,7 @@ function setControlState(
 btnRecordStart.addEventListener("click", async () => {
   setControlState(btnRecordStart, btnRecordStop, recordingIndicator, tileRecording, "starting");
   await powernap.startRecording();
+  setControlState(btnRecordStart, btnRecordStop, recordingIndicator, tileRecording, "running");
 });
 btnRecordStop.addEventListener("click", async () => {
   setControlState(btnRecordStart, btnRecordStop, recordingIndicator, tileRecording, "stopping");
