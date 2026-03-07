@@ -30,21 +30,18 @@ function findFreePort(): Promise<number> {
   });
 }
 
-function todayLogDir(projectRoot: string): string {
-  const now = new Date();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  return path.join(projectRoot, `logs-app-${now.getFullYear()}${mm}${dd}`);
+function logDir(projectRoot: string): string {
+  return path.join(projectRoot, "logs-app");
 }
 
 function startServer(port: number): void {
   const projectRoot = path.resolve(__dirname, "..", "..", "..");
-  const logDir = todayLogDir(projectRoot);
+  const logDirPath = logDir(projectRoot);
 
   serverProc = spawn("uv", [
     "run", "run_server.py",
     "--port", String(port),
-    "--log-dir", logDir,
+    "--log-dir", logDirPath,
     "--save-recordings",
     "--resume-from-checkpoint", "auto",
   ], { cwd: projectRoot });
@@ -60,7 +57,7 @@ function startServer(port: number): void {
     serverProc = null;
   });
 
-  console.log(`[server] spawned on port ${port}, log-dir ${logDir}`);
+  console.log(`[server] spawned on port ${port}, log-dir ${logDirPath}`);
 }
 
 function stopServer(): void {
