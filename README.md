@@ -1,6 +1,5 @@
 # PowerNap
-
-Online record → label → train → infer pipeline for user action prediction.
+A system that labels interaction data with your computer use, and trains a model on that data in real-time to predict what you'll do next.
 
 ## Install
 
