@@ -23,7 +23,6 @@ class OnlineRecorder(ScreenRecorder):
         queue_maxsize=0,
         log_dir=None,
         target_dpi=DEFAULT_TARGET_DPI,
-        lossless=True,
         save_screenshots=False,
         disable: Optional[List[str]] = None,
         **kwargs
@@ -35,7 +34,6 @@ class OnlineRecorder(ScreenRecorder):
             queue_maxsize: Max size of aggregation queue (0 = unlimited)
             log_dir: Directory to save logs to
             target_dpi: Target DPI for screenshots (lower = smaller images)
-            lossless: If True, save screenshots as PNG
             save_screenshots: If True, save screenshots to disk
             disable: List of event types to disable. Defaults to ["move"].
                      Valid values: "move", "scroll", "click", "key"
@@ -46,10 +44,7 @@ class OnlineRecorder(ScreenRecorder):
             monitor_dpis = get_monitor_dpis()
             if monitor_dpis:
                 kwargs["scale"] = calculate_monitor_scales(target_dpi, monitor_dpis)
-        
-        # Default to lossless (PNG) saving
-        kwargs.setdefault("lossless", lossless)
-        
+
         # Default to NOT saving screenshots (for tinker usage)
         kwargs.setdefault("save_screenshots", save_screenshots)
         

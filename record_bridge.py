@@ -12,6 +12,7 @@ import argparse
 import base64
 import io
 import json
+import os
 import signal
 import sys
 
@@ -56,10 +57,11 @@ def main():
     parser.add_argument("--disable-events", type=str, nargs="*", default=None)
     args = parser.parse_args()
 
-    from record.constants import constants_manager
+    from napsack.record.constants import constants_manager
     from powernap.napsack import OnlineRecorder
 
-    constants_manager.set_preset(args.precision, verbose=False)
+    os.environ["CAPTURE_PRECISION"] = args.precision
+    constants_manager.set_preset()
 
     disable_events = args.disable_events
     if disable_events is not None and len(disable_events) == 0:
