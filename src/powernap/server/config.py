@@ -24,7 +24,7 @@ class ServerConfig(BaseModel):
     chunk_workers: int = 4
 
     # Trainer
-    model: str = "Qwen/Qwen3-VL-30B-A3B-Instruct"
+    model: str = Field(default_factory=lambda: os.getenv("POWERNAP_MODEL", "Qwen/Qwen3-VL-30B-A3B-Instruct"))
     reward_llm: str = "gemini/gemini-3-flash-preview"
     num_generations: int = 8
     learning_rate: float = 5e-5
