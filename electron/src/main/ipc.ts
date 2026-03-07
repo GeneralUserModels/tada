@@ -29,5 +29,4 @@ export const IPC = {
   OVERLAY_PREDICTION: "overlay:prediction",
   OVERLAY_WAITING: "overlay:waiting",
   OVERLAY_FLUSHING: "overlay:flushing",
-  OVERLAY_SLEEPWALK: "overlay:sleepwalk",
 } as const;

@@ -53,7 +53,3 @@ class ServerConfig(BaseModel):
     resume_from_checkpoint: str | None = Field(default_factory=lambda: os.getenv("POWERNAP_RESUME_FROM_CHECKPOINT") or None)
     retriever_checkpoint: str | None = Field(default_factory=lambda: os.getenv("POWERNAP_RETRIEVER_CHECKPOINT") or None)
     sampler_ttl_seconds: int = 60
-
-    # SleepWalk
-    sleepwalk_model: str = "gemini/gemini-3-flash-preview"
-    sleepwalk_max_iter: int = 5
