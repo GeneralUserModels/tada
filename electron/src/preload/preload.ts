@@ -45,9 +45,6 @@ contextBridge.exposeInMainWorld("powernap", {
     ipcRenderer.on("overlay:waiting", () => cb()),
   onOverlayFlushing: (cb: () => void) =>
     ipcRenderer.on("overlay:flushing", () => cb()),
-  onOverlaySleepwalk: (cb: () => void) =>
-    ipcRenderer.on("overlay:sleepwalk", () => cb()),
-
   // Overlay resize (renderer -> main)
   resizeOverlay: (height: number) =>
     ipcRenderer.send("overlay:resize", height),

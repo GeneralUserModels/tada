@@ -267,10 +267,6 @@ app.whenReady().then(async () => {
 
   // Global shortcuts
   globalShortcut.register("Control+H", toggleOverlay);
-  globalShortcut.register("Control+G", () => {
-    // Sleepwalk toggle — forward to overlay
-    overlayWindow?.webContents.send(IPC.OVERLAY_SLEEPWALK);
-  });
 });
 
 app.on("window-all-closed", () => {
