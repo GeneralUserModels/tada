@@ -26,6 +26,9 @@ async def start_recording(request: Request):
     if state.labeling_task is None or state.labeling_task.done():
         from powernap.server.services.labeling import run_labeling_service
         state.labeling_task = asyncio.create_task(run_labeling_service(state))
+        state.labeling_task.add_done_callback(
+            lambda t: logger.error("Labeling task crashed: %s", t.exception()) if not t.cancelled() and t.exception() else None
+        )
 
     logger.info("Recording started")
     return {"status": "ok"}
@@ -61,6 +64,9 @@ async def start_training(request: Request):
     if state.training_task is None or state.training_task.done():
         from powernap.server.services.training import run_training_service
         state.training_task = asyncio.create_task(run_training_service(state))
+        state.training_task.add_done_callback(
+            lambda t: logger.error("Training task crashed: %s", t.exception()) if not t.cancelled() and t.exception() else None
+        )
 
     logger.info("Training started")
     return {"status": "ok"}
