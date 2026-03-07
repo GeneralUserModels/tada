@@ -143,6 +143,14 @@ async def run_training_service(state: Any):
                 builders_for_batch.append(builder)
 
             if not traj_groups:
+                # All rollouts failed — likely sampler expired, refresh and retry
+                logger.warning("All rollouts failed, refreshing sampler...")
+                try:
+                    await loop.run_in_executor(None, trainer.refresh_sampler)
+                    logger.info("Sampler refreshed, will retry on next iteration")
+                except Exception as e:
+                    logger.error(f"Sampler refresh failed: {e}, waiting 30s...")
+                    await asyncio.sleep(30)
                 continue
 
             # Batched training
