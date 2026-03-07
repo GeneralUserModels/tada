@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "install:electron": "cd electron && npm install",
+    "dev": "cd electron && npm run dev"
+  }
+}
