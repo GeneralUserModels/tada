@@ -5,8 +5,6 @@ const overlayTitle = document.getElementById("overlay-title")!;
 const overlayIcon = document.getElementById("overlay-icon")!;
 const content = document.getElementById("overlay-content")!;
 
-let sleepwalkActive = false;
-
 function parseActions(text: string): string[] {
   const matches = text.match(/<action>([\s\S]*?)<\/action>/g);
   if (matches) {
@@ -63,23 +61,6 @@ function showPrediction(actions: string[]) {
   updateSize();
 }
 
-function showSleepwalk(active: boolean, currentAction?: string) {
-  setHeaderState(
-    active ? "SleepWalk Active" : "SleepWalk Stopped",
-    active ? "\u26A1" : "\u25CB",
-    active ? "sleepwalk-active" : ""
-  );
-  content.className = "";
-  if (currentAction) {
-    content.innerHTML = `<div class="sw-label">Executing</div><div class="sw-action">${escapeHtml(currentAction)}</div>`;
-  } else if (active) {
-    content.innerHTML = "Waiting for prediction\u2026";
-  } else {
-    content.innerHTML = "";
-  }
-  updateSize();
-}
-
 // ── Event listeners ──────────────────────────────────────────
 
 powernap.onOverlayWaiting(() => showWaiting());
@@ -96,11 +77,6 @@ powernap.onOverlayPrediction((data: any) => {
   } else {
     showWaiting();
   }
-});
-
-powernap.onOverlaySleepwalk(() => {
-  sleepwalkActive = !sleepwalkActive;
-  showSleepwalk(sleepwalkActive);
 });
 
 showWaiting();
