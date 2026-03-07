@@ -121,7 +121,7 @@ class OnlineEnvTrainer:
         lora_rank: int = 32,
         num_imgs_per_sample: int = 0,
         retrieval_top_k: int = 10,
-        retrieval_mmr_k: int = 10,
+        retrieval_mmr_k: int = 5,
         retrieval_mmr_alpha: float = 0.5,
         retrieval_time_decay_lambda: float = 0.5,
         dedup_threshold: float = 0.8,

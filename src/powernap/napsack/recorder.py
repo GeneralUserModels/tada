@@ -3,7 +3,7 @@ from datetime import datetime
 from queue import Queue, Empty
 from typing import List, Optional
 
-from record.__main__ import ScreenRecorder, get_monitor_dpis, calculate_monitor_scales
+from napsack.record.__main__ import ScreenRecorder, get_monitor_dpis, calculate_monitor_scales
 
 
 # Default DPI for screenshot rescaling (lower = smaller images, fewer tokens)

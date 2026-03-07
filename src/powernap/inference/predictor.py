@@ -21,7 +21,7 @@ class Predictor:
 
     def __init__(self, renderer=None, tokenizer=None, max_tokens=512, temperature=1.0,
                  retriever=None, retriever_checkpoint=None, log_dir=None,
-                 top_k=10, mmr_k=10, mmr_alpha=0.5, time_decay_lambda=0.5):
+                 top_k=10, mmr_k=5, mmr_alpha=0.5, time_decay_lambda=0.5):
         self.renderer = renderer
         self.tokenizer = tokenizer
         self.model_path = None  # set by inference loop for logging
