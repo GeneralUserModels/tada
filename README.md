@@ -6,11 +6,6 @@ Online record → label → train → infer pipeline for user action prediction.
 
 ```bash
 cd powernap
-
-# Python backend
-uv pip install -e .
-
-# Electron frontend
 npm run install:electron
 ```
 
