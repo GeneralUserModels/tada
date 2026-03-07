@@ -578,20 +578,10 @@ button, input, select, textarea, canvas, a,
 
 .history-feed {
   flex: 1;
-  overflow-y: auto;
-  max-height: calc(100vh - 160px);
+  overflow-y: visible;
   display: flex;
   flex-direction: column;
   gap: 1px;
-}
-
-.history-feed::-webkit-scrollbar {
-  width: 5px;
-}
-
-.history-feed::-webkit-scrollbar-thumb {
-  background: rgba(var(--sage-rgb), 0.15);
-  border-radius: 2.5px;
 }
 
 .history-item {
