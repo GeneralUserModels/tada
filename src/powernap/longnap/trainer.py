@@ -7,11 +7,9 @@ Manages the streaming training loop: rollouts → batched forward_backward → o
 import asyncio
 import json
 import logging
-import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from queue import Empty
 from typing import Any, Dict, List, Optional
 
 import tinker
@@ -271,10 +269,6 @@ class OnlineEnvTrainer:
         logger.warning("No valid checkpoints found in checkpoints.jsonl")
         return None
 
-    def _resolve_checkpoint(self, checkpoint_path):
-        """Resolve 'auto' to the latest checkpoint. Instance method wrapper."""
-        return self._resolve_checkpoint_static(checkpoint_path, self.log_dir)
-
     def _get_checkpoint_entry(self, state_path):
         """Look up the full checkpoint entry for a given state_path from checkpoints.jsonl."""
         ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
@@ -285,11 +279,6 @@ class OnlineEnvTrainer:
             if entry.get("state_path") == state_path:
                 return entry
         return None
-
-    def _get_retriever_path_for_checkpoint(self, state_path):
-        """Look up the retriever path for a given state_path from checkpoints.jsonl."""
-        entry = self._get_checkpoint_entry(state_path)
-        return entry.get("retriever_path") if entry else None
 
     def _restore_checkpoint_metadata(self, checkpoint_path):
         """Restore metadata from checkpoint (step counter, retriever) without loading model state.
@@ -311,6 +300,18 @@ class OnlineEnvTrainer:
             logger.warning(f"No checkpoint entry found for {checkpoint_path}, starting from step 0")
 
         logger.info(f"Successfully restored checkpoint metadata from {checkpoint_path}")
+
+    def refresh_sampler(self):
+        """Re-save weights and recreate sampling client (e.g. after pause/resume)."""
+        save_result = self.training_client.save_weights_for_sampler(
+            name=f'{self.run_name}.model',
+            ttl_seconds=self.sampler_ttl_seconds,
+        ).result()
+        self.latest_sampler_path = save_result.path
+        self.sampling_client = self.service_client.create_sampling_client(
+            model_path=self.latest_sampler_path
+        )
+        logger.info(f"Refreshed sampler: {self.latest_sampler_path}")
 
     async def _save_checkpoint(self, step):
         """Save a checkpoint and record it to checkpoints.jsonl. Deletes previous checkpoint."""
@@ -706,147 +707,3 @@ class OnlineEnvTrainer:
         self._step += 1
         return metrics
 
-    def run_streaming(self, recorder, label_queue, past_len: int, future_len: int,
-                      batch_size: int, num_imgs_per_sample: int = 0,
-                      shutdown_event: Optional[threading.Event] = None):
-        """Main streaming training loop.
-
-        Runs batch_size rollouts concurrently, then sends one batched
-        forward_backward + optim_step (1-2 Tinker clock cycles per step).
-        """
-        asyncio.run(self._run_streaming_async(
-            recorder, label_queue, past_len, future_len,
-            batch_size, num_imgs_per_sample, shutdown_event,
-        ))
-
-    async def _run_streaming_async(self, recorder, label_queue, past_len: int, future_len: int,
-                                   batch_size: int, num_imgs_per_sample: int = 0,
-                                   shutdown_event: Optional[threading.Event] = None):
-        """Async implementation of streaming training with batched forward_backward.
-
-        Phase 1: Submit rollouts concurrently as samples arrive (up to batch_size).
-        Phase 2: Gather all rollout results.
-        Phase 3: One batched forward_backward + optim_step (1 clock cycle for LLM judge,
-                 2 clock cycles for ELBO).
-        """
-        min_required = past_len + future_len
-        buffer = []
-        steps_completed = 0
-
-        loop = asyncio.get_running_loop()
-
-        async def get_from_queue():
-            """Await items from threading Queue without CPU spinning."""
-            while True:
-                try:
-                    return await loop.run_in_executor(
-                        None, lambda: label_queue.get(timeout=1.0)
-                    )
-                except Empty:
-                    if shutdown_event and shutdown_event.is_set():
-                        return None
-                    if not recorder.running and label_queue.empty():
-                        return None
-
-        def _should_run():
-            if shutdown_event and shutdown_event.is_set():
-                return False
-            return recorder.running or not label_queue.empty()
-
-        while _should_run():
-            # === Collect and run one batch ===
-            batch_rollouts = []
-            pending_samples = []
-            step_start = None
-
-            queue_task = asyncio.create_task(get_from_queue())
-
-            # Phase 1: Submit rollouts as samples arrive (up to batch_size)
-            while len(batch_rollouts) < batch_size:
-                if not _should_run():
-                    break
-
-                wait_tasks = {queue_task} | set(batch_rollouts)
-                done, _ = await asyncio.wait(wait_tasks, return_when=asyncio.FIRST_COMPLETED)
-
-                for task in done:
-                    if task is queue_task:
-                        record = task.result()
-                        if record is None:
-                            queue_task = None
-                            break
-
-                        buffer.append(record)
-                        print(f"[train] buffer size: {len(buffer)}/{min_required}")
-
-                        if len(buffer) >= min_required:
-                            pending_samples.append(
-                                make_sample(buffer, past_len, future_len, num_imgs_per_sample)
-                            )
-
-                        queue_task = asyncio.create_task(get_from_queue())
-
-                while pending_samples and len(batch_rollouts) < batch_size:
-                    sample = pending_samples.pop(0)
-                    if step_start is None:
-                        step_start = time.time()
-                    idx = len(batch_rollouts) + 1
-                    print(f"[train] step {self._step}: rollout {idx}/{batch_size}...")
-                    rollout_task = asyncio.create_task(self._rollout_one_sample(sample))
-                    batch_rollouts.append(rollout_task)
-
-                if queue_task is None:
-                    break
-
-            # Cancel queue task while we finish this batch
-            if queue_task and not queue_task.done():
-                queue_task.cancel()
-                try:
-                    await queue_task
-                except asyncio.CancelledError:
-                    pass
-
-            # Phase 2: Wait for all rollouts to complete
-            if not batch_rollouts:
-                continue
-
-            results = await asyncio.gather(*batch_rollouts, return_exceptions=True)
-
-            traj_groups = []
-            samples_for_batch = []
-            builders_for_batch = []
-            for r in results:
-                if isinstance(r, Exception):
-                    logger.error(f"Rollout failed: {r}")
-                    continue
-                traj_group, sample, builder = r
-                traj_groups.append(traj_group)
-                samples_for_batch.append(sample)
-                builders_for_batch.append(builder)
-
-            if not traj_groups:
-                continue
-
-            # Phase 3: Batched training (1-2 forward_backward calls instead of N)
-            print(f"[train] step {self._step}: batched training on {len(traj_groups)} groups...")
-            if self.loss_mode == "logprob_elbo":
-                fwdbwd_future, extra_metrics = self._train_batch_elbo(traj_groups, samples_for_batch, builders_for_batch)
-            else:
-                fwdbwd_future, extra_metrics = self._train_batch_llm_judge(traj_groups, samples_for_batch)
-
-            fwdbwd_futures = [fwdbwd_future] if fwdbwd_future is not None else []
-            extra_metrics_list = [extra_metrics] if extra_metrics else []
-
-            if fwdbwd_futures:
-                await self._finish_step(fwdbwd_futures, traj_groups, step_start or time.time(), extra_metrics_list, samples_for_batch, builders=builders_for_batch)
-                steps_completed += 1
-
-                if wandb and wandb.run is not None:
-                    wandb.log({
-                        "pipeline/buffer_size": len(buffer),
-                        "pipeline/batches_yielded": steps_completed,
-                        "pipeline/label_queue_size": label_queue.qsize(),
-                    })
-
-                if len(buffer) > min_required:
-                    buffer = buffer[-min_required:]

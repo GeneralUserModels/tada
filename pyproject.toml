@@ -11,13 +11,15 @@ requires-python = ">=3.12,<3.14"
 dependencies = [
     "accelerate",
     "datasets",
+    "fastapi",
     "litellm",
     "numpy",
-    "pack",
+    "napsack",
     "pandas",
     "peft",
     "pillow",
     "python-dotenv",
+    "python-multipart",
     "rich",
     "screeninfo",
     "tinker",
@@ -25,12 +27,13 @@ dependencies = [
     "torch",
     "transformers",
     "trl",
+    "uvicorn[standard]",
     "wandb",
+    "websockets",
 ]
 
 [tool.uv.sources]
-pack = { path = "./pack", editable = true }
-tinker-cookbook = { path = "./tinker-cookbook", editable = true }
+tinker-cookbook = { git = "https://github.com/thinking-machines-lab/tinker-cookbook" }
 
 [tool.setuptools]
 package-dir = {"" = "src"}

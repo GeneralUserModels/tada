@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:">
+  <title>PowerNap</title>
+  <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+  <div id="grain"></div>
+
+  <div id="app">
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <text x="1" y="17" font-family="sans-serif" font-weight="bold" font-size="11" fill="url(#brandGrad)">Z</text>
+            <text x="7" y="13" font-family="sans-serif" font-weight="bold" font-size="8" fill="url(#brandGrad)" opacity="0.75">z</text>
+            <text x="12" y="9" font-family="sans-serif" font-weight="bold" font-size="6" fill="url(#brandGrad)" opacity="0.5">z</text>
+            <defs><linearGradient id="brandGrad" x1="2" y1="2" x2="18" y2="18"><stop stop-color="#84B179"/><stop offset="1" stop-color="#A2CB8B"/></linearGradient></defs>
+          </svg>
+        </div>
+        <span class="brand-name">PowerNap</span>
+        <div id="connection-status" class="conn-badge disconnected">
+          <span class="conn-dot"></span>
+        </div>
+      </div>
+
+      <div class="sidebar-nav">
+        <button class="nav-item active" data-panel="dashboard-view">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="1" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.3"/><rect x="1" y="9" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="9" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.3"/></svg>
+          Dashboard
+        </button>
+        <button class="nav-item" data-panel="history-view">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          History
+        </button>
+        <button class="nav-item" data-panel="settings-view">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          Settings
+        </button>
+      </div>
+
+    </nav>
+
+    <!-- Main Content -->
+    <main id="content">
+
+      <div class="status-bar">
+        <div class="stat-pill"><span class="stat-label">Labels</span><span class="stat-value" id="stat-labels">0</span></div>
+        <div class="stat-pill"><span class="stat-label">Queue</span><span class="stat-value" id="stat-queue">0</span></div>
+        <div class="stat-pill"><span class="stat-label">Step</span><span class="stat-value" id="stat-step">0</span></div>
+        <div class="stat-pill"><span class="stat-label">Buffer</span><span class="stat-value" id="stat-buffer">0</span></div>
+      </div>
+
+      <!-- Dashboard View -->
+      <div id="dashboard-view" class="view active">
+
+        <!-- Controls -->
+        <section class="glass-card">
+          <div class="card-header">
+            <h2>Pipeline</h2>
+          </div>
+          <div class="controls-grid">
+            <div class="control-tile" id="tile-recording">
+              <div class="tile-top">
+                <div class="tile-icon recording-icon">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="7" r="2.5" fill="currentColor"/></svg>
+                </div>
+                <span class="tile-label">Recording</span>
+              </div>
+              <div class="tile-status" id="recording-indicator">Idle</div>
+              <div class="tile-actions">
+                <button id="btn-record-start" class="pill-btn pill-start">Start</button>
+                <button id="btn-record-stop" class="pill-btn pill-stop" disabled>Stop</button>
+              </div>
+            </div>
+
+            <div class="control-tile" id="tile-training">
+              <div class="tile-top">
+                <div class="tile-icon training-icon">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 11l3-4 3 2.5 4-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <span class="tile-label">Training</span>
+              </div>
+              <div class="tile-status" id="training-indicator">Idle</div>
+              <div class="tile-actions">
+                <button id="btn-train-start" class="pill-btn pill-start">Start</button>
+                <button id="btn-train-stop" class="pill-btn pill-stop" disabled>Stop</button>
+              </div>
+            </div>
+
+            <div class="control-tile" id="tile-inference">
+              <div class="tile-top">
+                <div class="tile-icon inference-icon">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v4l3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 8.5A5 5 0 1012 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </div>
+                <span class="tile-label">Inference</span>
+              </div>
+              <div class="tile-status" id="inference-indicator">Idle</div>
+              <div class="tile-actions">
+                <button id="btn-generate" class="pill-btn pill-start">Generate Predictions</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Two-column: Prediction + Scores -->
+        <div class="split-row">
+          <!-- Prediction -->
+          <section class="glass-card flex-2">
+            <div class="card-header">
+              <h2>Prediction</h2>
+              <span id="prediction-timestamp" class="card-meta"></span>
+            </div>
+            <div id="prediction-content" class="prediction-body">
+              <span class="empty-state">Waiting for first prediction...</span>
+            </div>
+          </section>
+
+          <!-- Rewards Chart -->
+          <section class="glass-card flex-1">
+            <div class="card-header">
+              <h2>Rewards</h2>
+              <div class="chart-legend">
+                <span class="legend-item"><span class="legend-dot legend-accuracy"></span>Accuracy</span>
+                <span class="legend-item"><span class="legend-dot legend-formatting"></span>Formatting</span>
+                <span class="legend-item"><span class="legend-dot legend-combined"></span>Combined</span>
+              </div>
+            </div>
+            <canvas id="reward-chart"></canvas>
+            <div id="elbo-score" class="elbo-badge">ELBO &mdash;</div>
+          </section>
+        </div>
+      </div>
+
+      <!-- History View -->
+      <div id="history-view" class="view">
+        <section class="glass-card full-height">
+          <div class="card-header">
+            <h2>Activity Log</h2>
+          </div>
+          <div id="history-list" class="history-feed"></div>
+        </section>
+      </div>
+
+      <!-- Settings View -->
+      <div id="settings-view" class="view">
+        <section class="glass-card">
+          <div class="card-header">
+            <h2>Configuration</h2>
+          </div>
+          <div class="settings-sections">
+            <div class="settings-group">
+              <h3>API Keys</h3>
+              <label class="field">
+                <span>Gemini</span>
+                <input type="password" id="set-gemini-key" placeholder="sk-...">
+              </label>
+              <label class="field">
+                <span>Tinker</span>
+                <input type="password" id="set-tinker-key" placeholder="tk-...">
+              </label>
+              <label class="field">
+                <span>HuggingFace</span>
+                <input type="password" id="set-hf-token" placeholder="hf_...">
+              </label>
+              <label class="field">
+                <span>Weights & Biases</span>
+                <input type="password" id="set-wandb-key" placeholder="wandb-...">
+              </label>
+            </div>
+            <div class="settings-group">
+              <h3>Model</h3>
+              <label class="field">
+                <span>Base Model</span>
+                <input type="text" id="set-model" placeholder="Qwen/Qwen3-VL-30B-A3B-Instruct">
+              </label>
+              <label class="field">
+                <span>Reward LLM</span>
+                <input type="text" id="set-reward-llm" placeholder="gemini/gemini-3-flash-preview">
+              </label>
+              <label class="field">
+                <span>Recording FPS</span>
+                <input type="number" id="set-fps" placeholder="5" min="1" max="60">
+              </label>
+            </div>
+          </div>
+          <div class="settings-footer">
+            <button id="btn-save-settings" class="pill-btn pill-start">Save Changes</button>
+          </div>
+        </section>
+      </div>
+
+    </main>
+  </div>
+  <script type="module" src="scripts/app.js"></script>
+</body>
+</html>
