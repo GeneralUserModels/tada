@@ -2,8 +2,11 @@
 """Uvicorn launcher for the PowerNap FastAPI server."""
 
 import argparse
+import logging
 import os
 import uvicorn
+
+logging.basicConfig(level=logging.INFO, format="%(name)s - %(levelname)s - %(message)s")
 
 
 def main():
