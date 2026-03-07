@@ -67,13 +67,8 @@ html, body {
   color: var(--fern);
 }
 
-#overlay-title.sleepwalk-active {
-  color: var(--cream);
-}
-
 .header-icon.predicted { color: var(--mint); opacity: 0.9; }
 .header-icon.flushing  { color: var(--fern); opacity: 0.7; }
-.header-icon.sleepwalk-active { color: var(--cream); opacity: 0.9; }
 
 /* ── Divider ──────────────────────────────────────────── */
 
@@ -125,20 +120,3 @@ html, body {
   line-height: 1.5;
 }
 
-/* ── Sleepwalk executing label ────────────────────────── */
-
-.sw-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--cream);
-  opacity: 0.7;
-  margin-bottom: 6px;
-}
-
-.sw-action {
-  color: rgba(255,255,255,0.85);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
