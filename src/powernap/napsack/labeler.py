@@ -14,11 +14,11 @@ from typing import List, Optional
 from PIL import Image
 
 # Import from pack
-from label.video import create_video
-from label.clients.gemini import GeminiClient
-from label.clients.client import CAPTION_SCHEMA
-from label.models import Aggregation as LabelAggregation
-from record.sanitize import sanitize_records
+from napsack.label.video import create_video
+from napsack.label.clients.gemini import GeminiClient
+from napsack.label.clients.client import CAPTION_SCHEMA
+from napsack.label.models import Aggregation as LabelAggregation
+from napsack.record.sanitize import sanitize_records
 
 logger = logging.getLogger(__name__)
 

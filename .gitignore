@@ -1,3 +1,13 @@
+node_modules/
+scores_step_1184.csv
+scores_step_1184_extra.csv
+scripts/generate_and_score.py
+scripts/generate_demo2.py
+scripts/judge_reward_table.py
+scripts/redact_demo3.py
+scripts/redact_demo3_v2.py
+scripts/redact_demo3_v3.py
+scripts/score_manual_examples.py
 tinker-cookbook/
 pack/
 data/

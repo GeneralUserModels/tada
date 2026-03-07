@@ -14,7 +14,7 @@ from powernap.longnap.trainer_utils import (
 )
 from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams, mmr_select
 
-VERIFIER_PROMPT_PATH = Path(__file__).resolve().parents[1] / "longnap" / "verifier.txt"
+VERIFIER_PROMPT_PATH = Path(__file__).resolve().parents[1] / "longnap" / "verifiers" / "accuracy.txt"
 
 
 class Predictor:
@@ -124,16 +124,6 @@ class Predictor:
                 f.write("\n")
 
         return result
-
-    def add_to_retriever(self, text, event_ts, namespace="train"):
-        self.retriever.add(text, event_ts=event_ts, namespace=namespace)
-
-    def predict_from_buffer(self, buffer, past_len, future_len, processor,
-                             sampling_client=None, num_imgs_per_sample=0):
-        """Build messages from buffer and run prediction."""
-        past = buffer[-past_len:]
-        return self.predict_from_snapshot(past, future_len, sampling_client=sampling_client,
-                                          num_imgs_per_sample=num_imgs_per_sample)
 
     def predict_from_snapshot(self, past, future_len, sampling_client=None,
                               num_imgs_per_sample=0):

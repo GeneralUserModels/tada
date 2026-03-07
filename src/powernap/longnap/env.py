@@ -299,7 +299,7 @@ class LongNAPEnvGroupBuilder(EnvGroupBuilder):
     retrieval_mmr_k: int = 5
     retrieval_mmr_alpha: float = 0.5
     retrieval_time_decay_lambda: float = 0.5
-    
+
     async def make_envs(self) -> Sequence[Env]:
         """Create num_envs copies of the LongNAP environment."""
         return [
