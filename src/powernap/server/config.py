@@ -26,7 +26,7 @@ class ServerConfig(BaseModel):
     # Trainer
     model: str = Field(default_factory=lambda: os.getenv("POWERNAP_MODEL", "Qwen/Qwen3-VL-30B-A3B-Instruct"))
     reward_llm: str = "gemini/gemini-3-flash-preview"
-    num_generations: int = 8
+    num_generations: int = 4
     learning_rate: float = 5e-5
     max_completion_length: int = 512
     num_imgs_per_sample: int = 2
