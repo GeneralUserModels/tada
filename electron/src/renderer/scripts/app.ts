@@ -224,21 +224,12 @@ const settingsFields: [string, string][] = [
   ["set-fps", "fps"],
 ];
 
-// Restore saved settings on load
-for (const [elemId, key] of settingsFields) {
-  const saved = localStorage.getItem(`powernap_${key}`);
-  if (saved) {
-    ($(elemId) as HTMLInputElement).value = saved;
-  }
-}
-
 btnSaveSettings.addEventListener("click", async () => {
   const data: Record<string, unknown> = {};
   for (const [elemId, key] of settingsFields) {
     const val = ($(elemId) as HTMLInputElement).value.trim();
     if (val) {
       data[key] = key === "fps" ? parseInt(val, 10) : val;
-      localStorage.setItem(`powernap_${key}`, val);
     }
   }
   if (Object.keys(data).length > 0) {
@@ -397,17 +388,16 @@ powernap.onServerReady(async () => {
         }
       } catch { /* metrics.jsonl may not exist yet */ }
 
-      // Auto-send saved settings to server on connect
-      const saved: Record<string, unknown> = {};
-      for (const [elemId, key] of settingsFields) {
-        const val = localStorage.getItem(`powernap_${key}`);
-        if (val) {
-          saved[key] = key === "fps" ? parseInt(val, 10) : val;
+      // Populate settings fields from server
+      try {
+        const settings = (await powernap.getSettings()) as Record<string, unknown>;
+        for (const [elemId, key] of settingsFields) {
+          const val = settings[key];
+          if (val !== undefined && val !== null && val !== "") {
+            ($(elemId) as HTMLInputElement).value = String(val);
+          }
         }
-      }
-      if (Object.keys(saved).length > 0) {
-        await powernap.updateSettings(saved);
-      }
+      } catch { /* settings fetch failed */ }
     }
   } catch {
     // Server not running yet

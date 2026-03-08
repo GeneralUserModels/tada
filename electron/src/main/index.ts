@@ -44,6 +44,7 @@ function startServer(port: number): void {
     "--log-dir", logDirPath,
     "--save-recordings",
     "--resume-from-checkpoint", "auto",
+    "--log-to-wandb",
   ], { cwd: projectRoot });
 
   serverProc.stdout?.on("data", (chunk: Buffer) => {
