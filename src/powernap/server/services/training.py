@@ -110,6 +110,14 @@ async def run_training_service(state: Any):
             buffer.append(item)
             state.untrained_batches = label_queue.qsize()
             logger.info(f"Training buffer: {len(buffer)}/{min_required}")
+            await broadcast(state, "status", {
+                "recording_active": state.recording_active,
+                "training_active": state.training_active,
+                "inference_active": state.inference_active,
+                "untrained_batches": state.untrained_batches,
+                "labels_processed": state.labels_processed,
+                "inference_buffer_size": len(state.inference_buffer),
+            })
 
             if len(buffer) < min_required:
                 continue

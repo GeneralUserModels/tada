@@ -7,10 +7,10 @@ from pydantic import BaseModel, Field
 
 class ServerConfig(BaseModel):
     # API keys (populated via settings endpoint or env)
-    gemini_api_key: str = ""
-    tinker_api_key: str = ""
-    hf_token: str = ""
-    wandb_api_key: str = ""
+    gemini_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
+    tinker_api_key: str = Field(default_factory=lambda: os.getenv("TINKER_API_KEY", ""))
+    hf_token: str = Field(default_factory=lambda: os.getenv("HF_TOKEN", ""))
+    wandb_api_key: str = Field(default_factory=lambda: os.getenv("WANDB_API_KEY", ""))
 
     # Recorder
     fps: int = 5
