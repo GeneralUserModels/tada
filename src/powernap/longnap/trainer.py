@@ -355,28 +355,38 @@ class OnlineEnvTrainer:
         return state_path
 
     async def _rollout_one_sample(self, sample: Dict[str, Any]):
-        """Run rollout only (no forward_backward). Returns (TrajectoryGroup, sample)."""
-        builder = LongNAPEnvGroupBuilder(
-            input_data=sample,
-            renderer=self.renderer,
-            tokenizer=self.tokenizer,
-            retriever=self.retriever,
-            reward_scorer=self.reward_scorer,
-            num_envs=self.num_generations,
-            retrieval_top_k=self.retrieval_top_k,
-            retrieval_mmr_k=self.retrieval_mmr_k,
-            retrieval_mmr_alpha=self.retrieval_mmr_alpha,
-            retrieval_time_decay_lambda=self.retrieval_time_decay_lambda,
-        )
+        """Run rollout only (no forward_backward). Returns (TrajectoryGroup, sample).
 
-        policy = TinkerTokenCompleter(
-            self.sampling_client,
-            max_tokens=self.max_tokens,
-            temperature=self.temperature,
-        )
-
-        traj_group = await do_group_rollout(builder, policy)
-        return traj_group, sample, builder
+        Retries indefinitely on failure: refreshes sampler and waits 15s between attempts.
+        """
+        while True:
+            try:
+                builder = LongNAPEnvGroupBuilder(
+                    input_data=sample,
+                    renderer=self.renderer,
+                    tokenizer=self.tokenizer,
+                    retriever=self.retriever,
+                    reward_scorer=self.reward_scorer,
+                    num_envs=self.num_generations,
+                    retrieval_top_k=self.retrieval_top_k,
+                    retrieval_mmr_k=self.retrieval_mmr_k,
+                    retrieval_mmr_alpha=self.retrieval_mmr_alpha,
+                    retrieval_time_decay_lambda=self.retrieval_time_decay_lambda,
+                )
+                policy = TinkerTokenCompleter(
+                    self.sampling_client,
+                    max_tokens=self.max_tokens,
+                    temperature=self.temperature,
+                )
+                traj_group = await do_group_rollout(builder, policy)
+                return traj_group, sample, builder
+            except Exception as e:
+                logger.error(f"Rollout failed: {e}. Refreshing sampler and retrying in 15s...")
+                try:
+                    self.refresh_sampler()
+                except Exception as re:
+                    logger.error(f"refresh_sampler failed: {re}")
+                await asyncio.sleep(15)
 
     def _train_batch_llm_judge(self, traj_groups: list, samples: list):
         """Compute advantages and one batched forward_backward for all groups.
@@ -437,8 +447,8 @@ class OnlineEnvTrainer:
                 ).result()
                 break
             except Exception as e:
-                logger.warning(f"ELBO SFT forward_backward failed: {e}. Retrying in 120s...")
-                time.sleep(120)
+                logger.warning(f"ELBO SFT forward_backward failed: {e}. Retrying in 15s...")
+                time.sleep(15)
 
         # --- Extract rewards per trajectory, GRPO normalize per group ---
         all_rl_data = []
@@ -495,8 +505,8 @@ class OnlineEnvTrainer:
                     )
                     break
                 except Exception as e:
-                    logger.warning(f"ELBO RL forward_backward failed: {e}. Retrying in 120s...")
-                    time.sleep(120)
+                    logger.warning(f"ELBO RL forward_backward failed: {e}. Retrying in 15s...")
+                    time.sleep(15)
 
         total_sft_loss = sft_result.metrics.get("loss:sum", 0.0)
         rewards_all = torch.tensor(all_logprob_rewards)
@@ -608,16 +618,16 @@ class OnlineEnvTrainer:
                     result = f.result()
                     break
                 except Exception as e:
-                    logger.warning(f"forward_backward failed: {e}. Retrying in 120s...")
-                    time.sleep(120)
+                    logger.warning(f"forward_backward failed: {e}. Retrying in 15s...")
+                    time.sleep(15)
             total_loss += result.metrics.get("loss:sum", 0.0)
         while True:
             try:
                 optim_result = optim_future.result()
                 break
             except Exception as e:
-                logger.warning(f"optim_step failed: {e}. Retrying in 120s...")
-                time.sleep(120)
+                logger.warning(f"optim_step failed: {e}. Retrying in 15s...")
+                time.sleep(15)
 
         # Update sampling client (infinite retry on failure)
         while True:
@@ -632,8 +642,8 @@ class OnlineEnvTrainer:
                 )
                 break
             except Exception as e:
-                logger.warning(f"save_weights_for_sampler failed: {e}. Retrying in 120s...")
-                time.sleep(120)
+                logger.warning(f"save_weights_for_sampler failed: {e}. Retrying in 15s...")
+                time.sleep(15)
 
         # Compute metrics
         all_rewards = []

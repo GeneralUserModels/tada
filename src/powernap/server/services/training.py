@@ -141,17 +141,10 @@ async def run_training_service(state: Any):
             traj_groups = []
             samples_for_batch = []
             builders_for_batch = []
-            for r in results:
-                if isinstance(r, Exception):
-                    logger.error(f"Rollout failed: {r}")
-                    continue
-                traj_group, sample_r, builder = r
+            for traj_group, sample_r, builder in results:
                 traj_groups.append(traj_group)
                 samples_for_batch.append(sample_r)
                 builders_for_batch.append(builder)
-
-            if not traj_groups:
-                continue
 
             # Batched training
             if config.loss_mode == "logprob_elbo":
