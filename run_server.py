@@ -5,6 +5,9 @@ import argparse
 import logging
 import os
 import uvicorn
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(name)s - %(levelname)s - %(message)s")
 
@@ -36,7 +39,7 @@ def main():
         os.environ["POWERNAP_RETRIEVER_CHECKPOINT"] = args.retriever_checkpoint
     os.environ["POWERNAP_LOG_DIR"] = args.log_dir
     os.environ["POWERNAP_LOSS_MODE"] = args.loss_mode
-    if args.log_to_wandb:
+    if args.log_to_wandb or os.environ.get("WANDB_API_KEY"):
         os.environ["POWERNAP_LOG_TO_WANDB"] = "1"
     os.environ["POWERNAP_WANDB_PROJECT"] = args.wandb_project
     os.environ["POWERNAP_WANDB_RUN_NAME"] = args.wandb_run_name

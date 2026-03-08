@@ -574,7 +574,7 @@ class OnlineEnvTrainer:
                 table_data["penalty"].append(sc["penalty"])
         
         df = pd.DataFrame(table_data)
-        wandb.log({"rollouts": wandb.Table(dataframe=df)})
+        wandb.log({"rollouts": wandb.Table(dataframe=df)}, step=self._step)
 
     async def _finish_step(
         self,
@@ -687,8 +687,8 @@ class OnlineEnvTrainer:
                 metrics["train/llm_judge_reward_mean"] = sum(judge_rewards) / len(judge_rewards)
 
         if self.log_to_wandb and wandb.run is not None:
-            wandb.log(metrics)
-            
+            wandb.log(metrics, step=self._step)
+
             # Log rollouts table to wandb
             if samples:
                 self._log_rollouts_to_wandb(trajectory_groups, samples, builders=builders)
