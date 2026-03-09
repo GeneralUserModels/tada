@@ -153,7 +153,7 @@ async def run_training_service(state: Any):
                 )
             else:
                 fwdbwd_future, extra_metrics = trainer._train_batch_llm_judge(
-                    traj_groups, samples_for_batch
+                    traj_groups, samples_for_batch, builders_for_batch
                 )
 
             fwdbwd_futures = [fwdbwd_future] if fwdbwd_future is not None else []

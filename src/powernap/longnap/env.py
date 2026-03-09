@@ -98,6 +98,7 @@ class LongNAPEnv(Env):
         self.phase = self.PHASE_THINK
         self.messages: List[Dict] = []
         self.think_text: str = ""
+        self.retrieved_text: str = ""
         self.revise_text: str = ""
         self.actions_text: str = ""
         
@@ -215,7 +216,8 @@ class LongNAPEnv(Env):
             
             # Do retrieval
             retrieved_text = self._do_retrieval(self.think_text)
-            
+            self.retrieved_text = retrieved_text
+
             # Build Revise prompt
             self.messages = self._build_revise_messages(retrieved_text)
             next_prompt = self.renderer.build_generation_prompt(self.messages)
@@ -323,22 +325,27 @@ class LongNAPEnvGroupBuilder(EnvGroupBuilder):
         env_group: Sequence[Env]
     ) -> List[tuple[float, Metrics]]:
         """
-        Compute group-level rewards and save retriever candidates for later ELBO-based selection.
+        Compute group-level rewards and save retriever candidates for later winner selection.
 
         The per-step rewards are already computed in env.step(), so we return 0 here.
-        Retriever winner selection is deferred to add_elbo_winner_to_retriever() which
-        is called from the training step after ELBO logprob rewards are computed.
+        Retriever winner selection is deferred to add_winner_to_retriever(), which is
+        called from the training step once rewards are finalized (logprob for ELBO mode,
+        LLM judge scores for llm_judge mode).
         """
-        # Collect per-env score components for wandb logging
+        # Collect per-env score components and retrieved texts for wandb logging
         all_score_components = []
+        all_retrieved_texts = []
         for env in env_group:
             if isinstance(env, LongNAPEnv):
                 all_score_components.append(env.score_components)
+                all_retrieved_texts.append(env.retrieved_text)
             else:
                 all_score_components.append({"accuracy": 0.0, "formatting": 0.0, "penalty": 0.0})
+                all_retrieved_texts.append("")
         object.__setattr__(self, '_score_components', all_score_components)
+        object.__setattr__(self, '_retrieved_texts', all_retrieved_texts)
 
-        # Save retriever candidates (don't add yet — wait for ELBO rewards)
+        # Save retriever candidates (don't add yet — wait for finalized rewards in training step)
         if self.retriever is not None:
             candidates = []
             for env in env_group:
@@ -356,8 +363,8 @@ class LongNAPEnvGroupBuilder(EnvGroupBuilder):
         # Return zero group reward (per-step rewards already computed)
         return [(0.0, {}) for _ in trajectory_group]
 
-    def add_elbo_winner_to_retriever(self, rewards: list):
-        """Add the trajectory with the highest ELBO reward to the retriever."""
+    def add_winner_to_retriever(self, rewards: list):
+        """Add the trajectory with the highest reward to the retriever."""
         candidates = getattr(self, '_retriever_candidates', None)
         if not self.retriever or not candidates:
             return
