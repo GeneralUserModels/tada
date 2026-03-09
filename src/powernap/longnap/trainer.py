@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -147,7 +148,6 @@ class OnlineEnvTrainer:
         self.log_dir = log_dir
         self.log_to_wandb = log_to_wandb and wandb is not None
         self.checkpoint_every_n_steps = checkpoint_every_n_steps
-        self.run_name = wandb_run_name
 
         # Initialize Tinker clients
         self.service_client = tinker.ServiceClient()
@@ -155,6 +155,22 @@ class OnlineEnvTrainer:
 
         # Resolve checkpoint path early (before creating training client)
         self._resolved_checkpoint = self._resolve_checkpoint_static(resume_from_checkpoint, log_dir)
+
+        # Determine effective run_name: restore from checkpoint or create new with unique suffix
+        _ckpt_entry_early = self._get_checkpoint_entry(self._resolved_checkpoint) if self._resolved_checkpoint else None
+        if _ckpt_entry_early and "run_name" in _ckpt_entry_early:
+            self.run_name = _ckpt_entry_early["run_name"]
+            self._resume_wandb_id = _ckpt_entry_early.get("wandb_run_id")
+            logger.info(f"Restored run_name from checkpoint: {self.run_name}")
+        else:
+            uid = uuid.uuid4().hex[:8]
+            if wandb_run_name == "longnap-online":
+                logger.warning(
+                    f"Using default wandb_run_name 'longnap-online'. Multiple concurrent runs will conflict. "
+                    f"Appending unique suffix: {uid}"
+                )
+            self.run_name = f"{wandb_run_name}-{uid}"
+            self._resume_wandb_id = None
 
         # Create training client - use create_training_client_from_state if resuming from checkpoint
         # This supports cross-session checkpoint loading
@@ -227,9 +243,9 @@ class OnlineEnvTrainer:
 
         # Initialize wandb
         if self.log_to_wandb:
-            wandb.init(
+            wandb_kwargs = dict(
                 project=wandb_project,
-                name=wandb_run_name,
+                name=self.run_name,
                 config={
                     "model": model_name,
                     "reward_llm": reward_llm,
@@ -239,6 +255,10 @@ class OnlineEnvTrainer:
                     "learning_rate": learning_rate,
                 }
             )
+            if self._resume_wandb_id:
+                wandb_kwargs["id"] = self._resume_wandb_id
+                wandb_kwargs["resume"] = "allow"
+            wandb.init(**wandb_kwargs)
 
         # Handle checkpoint resume (restore step counter, retriever, etc.)
         if self._resolved_checkpoint:
@@ -348,7 +368,15 @@ class OnlineEnvTrainer:
 
         ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
         ckpt_file.parent.mkdir(parents=True, exist_ok=True)
-        entry = {"name": checkpoint_name, "step": step, "state_path": state_path, "retriever_path": str(retriever_path)}
+        wandb_run_id = wandb.run.id if (self.log_to_wandb and wandb.run is not None) else None
+        entry = {
+            "name": checkpoint_name,
+            "step": step,
+            "state_path": state_path,
+            "retriever_path": str(retriever_path),
+            "run_name": self.run_name,
+            "wandb_run_id": wandb_run_id,
+        }
         with open(ckpt_file, "a") as f:
             f.write(json.dumps(entry) + "\n")
 
@@ -388,17 +416,23 @@ class OnlineEnvTrainer:
                     logger.error(f"refresh_sampler failed: {re}")
                 await asyncio.sleep(15)
 
-    def _train_batch_llm_judge(self, traj_groups: list, samples: list):
+    def _train_batch_llm_judge(self, traj_groups: list, samples: list, builders: list = None):
         """Compute advantages and one batched forward_backward for all groups.
 
         Returns:
             (fwdbwd_future_or_None, extra_metrics)
         """
         all_data = []
-        for traj_group in traj_groups:
+        _builders = builders or [None] * len(traj_groups)
+        for traj_group, builder in zip(traj_groups, _builders):
             advantages = compute_advantages([traj_group])
             data_D, _ = assemble_training_data([traj_group], advantages)
             all_data.extend([_remove_mask(d) for d in data_D])
+
+            # Add judge winner to retriever
+            if builder is not None:
+                rewards = traj_group.get_total_rewards()
+                builder.add_winner_to_retriever(rewards)
 
         if not all_data:
             logger.warning("No training data produced for batch")
@@ -472,9 +506,9 @@ class OnlineEnvTrainer:
             total_gt_tokens += len(gt_tokens) * num_trajs
             all_logprob_rewards.extend(rewards)
 
-            # Add ELBO winner to retriever
+            # Add winner to retriever
             if builder is not None:
-                builder.add_elbo_winner_to_retriever(rewards)
+                builder.add_winner_to_retriever(rewards)
 
             # GRPO normalize within this group
             rewards_t = torch.tensor(rewards)
@@ -533,6 +567,7 @@ class OnlineEnvTrainer:
             "step": [],
             "prompt": [],
             "think": [],
+            "retrieved": [],
             "revise": [],
             "actions": [],
             "ground_truth": [],
@@ -547,8 +582,9 @@ class OnlineEnvTrainer:
             # Get prompt from sample
             prompt = sample.get("past_actions", "")
             
-            # Get per-env score components from builder
+            # Get per-env score components and retrieved texts from builder
             score_components_list = getattr(builder, '_score_components', None) if builder else None
+            retrieved_texts_list = getattr(builder, '_retrieved_texts', None) if builder else None
             
             # Get completions and rewards from each trajectory
             for i, traj in enumerate(traj_group.trajectories_G):
@@ -568,13 +604,15 @@ class OnlineEnvTrainer:
                 # Get total reward (only from the final actions phase)
                 reward = sum(trans.reward for trans in traj.transitions)
                 
-                # Get score components for this trajectory
+                # Get score components and retrieved text for this trajectory
                 sc = (score_components_list[i] if score_components_list and i < len(score_components_list)
                       else {"accuracy": 0.0, "formatting": 0.0, "penalty": 0.0})
-                
+                retrieved = (retrieved_texts_list[i] if retrieved_texts_list and i < len(retrieved_texts_list) else "")
+
                 table_data["step"].append(self._step)
                 table_data["prompt"].append(prompt)
                 table_data["think"].append(think_text)
+                table_data["retrieved"].append(retrieved)
                 table_data["revise"].append(revise_text)
                 table_data["actions"].append(actions_text)
                 table_data["ground_truth"].append(sample.get("solution", ""))
