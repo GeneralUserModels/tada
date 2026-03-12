@@ -70,7 +70,7 @@ async def run_labeling_service(state: Any):
 
     # Lazy-init labeler
     if state.labeler is None:
-        from powernap.napsack import Labeler
+        from connectors.screen.napsack import Labeler
         log_dir = Path(config.log_dir)
         log_dir.mkdir(parents=True, exist_ok=True)
         session_dir = log_dir / f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"

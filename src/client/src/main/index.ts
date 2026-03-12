@@ -35,11 +35,11 @@ function logDir(projectRoot: string): string {
 }
 
 function startServer(port: number): void {
-  const projectRoot = path.resolve(__dirname, "..", "..", "..");
+  const projectRoot = path.resolve(__dirname, "..", "..", "..", "..");
   const logDirPath = logDir(projectRoot);
 
   serverProc = spawn("uv", [
-    "run", "run_server.py",
+    "run", "python", "-m", "powernap.server",
     "--port", String(port),
     "--log-dir", logDirPath,
     "--save-recordings",

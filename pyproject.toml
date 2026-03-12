@@ -35,6 +35,10 @@ dependencies = [
 [tool.uv.sources]
 tinker-cookbook = { git = "https://github.com/thinking-machines-lab/tinker-cookbook" }
 
+[project.scripts]
+powernap-server = "powernap.server.__main__:main"
+powernap-bridge = "connectors.screen.napsack.bridge:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
