@@ -58,7 +58,7 @@ def main():
     args = parser.parse_args()
 
     from napsack.record.constants import constants_manager
-    from powernap.napsack import OnlineRecorder
+    from . import OnlineRecorder
 
     os.environ["CAPTURE_PRECISION"] = args.precision
     constants_manager.set_preset()
