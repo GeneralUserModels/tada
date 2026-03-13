@@ -12,6 +12,12 @@ scripts/score_manual_examples.py
 tinker-cookbook/
 pack/
 data/
+
+# Electron / DMG build
+src/client/dist/
+src/client/release/
+src/client/node_modules/
+.DS_Store
 grpo_trainer.py
 tmp_images/
 

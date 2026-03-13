@@ -29,4 +29,13 @@ export const IPC = {
   OVERLAY_PREDICTION: "overlay:prediction",
   OVERLAY_WAITING: "overlay:waiting",
   OVERLAY_FLUSHING: "overlay:flushing",
+
+  // Bootstrap (main -> setup window)
+  BOOTSTRAP_PROGRESS: "bootstrap:progress",
+  BOOTSTRAP_LOG: "bootstrap:log",
+  BOOTSTRAP_ERROR: "bootstrap:error",
+  BOOTSTRAP_COMPLETE: "bootstrap:complete",
+
+  // Bootstrap (setup window -> main)
+  BOOTSTRAP_RETRY: "bootstrap:retry",
 } as const;
