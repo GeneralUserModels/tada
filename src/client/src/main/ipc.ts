@@ -29,4 +29,20 @@ export const IPC = {
   OVERLAY_PREDICTION: "overlay:prediction",
   OVERLAY_WAITING: "overlay:waiting",
   OVERLAY_FLUSHING: "overlay:flushing",
+
+  // Bootstrap (main -> setup window)
+  BOOTSTRAP_PROGRESS: "bootstrap:progress",
+  BOOTSTRAP_LOG: "bootstrap:log",
+  BOOTSTRAP_ERROR: "bootstrap:error",
+  BOOTSTRAP_COMPLETE: "bootstrap:complete",
+
+  // Bootstrap (setup window -> main)
+  BOOTSTRAP_RETRY: "bootstrap:retry",
+
+  // Onboarding
+  ONBOARDING_SUBMIT: "onboarding:submit",
+  ONBOARDING_CHECK_SCREEN_PERMISSION: "onboarding:check-screen-permission",
+  ONBOARDING_OPEN_SCREEN_SETTINGS: "onboarding:open-screen-settings",
+  ONBOARDING_REQUEST_SCREEN_PERMISSION: "onboarding:request-screen-permission",
+  ONBOARDING_GOOGLE_LOGIN: "onboarding:google-login",
 } as const;

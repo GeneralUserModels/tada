@@ -1,21 +1,42 @@
 /** Spawns the recording bridge as a child process, reads stdout, POSTs to server. */
 
 import { spawn, ChildProcess } from "child_process";
-import * as path from "path";
 import * as readline from "readline";
 import { postAggregation } from "./api";
+import { isDev, getDataDir, getPythonPath, getPythonSrcDir } from "./paths";
 
 let proc: ChildProcess | null = null;
 
 export function startRecording(fps = 5, bufferSeconds = 12): void {
   if (proc) return;
 
-  const projectRoot = path.resolve(__dirname, "..", "..", "..", "..");
-  const pythonPath = path.join(projectRoot, ".venv", "bin", "python");
+  const pythonPath = getPythonPath();
 
-  proc = spawn(pythonPath, ["-m", "connectors.screen.napsack", "--fps", String(fps), "--buffer-seconds", String(bufferSeconds)], {
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  if (isDev()) {
+    // Dev mode: use uv run from repo root
+    const projectRoot = getDataDir();
+    proc = spawn("uv", [
+      "run", "python", "-m", "connectors.screen.napsack",
+      "--fps", String(fps),
+      "--buffer-seconds", String(bufferSeconds),
+    ], {
+      stdio: ["pipe", "pipe", "pipe"],
+      cwd: projectRoot,
+    });
+  } else {
+    // Packaged mode: use venv python directly with PYTHONPATH
+    proc = spawn(pythonPath, [
+      "-m", "connectors.screen.napsack",
+      "--fps", String(fps),
+      "--buffer-seconds", String(bufferSeconds),
+    ], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        PYTHONPATH: getPythonSrcDir(),
+      },
+    });
+  }
 
   const rl = readline.createInterface({ input: proc.stdout! });
 
