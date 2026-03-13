@@ -13,6 +13,9 @@ import { IPC } from "./ipc";
 import * as api from "./api";
 import * as ws from "./ws";
 import * as recorder from "./recorder";
+import { isDev, getDataDir, getPythonPath, getUvPath, getLogDir, getPythonSrcDir } from "./paths";
+import * as bootstrap from "./bootstrap";
+import * as onboarding from "./onboarding";
 
 let serverProc: ChildProcess | null = null;
 
@@ -30,22 +33,38 @@ function findFreePort(): Promise<number> {
   });
 }
 
-function logDir(projectRoot: string): string {
-  return path.join(projectRoot, "logs-app");
-}
-
 function startServer(port: number): void {
-  const projectRoot = path.resolve(__dirname, "..", "..", "..", "..");
-  const logDirPath = logDir(projectRoot);
+  const logDirPath = getLogDir();
+  const pythonPath = getPythonPath();
+  const pythonSrcDir = getPythonSrcDir();
 
-  serverProc = spawn("uv", [
-    "run", "python", "-m", "powernap.server",
-    "--port", String(port),
-    "--log-dir", logDirPath,
-    "--save-recordings",
-    "--resume-from-checkpoint", "auto",
-    "--log-to-wandb",
-  ], { cwd: projectRoot });
+  if (isDev()) {
+    // Dev mode: use uv run from repo root
+    const projectRoot = getDataDir();
+    serverProc = spawn("uv", [
+      "run", "python", "-m", "powernap.server",
+      "--port", String(port),
+      "--log-dir", logDirPath,
+      "--save-recordings",
+      "--resume-from-checkpoint", "auto",
+      "--log-to-wandb",
+    ], { cwd: projectRoot });
+  } else {
+    // Packaged mode: use venv python directly
+    serverProc = spawn(pythonPath, [
+      "-m", "powernap.server",
+      "--port", String(port),
+      "--log-dir", logDirPath,
+      "--save-recordings",
+      "--resume-from-checkpoint", "auto",
+      "--log-to-wandb",
+    ], {
+      env: {
+        ...process.env,
+        PYTHONPATH: pythonSrcDir,
+      },
+    });
+  }
 
   serverProc.stdout?.on("data", (chunk: Buffer) => {
     process.stdout.write(`[server] ${chunk}`);
@@ -91,11 +110,34 @@ function waitForServer(url: string, timeoutMs = 30000): Promise<void> {
   });
 }
 
+let setupWindow: BrowserWindow | null = null;
 let dashboardWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
 let overlayVisible = false;
 
 // ── Window creation ──────────────────────────────────────────
+
+function createSetupWindow(): BrowserWindow {
+  setupWindow = new BrowserWindow({
+    width: 500,
+    height: 350,
+    title: "PowerNap",
+    titleBarStyle: "hiddenInset",
+    backgroundColor: "#F4F2EE",
+    resizable: false,
+    webPreferences: {
+      preload: path.join(__dirname, "..", "preload", "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  setupWindow.on("closed", () => {
+    setupWindow = null;
+  });
+
+  return setupWindow;
+}
 
 function createDashboard() {
   dashboardWindow = new BrowserWindow({
@@ -247,27 +289,88 @@ function setupIpc() {
   });
 }
 
-// ── App lifecycle ────────────────────────────────────────────
+// ── Bootstrap ────────────────────────────────────────────────
 
-app.whenReady().then(async () => {
-  app.dock?.show();
+async function runBootstrap(): Promise<void> {
+  const win = createSetupWindow();
+  await win.loadFile(path.join(__dirname, "..", "renderer", "setup.html"));
+
+  return new Promise<void>((resolve) => {
+    const doBootstrap = async () => {
+      try {
+        await bootstrap.run(
+          (msg, pct) => { win.webContents.send(IPC.BOOTSTRAP_PROGRESS, msg, pct); },
+          (line) => { win.webContents.send(IPC.BOOTSTRAP_LOG, line); },
+        );
+        win.webContents.send(IPC.BOOTSTRAP_COMPLETE);
+        await new Promise((r) => setTimeout(r, 1000));
+        win.close();
+        ipcMain.removeAllListeners(IPC.BOOTSTRAP_RETRY);
+        resolve();
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error("[bootstrap] failed:", errMsg);
+        try {
+          win.webContents.send(IPC.BOOTSTRAP_ERROR, errMsg);
+        } catch {
+          console.error("[bootstrap] could not send error to setup window");
+        }
+        // don't resolve — wait for retry
+      }
+    };
+
+    ipcMain.on(IPC.BOOTSTRAP_RETRY, () => {
+      doBootstrap();
+    });
+
+    doBootstrap();
+  });
+}
+
+function launchApp(port: number) {
   createDashboard();
   createOverlay();
-  setupIpc();
   setupWsForwarding();
 
-  const port = await findFreePort();
-  api.setServerUrl(`http://127.0.0.1:${port}`);
   startServer(port);
 
-  // Don't block window rendering — connect in background
-  waitForServer(`http://127.0.0.1:${port}/api/status`).then(() => {
+  waitForServer(`http://127.0.0.1:${port}/api/status`).then(async () => {
+    // Push saved onboarding config to the server
+    const config = onboarding.getConfig();
+    if (config) {
+      try {
+        const { user_name, user_email, ...serverConfig } = config as unknown as Record<string, unknown>;
+        await api.updateSettings(serverConfig);
+      } catch (err) {
+        console.error("[onboarding] failed to push config to server:", err);
+      }
+    }
     ws.connect();
     dashboardWindow?.webContents.send(IPC.SERVER_READY);
   });
 
-  // Global shortcuts
   globalShortcut.register("Control+H", toggleOverlay);
+}
+
+// ── App lifecycle ────────────────────────────────────────────
+
+app.whenReady().then(async () => {
+  app.dock?.show();
+  setupIpc();
+
+  // In packaged mode, check if bootstrap is needed
+  if (!isDev() && !bootstrap.isReady()) {
+    await runBootstrap();
+  }
+
+  // Onboarding: collect API keys and model on first launch
+  if (!onboarding.isComplete()) {
+    await onboarding.runOnboarding();
+  }
+
+  const port = await findFreePort();
+  api.setServerUrl(`http://127.0.0.1:${port}`);
+  launchApp(port);
 });
 
 app.on("window-all-closed", () => {

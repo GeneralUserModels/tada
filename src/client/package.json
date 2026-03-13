@@ -2,20 +2,57 @@
   "name": "powernap",
   "version": "0.1.0",
   "description": "PowerNap — predict what you'll do next",
+  "author": "PowerNap",
   "main": "dist/main/index.js",
   "scripts": {
     "copy-static": "cp -r src/renderer/*.html dist/renderer/ && cp -r src/renderer/styles dist/renderer/",
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && npm run copy-static",
     "start": "npm run build && electron dist/main/index.js",
-    "dev": "npm run build && electron dist/main/index.js"
+    "dev": "npm run build && electron dist/main/index.js",
+    "dist": "npm run build && npx electron-builder --mac --publish never"
   },
   "dependencies": {
-    "electron": "^33.0.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "electron": "^33.0.0",
     "typescript": "^5.6.0",
     "@types/node": "^22.0.0",
-    "@types/ws": "^8.5.0"
+    "@types/ws": "^8.5.0",
+    "electron-builder": "^25.0.0",
+    "@electron/notarize": "^2.0.0"
+  },
+  "build": {
+    "appId": "com.powernap.app",
+    "productName": "PowerNap",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/main/**/*",
+      "dist/preload/**/*",
+      "dist/renderer/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": "dmg",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSScreenCaptureUsageDescription": "PowerNap needs screen recording to observe your workflow.",
+        "NSAccessibilityUsageDescription": "PowerNap needs accessibility access to track input events."
+      }
+    },
+    "extraResources": [
+      { "from": "../../src/powernap", "to": "python-src/powernap" },
+      { "from": "../../src/connectors", "to": "python-src/connectors" },
+      { "from": "bootstrap/requirements.txt", "to": "python-src/requirements.txt" },
+      { "from": "../../pyproject.toml", "to": "python-src/pyproject.toml" }
+    ],
+    "dmg": {
+      "title": "PowerNap"
+    }
   }
 }

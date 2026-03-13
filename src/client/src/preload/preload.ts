@@ -48,4 +48,27 @@ contextBridge.exposeInMainWorld("powernap", {
   // Overlay resize (renderer -> main)
   resizeOverlay: (height: number) =>
     ipcRenderer.send("overlay:resize", height),
+
+  // Onboarding
+  googleLogin: () => ipcRenderer.invoke("onboarding:google-login"),
+  submitOnboarding: (data: Record<string, unknown>) =>
+    ipcRenderer.invoke("onboarding:submit", data),
+  checkScreenPermission: () =>
+    ipcRenderer.invoke("onboarding:check-screen-permission"),
+  openScreenSettings: () =>
+    ipcRenderer.invoke("onboarding:open-screen-settings"),
+  requestScreenPermission: () =>
+    ipcRenderer.invoke("onboarding:request-screen-permission"),
+
+  // Bootstrap
+  onBootstrapProgress: (cb: (msg: string, pct: number) => void) =>
+    ipcRenderer.on("bootstrap:progress", (_e, msg, pct) => cb(msg, pct)),
+  onBootstrapLog: (cb: (line: string) => void) =>
+    ipcRenderer.on("bootstrap:log", (_e, line) => cb(line)),
+  onBootstrapError: (cb: (errMsg: string) => void) =>
+    ipcRenderer.on("bootstrap:error", (_e, errMsg) => cb(errMsg)),
+  onBootstrapComplete: (cb: () => void) =>
+    ipcRenderer.on("bootstrap:complete", () => cb()),
+  retryBootstrap: () =>
+    ipcRenderer.send("bootstrap:retry"),
 });
