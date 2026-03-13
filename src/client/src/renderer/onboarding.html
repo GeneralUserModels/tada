@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+  <title>PowerNap</title>
+  <style>
+    @font-face {
+      font-family: 'Tahoe';
+      src: local('.AppleSystemUIFont'), local('BlinkMacSystemFont'), local('SF Pro Display'), local('SF Pro Text'), local('Helvetica Neue');
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --sage:      #84B179;
+      --fern:      #A2CB8B;
+      --mint:      #C7EABB;
+      --cream:     #E8F5BD;
+      --sage-rgb:  132,177,121;
+      --fern-rgb:  162,203,139;
+      --mint-rgb:  199,234,187;
+      --cream-rgb: 232,245,189;
+      --bg:            #F4F2EE;
+      --bg-warm:       #EBE8E2;
+      --glass:         rgba(255,255,255,0.55);
+      --glass-border:  rgba(var(--sage-rgb), 0.18);
+      --glass-shadow:  rgba(var(--sage-rgb), 0.08);
+      --text:        #2C3A28;
+      --text-secondary: #6B7A65;
+      --text-tertiary:  #9BA896;
+      --active-green:  #5DA34E;
+      --danger:        #C9594B;
+      --r-sm: 8px;
+      --r-md: 14px;
+      --r-lg: 20px;
+    }
+
+    body {
+      font-family: 'Tahoe', -apple-system, BlinkMacSystemFont, system-ui, 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.5;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+      -webkit-app-region: drag;
+      overflow: hidden;
+    }
+
+    /* ── Grain ─────────────────────────────────────────────── */
+    #grain {
+      position: fixed; inset: 0; z-index: 9999; pointer-events: none; opacity: 0.025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+      background-repeat: repeat; background-size: 200px;
+    }
+
+    /* ── Layout ────────────────────────────────────────────── */
+    .wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 40px 32px;
+      -webkit-app-region: no-drag;
+    }
+
+    /* ── No-drag on interactive elements ─────────────────── */
+    button, input, select, textarea, a {
+      -webkit-app-region: no-drag;
+    }
+
+    /* ── Steps indicator ──────────────────────────────────── */
+    .steps {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 32px;
+    }
+    .step-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(var(--sage-rgb), 0.2);
+      transition: all 0.3s;
+    }
+    .step-dot.active {
+      background: var(--sage);
+      box-shadow: 0 0 8px rgba(var(--sage-rgb), 0.35);
+      width: 10px; height: 10px;
+    }
+    .step-dot.done {
+      background: var(--fern);
+    }
+    .step-line {
+      width: 32px; height: 1px;
+      background: rgba(var(--sage-rgb), 0.15);
+    }
+
+    /* ── Page container ───────────────────────────────────── */
+    .page {
+      display: none;
+      flex-direction: column;
+      width: 100%;
+      max-width: 400px;
+      animation: fadeSlideIn 0.3s ease;
+    }
+    .page.active { display: flex; }
+
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Card ─────────────────────────────────────────────── */
+    .glass-card {
+      background: var(--glass);
+      backdrop-filter: blur(30px) saturate(1.3);
+      -webkit-backdrop-filter: blur(30px) saturate(1.3);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      box-shadow:
+        0 1px 3px var(--glass-shadow),
+        0 8px 24px rgba(var(--sage-rgb), 0.04),
+        inset 0 1px 0 rgba(255,255,255,0.5);
+    }
+
+    /* ── Typography ───────────────────────────────────────── */
+    .page-icon {
+      width: 44px; height: 44px;
+      border-radius: var(--r-md);
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(var(--mint-rgb), 0.35);
+      color: var(--sage);
+      margin-bottom: 16px;
+    }
+    .page-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+    .page-desc {
+      font-size: 12.5px;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+
+    /* ── Form fields ──────────────────────────────────────── */
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 14px;
+    }
+    .field-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .field-hint {
+      font-size: 10.5px;
+      color: var(--text-tertiary);
+      margin-top: -2px;
+    }
+    .optional-tag {
+      font-size: 10px;
+      color: var(--text-tertiary);
+      font-weight: 400;
+    }
+    .field input {
+      padding: 9px 12px;
+      background: rgba(255,255,255,0.6);
+      border: 1px solid rgba(var(--sage-rgb), 0.12);
+      border-radius: var(--r-sm);
+      color: var(--text);
+      font-size: 12.5px;
+      font-family: inherit;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .field input::placeholder { color: var(--text-tertiary); }
+    .field input:focus {
+      outline: none;
+      border-color: rgba(var(--sage-rgb), 0.4);
+      box-shadow: 0 0 0 3px rgba(var(--sage-rgb), 0.08);
+    }
+
+    /* ── Permission badge ─────────────────────────────────── */
+    .perm-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .perm-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 20px;
+    }
+    .perm-badge.granted   { background: rgba(var(--fern-rgb), 0.25); color: var(--active-green); }
+    .perm-badge.denied    { background: rgba(201,89,75,0.1); color: var(--danger); }
+    .perm-badge.unknown   { background: rgba(var(--sage-rgb), 0.08); color: var(--text-tertiary); }
+
+    .perm-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* ── Buttons ───────────────────────────────────────────── */
+    .btn-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 24px;
+    }
+    .btn {
+      padding: 8px 20px;
+      border-radius: 20px;
+      border: 1px solid var(--glass-border);
+      background: rgba(255,255,255,0.6);
+      font-size: 12px;
+      font-weight: 550;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.15s;
+      color: var(--text-secondary);
+    }
+    .btn:hover { background: rgba(255,255,255,0.85); }
+    .btn:active { transform: scale(0.97); }
+
+    .btn-ghost {
+      background: transparent;
+      border-color: transparent;
+      color: var(--text-tertiary);
+    }
+    .btn-ghost:hover {
+      color: var(--text-secondary);
+      background: rgba(var(--sage-rgb), 0.06);
+    }
+
+    .btn-primary {
+      color: #fff;
+      background: var(--sage);
+      border-color: var(--sage);
+    }
+    .btn-primary:hover { background: var(--active-green); border-color: var(--active-green); }
+    .btn-primary:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      background: var(--sage);
+      border-color: var(--sage);
+    }
+    .btn-primary:disabled:hover { background: var(--sage); }
+
+    .btn-outline {
+      color: var(--sage);
+      border-color: rgba(var(--sage-rgb), 0.25);
+      background: rgba(var(--mint-rgb), 0.15);
+    }
+    .btn-outline:hover {
+      background: rgba(var(--mint-rgb), 0.35);
+      border-color: rgba(var(--sage-rgb), 0.35);
+    }
+
+    /* ── Welcome extras ───────────────────────────────────── */
+    .welcome-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .welcome-brand svg { flex-shrink: 0; }
+    .welcome-brand span {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+    .welcome-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 28px;
+      line-height: 1.6;
+    }
+    .welcome-features {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .welcome-feature {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 12.5px;
+      color: var(--text);
+    }
+    .welcome-feature .wf-icon {
+      width: 26px; height: 26px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(var(--mint-rgb), 0.3);
+      color: var(--sage);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+  </style>
+</head>
+<body>
+  <div id="grain"></div>
+  <div class="wrapper">
+
+    <!-- Steps indicator -->
+    <div class="steps" id="steps">
+      <div class="step-dot active" data-step="0"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" data-step="1"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" data-step="2"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" data-step="3"></div>
+      <div class="step-line"></div>
+      <div class="step-dot" data-step="4"></div>
+    </div>
+
+    <!-- Page 0: Welcome -->
+    <div class="page active" data-page="0">
+      <div class="welcome-brand">
+        <svg width="28" height="28" viewBox="0 0 20 20" fill="none">
+          <text x="1" y="17" font-family="sans-serif" font-weight="bold" font-size="11" fill="url(#bGrad)">Z</text>
+          <text x="7" y="13" font-family="sans-serif" font-weight="bold" font-size="8" fill="url(#bGrad)" opacity="0.75">z</text>
+          <text x="12" y="9" font-family="sans-serif" font-weight="bold" font-size="6" fill="url(#bGrad)" opacity="0.5">z</text>
+          <defs><linearGradient id="bGrad" x1="2" y1="2" x2="18" y2="18"><stop stop-color="#84B179"/><stop offset="1" stop-color="#A2CB8B"/></linearGradient></defs>
+        </svg>
+        <span>powerNAP</span>
+      </div>
+      <p class="welcome-subtitle">A few quick steps to get you up and running. This only takes a minute.</p>
+      <div class="glass-card">
+        <div class="welcome-features">
+          <div class="welcome-feature">
+            <div class="wf-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
+            </div>
+            <span>Grant screen recording permission so PowerNap can observe your workflow</span>
+          </div>
+          <div class="welcome-feature">
+            <div class="wf-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v4l3 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 8.5A5.5 5.5 0 1013.5 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </div>
+            <span>Choose your prediction model</span>
+          </div>
+          <div class="welcome-feature">
+            <div class="wf-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 12V7M8 12V4M12 12V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </div>
+            <span>Connect your API keys</span>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <div></div>
+        <button class="btn btn-primary" id="btn-get-started">Get Started</button>
+      </div>
+    </div>
+
+    <!-- Page 1: Google Login -->
+    <div class="page" data-page="1">
+      <div class="page-icon">
+        <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 2.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM8 13c-1.7 0-3.2-.9-4-2.2.02-1.3 2.7-2 4-2s3.98.7 4 2c-.8 1.3-2.3 2.2-4 2.2Z" fill="currentColor"/></svg>
+      </div>
+      <div class="page-title">Sign In</div>
+      <p class="page-desc">Sign in with your Google account so we know who you are.</p>
+
+      <div class="glass-card" style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+        <button class="btn" id="btn-google-login" style="display:flex;align-items:center;gap:10px;padding:10px 24px;background:#fff;border:1px solid #dadce0;border-radius:4px;font-size:14px;font-weight:500;color:#3c4043;cursor:pointer;">
+          <svg width="18" height="18" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.26c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.997 8.997 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 2.58 9 2.58Z" fill="#EA4335"/></svg>
+          Sign in with Google
+        </button>
+        <div id="google-login-status" style="font-size:12.5px;color:var(--text-secondary);text-align:center;min-height:20px;"></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="btn-back-to-0">Back</button>
+        <button class="btn btn-primary" id="btn-google-continue" disabled>Continue</button>
+      </div>
+    </div>
+
+    <!-- Page 2: Screen Recording Permission -->
+    <div class="page" data-page="2">
+      <div class="page-icon">
+        <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
+      </div>
+      <div class="page-title">Screen Recording</div>
+      <p class="page-desc">PowerNap captures your screen to learn your workflow patterns. macOS requires explicit permission for this.</p>
+
+      <div class="glass-card">
+        <div class="perm-row">
+          <span class="perm-badge unknown" id="perm-status">Checking...</span>
+        </div>
+        <div class="perm-actions">
+          <button class="btn btn-outline" id="btn-request-perm">Request Permission</button>
+          <button class="btn btn-outline" id="btn-open-settings">Open System Settings</button>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="btn-back-to-1">Back</button>
+        <button class="btn btn-primary" id="btn-perm-continue" disabled>Continue</button>
+      </div>
+    </div>
+
+    <!-- Page 3: Model Selection -->
+    <div class="page" data-page="3">
+      <div class="page-icon">
+        <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M8 2v4l3 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 8.5A5.5 5.5 0 1013.5 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      </div>
+      <div class="page-title">Model</div>
+      <p class="page-desc">Choose which model PowerNap uses for predictions. Uses LiteLLM format so you can use any supported provider.</p>
+
+      <div class="glass-card">
+        <div class="field">
+          <span class="field-label">LiteLLM Model ID</span>
+          <input type="text" id="model" placeholder="gemini/gemini-3-flash-preview" value="gemini/gemini-3-flash-preview">
+          <span class="field-hint">e.g. gemini/gemini-3-flash-preview, openai/gpt-4o, anthropic/claude-sonnet-4-20250514</span>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="btn-back-to-2">Back</button>
+        <button class="btn btn-primary" id="btn-model-continue">Continue</button>
+      </div>
+    </div>
+
+    <!-- Page 4: API Keys -->
+    <div class="page" data-page="4">
+      <div class="page-icon">
+        <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M4 12V7M8 12V4M12 12V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="page-title">API Keys</div>
+      <p class="page-desc">Enter the API keys for your chosen model provider and any optional integrations.</p>
+
+      <div class="glass-card">
+        <div class="field">
+          <span class="field-label">Model Provider API Key</span>
+          <input type="password" id="gemini-key" placeholder="Enter your API key">
+        </div>
+        <div class="field">
+          <span class="field-label">Tinker API Key <span class="optional-tag">optional</span></span>
+          <input type="password" id="tinker-key" placeholder="Enter your Tinker API key">
+        </div>
+        <div class="field">
+          <span class="field-label">W&amp;B API Key <span class="optional-tag">optional</span></span>
+          <input type="password" id="wandb-key" placeholder="Enter your W&amp;B API key">
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="btn-back-to-3">Back</button>
+        <button class="btn btn-primary" id="btn-submit" disabled>Finish Setup</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const pages = document.querySelectorAll('.page');
+    const dots  = document.querySelectorAll('.step-dot');
+    let current = 0;
+    let googleUserName = '';
+    let googleUserEmail = '';
+
+    function goTo(idx) {
+      pages[current].classList.remove('active');
+      current = idx;
+      // Re-create element to re-trigger animation
+      const page = pages[current];
+      page.classList.add('active');
+
+      dots.forEach((d, i) => {
+        d.classList.remove('active', 'done');
+        if (i < idx) d.classList.add('done');
+        if (i === idx) d.classList.add('active');
+      });
+
+      // Check permission when arriving at page 2
+      if (idx === 2) checkPermission();
+    }
+
+    // ── Navigation buttons ────────────────────────────────
+    document.getElementById('btn-get-started').addEventListener('click', () => goTo(1));
+    document.getElementById('btn-back-to-0').addEventListener('click', () => goTo(0));
+    document.getElementById('btn-google-continue').addEventListener('click', () => goTo(2));
+    document.getElementById('btn-back-to-1').addEventListener('click', () => goTo(1));
+    document.getElementById('btn-perm-continue').addEventListener('click', () => goTo(3));
+    document.getElementById('btn-back-to-2').addEventListener('click', () => goTo(2));
+    document.getElementById('btn-model-continue').addEventListener('click', () => goTo(4));
+    document.getElementById('btn-back-to-3').addEventListener('click', () => goTo(3));
+
+    // ── Google Login (Page 1) ──────────────────────────────
+    const btnGoogleLogin = document.getElementById('btn-google-login');
+    const btnGoogleContinue = document.getElementById('btn-google-continue');
+    const googleLoginStatus = document.getElementById('google-login-status');
+
+    btnGoogleLogin.addEventListener('click', async () => {
+      btnGoogleLogin.disabled = true;
+      googleLoginStatus.textContent = 'Signing in...';
+      googleLoginStatus.style.color = 'var(--text-secondary)';
+      try {
+        const result = await window.powernap.googleLogin();
+        googleUserName = result.name;
+        googleUserEmail = result.email;
+        googleLoginStatus.innerHTML = '<strong>Signed in as ' + result.name + '</strong><br>' + result.email;
+        googleLoginStatus.style.color = 'var(--active-green)';
+        btnGoogleContinue.disabled = false;
+        btnGoogleLogin.style.display = 'none';
+      } catch (err) {
+        googleLoginStatus.textContent = 'Sign in failed. Please try again.';
+        googleLoginStatus.style.color = 'var(--danger)';
+        btnGoogleLogin.disabled = false;
+      }
+    });
+
+    // ── Permission (Page 2) ────────────────────────────────
+    const permStatus = document.getElementById('perm-status');
+    const btnPermContinue = document.getElementById('btn-perm-continue');
+    let screenPermGranted = false;
+
+    function updatePermBadge(status) {
+      permStatus.className = 'perm-badge';
+      screenPermGranted = (status === 'granted');
+      btnPermContinue.disabled = !screenPermGranted;
+
+      if (status === 'granted') {
+        permStatus.classList.add('granted');
+        permStatus.textContent = 'Granted';
+      } else if (status === 'denied' || status === 'restricted') {
+        permStatus.classList.add('denied');
+        permStatus.textContent = status === 'restricted' ? 'Restricted' : 'Not Granted';
+      } else {
+        permStatus.classList.add('unknown');
+        permStatus.textContent = status === 'not-determined' ? 'Not Determined' : status;
+      }
+    }
+
+    async function checkPermission() {
+      const status = await window.powernap.checkScreenPermission();
+      updatePermBadge(status);
+    }
+
+    document.getElementById('btn-request-perm').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-request-perm');
+      btn.disabled = true;
+      btn.textContent = 'Requesting...';
+      try {
+        const status = await window.powernap.requestScreenPermission();
+        updatePermBadge(status);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Request Permission';
+      }
+    });
+    document.getElementById('btn-open-settings').addEventListener('click', () => {
+      window.powernap.openScreenSettings();
+    });
+
+    // ── Model (Page 2) ──────────────────────────────────────
+    const modelInput = document.getElementById('model');
+    const btnModelContinue = document.getElementById('btn-model-continue');
+
+    function updateModelState() {
+      btnModelContinue.disabled = !modelInput.value.trim();
+    }
+    modelInput.addEventListener('input', updateModelState);
+    // Initial state — has default value so enable
+    updateModelState();
+
+    // ── API Keys (Page 3) ───────────────────────────────────
+    const geminiKeyInput = document.getElementById('gemini-key');
+    const btnSubmit = document.getElementById('btn-submit');
+
+    const tinkerKeyInput = document.getElementById('tinker-key');
+    const tinkerHint = document.createElement('span');
+    tinkerHint.className = 'field-hint';
+    tinkerHint.style.color = 'var(--danger)';
+    tinkerKeyInput.parentElement.appendChild(tinkerHint);
+
+    function validateTinkerKey() {
+      const val = tinkerKeyInput.value.trim();
+      if (val && !val.startsWith('tml-')) {
+        tinkerHint.textContent = 'Tinker keys must start with "tml-"';
+        return false;
+      }
+      tinkerHint.textContent = '';
+      return true;
+    }
+
+    function updateSubmitState() {
+      btnSubmit.disabled = !geminiKeyInput.value.trim() || !validateTinkerKey();
+    }
+    geminiKeyInput.addEventListener('input', updateSubmitState);
+    tinkerKeyInput.addEventListener('input', updateSubmitState);
+
+    btnSubmit.addEventListener('click', () => {
+      const data = {
+        reward_llm: modelInput.value.trim() || 'gemini/gemini-3-flash-preview',
+        gemini_api_key: geminiKeyInput.value.trim(),
+        tinker_api_key: document.getElementById('tinker-key').value.trim() || undefined,
+        wandb_api_key: document.getElementById('wandb-key').value.trim() || undefined,
+        user_name: googleUserName || undefined,
+        user_email: googleUserEmail || undefined,
+      };
+      window.powernap.submitOnboarding(data);
+    });
+
+    // Initial permission check
+    checkPermission();
+  </script>
+</body>
+</html>
