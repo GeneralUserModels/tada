@@ -15,6 +15,7 @@ import * as ws from "./ws";
 import * as recorder from "./recorder";
 import { isDev, getDataDir, getPythonPath, getUvPath, getLogDir, getPythonSrcDir } from "./paths";
 import * as bootstrap from "./bootstrap";
+import * as onboarding from "./onboarding";
 
 let serverProc: ChildProcess | null = null;
 
@@ -333,7 +334,16 @@ function launchApp(port: number) {
 
   startServer(port);
 
-  waitForServer(`http://127.0.0.1:${port}/api/status`).then(() => {
+  waitForServer(`http://127.0.0.1:${port}/api/status`).then(async () => {
+    // Push saved onboarding config to the server
+    const config = onboarding.getConfig();
+    if (config) {
+      try {
+        await api.updateSettings(config as unknown as Record<string, unknown>);
+      } catch (err) {
+        console.error("[onboarding] failed to push config to server:", err);
+      }
+    }
     ws.connect();
     dashboardWindow?.webContents.send(IPC.SERVER_READY);
   });
@@ -350,6 +360,11 @@ app.whenReady().then(async () => {
   // In packaged mode, check if bootstrap is needed
   if (!isDev() && !bootstrap.isReady()) {
     await runBootstrap();
+  }
+
+  // Onboarding: collect API keys and model on first launch
+  if (!onboarding.isComplete()) {
+    await onboarding.runOnboarding();
   }
 
   const port = await findFreePort();

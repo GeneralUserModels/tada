@@ -38,4 +38,11 @@ export const IPC = {
 
   // Bootstrap (setup window -> main)
   BOOTSTRAP_RETRY: "bootstrap:retry",
+
+  // Onboarding
+  ONBOARDING_SUBMIT: "onboarding:submit",
+  ONBOARDING_CHECK_SCREEN_PERMISSION: "onboarding:check-screen-permission",
+  ONBOARDING_OPEN_SCREEN_SETTINGS: "onboarding:open-screen-settings",
+  ONBOARDING_REQUEST_SCREEN_PERMISSION: "onboarding:request-screen-permission",
+  ONBOARDING_GOOGLE_LOGIN: "onboarding:google-login",
 } as const;
