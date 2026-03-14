@@ -365,6 +365,7 @@ powernap.onStatusUpdate((data: any) => {
 interface ConnectorInfo {
   enabled: boolean;
   available: boolean;
+  configured: boolean;
 }
 
 const connectorMeta: Record<string, { label: string; desc: string; icon: string }> = {
@@ -409,14 +410,11 @@ async function loadConnectors() {
         actionHtml = info.enabled
           ? '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:rgba(162,203,139,0.2);color:#5DA34E;">Active</span>'
           : '<span style="font-size:10px;color:#9BA896;">Inactive</span>';
-      } else if (name === "calendar" || name === "gmail") {
-        if (connected) {
-          actionHtml = `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:rgba(162,203,139,0.2);color:#5DA34E;">Connected</span>
-                        <button class="pill-btn pill-stop" style="font-size:10px;padding:3px 10px;" data-disconnect-google>Disconnect</button>`;
-        } else {
-          actionHtml = `<button class="pill-btn pill-start" style="font-size:10px;padding:3px 10px;" data-connect-scope="${name}">Connect</button>`;
-        }
+      } else if (!info.configured) {
+        // Never went through OAuth / setup — show Connect button
+        actionHtml = `<button class="pill-btn pill-start" style="font-size:10px;padding:3px 10px;" data-connect-scope="${name}">Connect</button>`;
       } else {
+        // Configured — show on/off toggle
         const checked = info.enabled ? "checked" : "";
         const bg = info.enabled ? '#84B179' : 'rgba(132,177,121,0.15)';
         const knobX = info.enabled ? 'translateX(16px)' : 'translateX(0)';
@@ -453,15 +451,6 @@ async function loadConnectors() {
           // Mark this service as enabled in config
           await powernap.updateConnector(svc, true);
         }
-        loadConnectors();
-      });
-    });
-
-    dashConnectors.querySelectorAll<HTMLElement>("[data-disconnect-google]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        btn.textContent = "Disconnecting...";
-        (btn as HTMLButtonElement).disabled = true;
-        await powernap.connectorDisconnectGoogle();
         loadConnectors();
       });
     });

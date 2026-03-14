@@ -404,9 +404,9 @@ body {
 
 /* ── No-drag on interactive elements ─────────────────────── */
 
-button, input, select, textarea, canvas, a,
+button, input, select, textarea, canvas, a, label,
 .pill-btn, .nav-item, .history-feed, .prediction-body,
-#reward-chart, #history-list {
+#reward-chart, #history-list, #dashboard-connectors {
   -webkit-app-region: no-drag;
   user-select: auto;
 }

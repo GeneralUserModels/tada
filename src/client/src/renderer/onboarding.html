@@ -893,6 +893,10 @@
           notifications: notifToggle.checked,
           filesystem: fsToggle.checked,
         },
+        google_configured: {
+          calendar: calendarConnected,
+          gmail: gmailConnected,
+        },
       };
       window.powernap.submitOnboarding(data);
     });
