@@ -29,6 +29,7 @@ dependencies = [
     "trl",
     "uvicorn[standard]",
     "wandb",
+    "watchdog",
     "websockets",
 ]
 

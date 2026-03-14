@@ -39,6 +39,10 @@ class ServerState:
     # Service tasks
     labeling_task: asyncio.Task | None = None
     training_task: asyncio.Task | None = None
+    context_logging_task: asyncio.Task | None = None
+
+    # Connector instances
+    filesystem_watcher: Any = None
 
     # Inference buffer trimming (logical offset for absolute indexing)
     inference_buffer_trim_offset: int = 0
