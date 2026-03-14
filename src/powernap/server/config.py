@@ -45,6 +45,9 @@ class ServerConfig(BaseModel):
     wandb_project: str = Field(default_factory=lambda: os.getenv("POWERNAP_WANDB_PROJECT", "longnap-online"))
     wandb_run_name: str = Field(default_factory=lambda: os.getenv("POWERNAP_WANDB_RUN_NAME", "longnap-online-env"))
 
+    # GWS CLI path (for Gmail / Calendar connectors)
+    gws_path: str = Field(default_factory=lambda: os.getenv("POWERNAP_GWS_PATH", "gws"))
+
     # Recording persistence
     save_recordings: bool = Field(default_factory=lambda: os.getenv("POWERNAP_SAVE_RECORDINGS", "") == "1")
 

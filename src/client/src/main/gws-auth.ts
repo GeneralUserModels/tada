@@ -75,13 +75,10 @@ export function ensureGwsClientSecret(): void {
   const configDir = path.join(os.homedir(), ".config", "gws");
   const secretPath = path.join(configDir, "client_secret.json");
 
-  // Extract project number from client ID (digits before the first dash)
-  const projectNumber = GOOGLE_CLIENT_ID.split("-")[0];
-
   const expected = {
     installed: {
       client_id: GOOGLE_CLIENT_ID,
-      project_id: `powernap-${projectNumber}`,
+      project_id: "nap-time-490101",
       client_secret: GOOGLE_CLIENT_SECRET,
       auth_uri: "https://accounts.google.com/o/oauth2/auth",
       token_uri: "https://oauth2.googleapis.com/token",
@@ -94,7 +91,7 @@ export function ensureGwsClientSecret(): void {
   if (fs.existsSync(secretPath)) {
     try {
       const existing = JSON.parse(fs.readFileSync(secretPath, "utf-8"));
-      if (existing?.installed?.project_id && existing?.installed?.client_id === GOOGLE_CLIENT_ID) {
+      if (existing?.installed?.project_id === "nap-time-490101" && existing?.installed?.client_id === GOOGLE_CLIENT_ID) {
         return; // Already valid
       }
     } catch { /* corrupt file, overwrite */ }
