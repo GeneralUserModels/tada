@@ -11,9 +11,11 @@ const DB_PATH = path.join(
 );
 
 export function canReadNotifications(): boolean {
+  // Check if the notification DB directory exists (don't check R_OK — that
+  // requires Full Disk Access which may not be granted yet at onboarding time).
   try {
-    fs.accessSync(DB_PATH, fs.constants.R_OK);
-    return true;
+    const dbDir = path.dirname(DB_PATH);
+    return fs.existsSync(dbDir);
   } catch {
     return false;
   }

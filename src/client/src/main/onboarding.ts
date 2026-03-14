@@ -91,8 +91,18 @@ export function runOnboarding(): Promise<void> {
     };
 
     const handleRequestScreenPermission = async () => {
-      await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } });
-      return systemPreferences.getMediaAccessStatus("screen");
+      // Use a real thumbnail size so macOS registers the capture attempt
+      try {
+        await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 320, height: 240 } });
+      } catch {}
+      const status = systemPreferences.getMediaAccessStatus("screen");
+      // On macOS Sequoia+, open System Settings directly so the user can toggle it
+      if (status !== "granted") {
+        shell.openExternal(
+          "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        );
+      }
+      return status;
     };
 
     const handleOpenSettings = () => {
