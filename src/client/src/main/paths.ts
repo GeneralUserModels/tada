@@ -29,6 +29,10 @@ export function getLogDir(): string {
   return path.join(getDataDir(), "logs-app");
 }
 
+export function getGwsPath(): string {
+  return path.join(getDataDir(), "gws");
+}
+
 export function getPythonSrcDir(): string {
   return isDev()
     ? path.join(getDataDir(), "src")

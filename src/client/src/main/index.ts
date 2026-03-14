@@ -16,6 +16,7 @@ import * as recorder from "./recorder";
 import { isDev, getDataDir, getPythonPath, getUvPath, getLogDir, getPythonSrcDir } from "./paths";
 import * as bootstrap from "./bootstrap";
 import * as onboarding from "./onboarding";
+import { setupConnectorIpc } from "./connector-manager";
 
 let serverProc: ChildProcess | null = null;
 
@@ -339,7 +340,7 @@ function launchApp(port: number) {
     const config = onboarding.getConfig();
     if (config) {
       try {
-        const { user_name, user_email, ...serverConfig } = config as unknown as Record<string, unknown>;
+        const { user_name, user_email, connectors, ...serverConfig } = config as unknown as Record<string, unknown>;
         await api.updateSettings(serverConfig);
       } catch (err) {
         console.error("[onboarding] failed to push config to server:", err);
@@ -357,6 +358,7 @@ function launchApp(port: number) {
 app.whenReady().then(async () => {
   app.dock?.show();
   setupIpc();
+  setupConnectorIpc();
 
   // In packaged mode, check if bootstrap is needed
   if (!isDev() && !bootstrap.isReady()) {

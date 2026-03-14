@@ -37,6 +37,10 @@
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
           History
         </button>
+        <button class="nav-item" data-panel="connectors-view">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 2v3H3v6h3v3h4v-3h3V5h-3V2H6z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          Connectors
+        </button>
         <button class="nav-item" data-panel="settings-view">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
           Settings
@@ -143,6 +147,13 @@
             <h2>Activity Log</h2>
           </div>
           <div id="history-list" class="history-feed"></div>
+        </section>
+      </div>
+
+      <!-- Connectors View -->
+      <div id="connectors-view" class="view">
+        <section class="glass-card">
+          <div id="dashboard-connectors" style="display:flex;flex-direction:column;gap:2px;"></div>
         </section>
       </div>
 

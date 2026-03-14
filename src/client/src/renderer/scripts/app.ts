@@ -148,6 +148,11 @@ document.querySelectorAll<HTMLButtonElement>(".nav-item").forEach((btn) => {
     if (panelId === "view-dashboard" && rewardHistory.length > 0) {
       requestAnimationFrame(() => drawChart());
     }
+
+    // Load connector status when switching to connectors view
+    if (panelId === "connectors-view") {
+      loadConnectors();
+    }
   });
 });
 
@@ -354,6 +359,130 @@ powernap.onStatusUpdate((data: any) => {
   statLabels.textContent = String(data.labels_processed ?? 0);
   statBuffer.textContent = String(data.inference_buffer_size ?? 0);
 });
+
+// ── Connectors ───────────────────────────────────────────
+
+interface ConnectorInfo {
+  enabled: boolean;
+  available: boolean;
+}
+
+const connectorMeta: Record<string, { label: string; desc: string; icon: string }> = {
+  screen:        { label: "Screen Recording",  desc: "Captures your screen to observe workflow",       icon: "monitor" },
+  calendar:      { label: "Google Calendar",    desc: "Read your upcoming events for context",          icon: "calendar" },
+  gmail:         { label: "Gmail",              desc: "Read recent emails for context",                 icon: "mail" },
+  notifications: { label: "Notifications",      desc: "Read macOS notification history",                icon: "bell" },
+  filesystem:    { label: "Filesystem",         desc: "Watch Desktop, Documents, Downloads",            icon: "folder" },
+};
+
+const connectorIcons: Record<string, string> = {
+  monitor:  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>',
+  calendar: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M2 6.5h12" stroke="currentColor" stroke-width="1.3"/><path d="M5 1.5v3M11 1.5v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  mail:     '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 4.5L8 9l6.5-4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  bell:     '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6a4 4 0 018 0v3l1.5 2H2.5L4 9V6z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.5 13a1.5 1.5 0 003 0" stroke="currentColor" stroke-width="1.3"/></svg>',
+  folder:   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
+};
+
+const dashConnectors = $("dashboard-connectors");
+
+async function loadConnectors() {
+  try {
+    const status = (await powernap.getConnectorStatus()) as Record<string, ConnectorInfo>;
+    dashConnectors.innerHTML = "";
+
+    // Determine which Google services are currently connected (for scope management)
+    const calendarOn = status.calendar?.enabled && status.calendar?.available;
+    const gmailOn = status.gmail?.enabled && status.gmail?.available;
+
+    for (const [name, info] of Object.entries(status)) {
+      const meta = connectorMeta[name];
+      if (!meta) continue;
+
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;";
+
+      const iconHtml = connectorIcons[meta.icon] || "";
+      const connected = info.enabled && info.available;
+
+      let actionHtml = "";
+      if (name === "screen") {
+        actionHtml = info.enabled
+          ? '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:rgba(162,203,139,0.2);color:#5DA34E;">Active</span>'
+          : '<span style="font-size:10px;color:#9BA896;">Inactive</span>';
+      } else if (name === "calendar" || name === "gmail") {
+        if (connected) {
+          actionHtml = `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:rgba(162,203,139,0.2);color:#5DA34E;">Connected</span>
+                        <button class="pill-btn pill-stop" style="font-size:10px;padding:3px 10px;" data-disconnect-google>Disconnect</button>`;
+        } else {
+          actionHtml = `<button class="pill-btn pill-start" style="font-size:10px;padding:3px 10px;" data-connect-scope="${name}">Connect</button>`;
+        }
+      } else {
+        const checked = info.enabled ? "checked" : "";
+        const bg = info.enabled ? '#84B179' : 'rgba(132,177,121,0.15)';
+        const knobX = info.enabled ? 'translateX(16px)' : 'translateX(0)';
+        actionHtml = `<label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;">
+          <input type="checkbox" ${checked} data-connector="${name}" style="opacity:0;width:0;height:0;position:absolute;">
+          <span style="position:absolute;inset:0;background:${bg};border-radius:20px;transition:background 0.2s;"></span>
+          <span style="position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:transform 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.15);transform:${knobX};"></span>
+        </label>`;
+      }
+
+      row.innerHTML = `
+        <div style="width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:rgba(199,234,187,0.3);color:#84B179;flex-shrink:0;">${iconHtml}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12.5px;font-weight:600;">${escapeHtml(meta.label)}</div>
+          <div style="font-size:11px;color:#9BA896;">${escapeHtml(meta.desc)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">${actionHtml}</div>
+      `;
+      dashConnectors.appendChild(row);
+    }
+
+    // Bind Google connect buttons (scope-aware)
+    dashConnectors.querySelectorAll<HTMLElement>("[data-connect-scope]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const svc = (btn as HTMLElement).dataset.connectScope!;
+        // Preserve existing Google scopes when adding a new one
+        const otherOn = svc === "calendar" ? gmailOn : calendarOn;
+        const scope = otherOn ? "calendar,gmail" : svc;
+
+        btn.textContent = "Connecting...";
+        (btn as HTMLButtonElement).disabled = true;
+        const ok = await powernap.connectorConnectGoogle(scope);
+        if (ok) {
+          // Mark this service as enabled in config
+          await powernap.updateConnector(svc, true);
+        }
+        loadConnectors();
+      });
+    });
+
+    dashConnectors.querySelectorAll<HTMLElement>("[data-disconnect-google]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.textContent = "Disconnecting...";
+        (btn as HTMLButtonElement).disabled = true;
+        await powernap.connectorDisconnectGoogle();
+        loadConnectors();
+      });
+    });
+
+    dashConnectors.querySelectorAll<HTMLInputElement>("[data-connector]").forEach((input) => {
+      input.addEventListener("change", async () => {
+        // Immediately update toggle visuals
+        const label = input.closest("label");
+        if (label) {
+          const track = label.children[1] as HTMLElement;
+          const knob = label.children[2] as HTMLElement;
+          if (track) track.style.background = input.checked ? '#84B179' : 'rgba(132,177,121,0.15)';
+          if (knob) knob.style.transform = input.checked ? 'translateX(16px)' : 'translateX(0)';
+        }
+        await powernap.updateConnector(input.dataset.connector!, input.checked);
+      });
+    });
+  } catch {
+    dashConnectors.innerHTML = '<div style="color:#9BA896;font-size:12px;padding:12px;">Unable to load connector status.</div>';
+  }
+}
 
 // ── Initial fetch ────────────────────────────────────────────
 
