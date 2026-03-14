@@ -52,7 +52,16 @@
       { "from": "../../pyproject.toml", "to": "python-src/pyproject.toml" }
     ],
     "dmg": {
-      "title": "PowerNap"
+      "title": "PowerNap",
+      "iconSize": 80,
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        { "x": 140, "y": 190 },
+        { "x": 400, "y": 190, "type": "link", "path": "/Applications" }
+      ]
     }
   }
 }

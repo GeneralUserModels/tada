@@ -60,6 +60,18 @@ contextBridge.exposeInMainWorld("powernap", {
   requestScreenPermission: () =>
     ipcRenderer.invoke("onboarding:request-screen-permission"),
 
+  // Onboarding connectors
+  connectGoogle: (scope?: string) => ipcRenderer.invoke("onboarding:connect-google", scope),
+  checkNotifications: () => ipcRenderer.invoke("onboarding:check-notifications"),
+  checkFilesystem: () => ipcRenderer.invoke("onboarding:check-filesystem"),
+
+  // Dashboard connectors
+  getConnectorStatus: () => ipcRenderer.invoke("connector:status"),
+  connectorConnectGoogle: (scope?: string) => ipcRenderer.invoke("connector:connect-google", scope),
+  connectorDisconnectGoogle: () => ipcRenderer.invoke("connector:disconnect-google"),
+  updateConnector: (name: string, enabled: boolean) =>
+    ipcRenderer.invoke("connector:update", name, enabled),
+
   // Bootstrap
   onBootstrapProgress: (cb: (msg: string, pct: number) => void) =>
     ipcRenderer.on("bootstrap:progress", (_e, msg, pct) => cb(msg, pct)),

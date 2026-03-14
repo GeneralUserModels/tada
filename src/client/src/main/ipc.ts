@@ -45,4 +45,15 @@ export const IPC = {
   ONBOARDING_OPEN_SCREEN_SETTINGS: "onboarding:open-screen-settings",
   ONBOARDING_REQUEST_SCREEN_PERMISSION: "onboarding:request-screen-permission",
   ONBOARDING_GOOGLE_LOGIN: "onboarding:google-login",
+
+  // Connectors (onboarding)
+  ONBOARDING_CONNECT_GOOGLE: "onboarding:connect-google",
+  ONBOARDING_CHECK_NOTIFICATIONS: "onboarding:check-notifications",
+  ONBOARDING_CHECK_FILESYSTEM: "onboarding:check-filesystem",
+
+  // Connectors (dashboard)
+  CONNECTOR_STATUS: "connector:status",
+  CONNECTOR_CONNECT_GOOGLE: "connector:connect-google",
+  CONNECTOR_DISCONNECT_GOOGLE: "connector:disconnect-google",
+  CONNECTOR_UPDATE: "connector:update",
 } as const;
