@@ -1,5 +1,6 @@
 """FastAPI application with CORS, lifespan, and route registration."""
 
+import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -53,9 +54,21 @@ def _restore_step_from_checkpoint(state: ServerState) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize shared state on startup, clean up on shutdown."""
+    from connectors.filesystem.watcher import FilesystemWatcher
+    from powernap.server.services.context_logging import run_context_logging_service
+
     state = ServerState()
     if state.config.resume_from_checkpoint:
         _restore_step_from_checkpoint(state)
+
+    # Start filesystem watcher
+    fs_watcher = FilesystemWatcher()
+    fs_watcher.start()
+    state.filesystem_watcher = fs_watcher
+
+    # Start context logging service
+    state.context_logging_task = asyncio.create_task(run_context_logging_service(state))
+
     app.state.server = state
     logger.info("PowerNap server started")
     yield
@@ -66,9 +79,13 @@ async def lifespan(app: FastAPI):
     state.training_active = False
     state.inference_active = False
 
-    for task in [state.labeling_task, state.training_task]:
+    for task in [state.labeling_task, state.training_task, state.context_logging_task]:
         if task and not task.done():
             task.cancel()
+
+    # Stop filesystem watcher
+    if state.filesystem_watcher:
+        state.filesystem_watcher.stop()
 
     # Close all WebSocket connections
     for ws in list(state.ws_connections):

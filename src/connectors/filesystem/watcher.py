@@ -1,9 +1,11 @@
 """Watch ~/Desktop, ~/Documents, ~/Downloads for filesystem changes using watchdog."""
+from __future__ import annotations
 
 import json
 import os
 import sys
 import time
+import threading
 
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
@@ -16,6 +18,11 @@ WATCH_DIRS = [
 
 
 class _Handler(FileSystemEventHandler):
+    def __init__(self, event_buffer: list | None = None, lock: threading.Lock | None = None):
+        super().__init__()
+        self._buffer = event_buffer
+        self._lock = lock
+
     def on_any_event(self, event: FileSystemEvent) -> None:
         if event.is_directory:
             return
@@ -24,16 +31,22 @@ class _Handler(FileSystemEventHandler):
             "path": event.src_path,
             "timestamp": time.time(),
         }
-        sys.stdout.write(json.dumps(record) + "\n")
-        sys.stdout.flush()
+        if self._buffer is not None:
+            with self._lock:
+                self._buffer.append(record)
+        else:
+            sys.stdout.write(json.dumps(record) + "\n")
+            sys.stdout.flush()
 
 
 class FilesystemWatcher:
-    """Watches user directories and outputs JSON lines to stdout."""
+    """Watches user directories and accumulates events in a buffer."""
 
     def __init__(self) -> None:
+        self._events: list[dict] = []
+        self._lock = threading.Lock()
         self._observer = Observer()
-        self._handler = _Handler()
+        self._handler = _Handler(event_buffer=self._events, lock=self._lock)
 
     def start(self) -> None:
         for d in WATCH_DIRS:
@@ -45,12 +58,24 @@ class FilesystemWatcher:
         self._observer.stop()
         self._observer.join()
 
+    def drain_events(self) -> list[dict]:
+        """Return accumulated events and clear the buffer."""
+        with self._lock:
+            events = self._events.copy()
+            self._events.clear()
+        return events
+
 
 if __name__ == "__main__":
-    watcher = FilesystemWatcher()
-    watcher.start()
+    handler = _Handler()
+    observer = Observer()
+    for d in WATCH_DIRS:
+        if os.path.isdir(d):
+            observer.schedule(handler, d, recursive=False)
+    observer.start()
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        watcher.stop()
+        observer.stop()
+        observer.join()
