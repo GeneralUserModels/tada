@@ -28,6 +28,7 @@ interface OnboardingConfig {
   user_name?: string;
   user_email?: string;
   connectors: ConnectorState;
+  google_configured?: { calendar: boolean; gmail: boolean };
 }
 
 function getSentinelPath(): string {
