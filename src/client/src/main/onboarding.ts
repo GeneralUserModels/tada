@@ -2,12 +2,23 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import { app, BrowserWindow, desktopCapturer, ipcMain, shell, systemPreferences } from "electron";
 import { getDataDir } from "./paths";
 import { IPC } from "./ipc";
 import { startGoogleLogin } from "./google-auth";
+import { connectGoogle } from "./gws-auth";
+import { canReadNotifications } from "./notifications";
 import { upsertUser } from "./supabase";
 import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth-config";
+
+export interface ConnectorState {
+  screen: boolean;
+  calendar: boolean;
+  gmail: boolean;
+  notifications: boolean;
+  filesystem: boolean;
+}
 
 interface OnboardingConfig {
   reward_llm: string;
@@ -16,6 +27,7 @@ interface OnboardingConfig {
   wandb_api_key?: string;
   user_name?: string;
   user_email?: string;
+  connectors: ConnectorState;
 }
 
 function getSentinelPath(): string {
@@ -46,11 +58,21 @@ function saveConfig(data: OnboardingConfig): void {
   fs.writeFileSync(getSentinelPath(), new Date().toISOString(), "utf-8");
 }
 
+function canWatchFilesystem(): boolean {
+  const dirs = ["Desktop", "Documents", "Downloads"];
+  return dirs.some(d => {
+    try {
+      fs.accessSync(path.join(os.homedir(), d), fs.constants.R_OK);
+      return true;
+    } catch { return false; }
+  });
+}
+
 export function runOnboarding(): Promise<void> {
   return new Promise<void>((resolve) => {
     const win = new BrowserWindow({
       width: 520,
-      height: 620,
+      height: 720,
       title: "PowerNap",
       titleBarStyle: "hiddenInset",
       backgroundColor: "#F4F2EE",
@@ -92,6 +114,18 @@ export function runOnboarding(): Promise<void> {
       }
     };
 
+    const handleConnectGoogle = async (_e: Electron.IpcMainInvokeEvent, scope?: string) => {
+      return connectGoogle(scope || "calendar,gmail");
+    };
+
+    const handleCheckNotifications = () => {
+      return canReadNotifications();
+    };
+
+    const handleCheckFilesystem = () => {
+      return canWatchFilesystem();
+    };
+
     const handleSubmit = (_e: Electron.IpcMainInvokeEvent, data: OnboardingConfig) => {
       saveConfig(data);
       win.close();
@@ -104,6 +138,9 @@ export function runOnboarding(): Promise<void> {
       ipcMain.removeHandler(IPC.ONBOARDING_OPEN_SCREEN_SETTINGS);
       ipcMain.removeHandler(IPC.ONBOARDING_REQUEST_SCREEN_PERMISSION);
       ipcMain.removeHandler(IPC.ONBOARDING_GOOGLE_LOGIN);
+      ipcMain.removeHandler(IPC.ONBOARDING_CONNECT_GOOGLE);
+      ipcMain.removeHandler(IPC.ONBOARDING_CHECK_NOTIFICATIONS);
+      ipcMain.removeHandler(IPC.ONBOARDING_CHECK_FILESYSTEM);
       ipcMain.removeHandler(IPC.ONBOARDING_SUBMIT);
     }
 
@@ -111,6 +148,9 @@ export function runOnboarding(): Promise<void> {
     ipcMain.handle(IPC.ONBOARDING_OPEN_SCREEN_SETTINGS, handleOpenSettings);
     ipcMain.handle(IPC.ONBOARDING_REQUEST_SCREEN_PERMISSION, handleRequestScreenPermission);
     ipcMain.handle(IPC.ONBOARDING_GOOGLE_LOGIN, handleGoogleLogin);
+    ipcMain.handle(IPC.ONBOARDING_CONNECT_GOOGLE, handleConnectGoogle);
+    ipcMain.handle(IPC.ONBOARDING_CHECK_NOTIFICATIONS, handleCheckNotifications);
+    ipcMain.handle(IPC.ONBOARDING_CHECK_FILESYSTEM, handleCheckFilesystem);
     ipcMain.handle(IPC.ONBOARDING_SUBMIT, handleSubmit);
 
     win.on("closed", () => {

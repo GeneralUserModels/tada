@@ -35,6 +35,12 @@ interface PowerNapAPI {
 
   // Overlay resize
   resizeOverlay: (height: number) => void;
+
+  // Dashboard connectors
+  getConnectorStatus: () => Promise<unknown>;
+  connectorConnectGoogle: (scope?: string) => Promise<unknown>;
+  connectorDisconnectGoogle: () => Promise<unknown>;
+  updateConnector: (name: string, enabled: boolean) => Promise<unknown>;
 }
 
 declare const powernap: PowerNapAPI;

@@ -212,6 +212,86 @@
       flex-wrap: wrap;
     }
 
+    /* ── Connector list ────────────────────────────────────── */
+    .connector-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .connector-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: var(--r-sm);
+      transition: background 0.15s;
+    }
+    .connector-row:hover { background: rgba(var(--sage-rgb), 0.04); }
+    .connector-icon {
+      width: 28px; height: 28px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(var(--mint-rgb), 0.3);
+      color: var(--sage);
+      flex-shrink: 0;
+    }
+    .connector-info { flex: 1; min-width: 0; }
+    .connector-name { font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .connector-desc { font-size: 11px; color: var(--text-tertiary); }
+    .connector-action { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .required-tag {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(201,89,75,0.08);
+      color: var(--danger);
+    }
+    .connected-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: rgba(var(--fern-rgb), 0.2);
+      color: var(--active-green);
+    }
+    .btn-sm {
+      padding: 5px 14px;
+      font-size: 11px;
+    }
+
+    /* Toggle switch */
+    .toggle {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: rgba(var(--sage-rgb), 0.15);
+      border-radius: 20px;
+      transition: background 0.2s;
+    }
+    .toggle-slider::before {
+      content: "";
+      position: absolute;
+      height: 14px; width: 14px;
+      left: 3px; bottom: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    }
+    .toggle input:checked + .toggle-slider { background: var(--sage); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(16px); }
+    .toggle input:disabled + .toggle-slider { opacity: 0.4; cursor: not-allowed; }
+
     /* ── Buttons ───────────────────────────────────────────── */
     .btn-row {
       display: flex;
@@ -390,27 +470,103 @@
       </div>
     </div>
 
-    <!-- Page 2: Screen Recording Permission -->
+    <!-- Page 2: Connectors -->
     <div class="page" data-page="2">
       <div class="page-icon">
-        <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
+        <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M6 2v3H3v6h3v3h4v-3h3V5h-3V2H6z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none"/></svg>
       </div>
-      <div class="page-title">Screen Recording</div>
-      <p class="page-desc">PowerNap captures your screen to learn your workflow patterns. macOS requires explicit permission for this.</p>
+      <div class="page-title">Connectors</div>
+      <p class="page-desc">Choose which data sources PowerNap can access to learn your patterns.</p>
 
-      <div class="glass-card">
-        <div class="perm-row">
-          <span class="perm-badge unknown" id="perm-status">Checking...</span>
-        </div>
-        <div class="perm-actions">
-          <button class="btn btn-outline" id="btn-request-perm">Request Permission</button>
-          <button class="btn btn-outline" id="btn-open-settings">Open System Settings</button>
+      <div class="glass-card" style="padding:16px;">
+        <div class="connector-list">
+          <!-- Screen Recording (required) -->
+          <div class="connector-row" id="conn-screen">
+            <div class="connector-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
+            </div>
+            <div class="connector-info">
+              <div class="connector-name">Screen Recording <span class="required-tag">Required</span></div>
+              <div class="connector-desc">Captures your screen to observe workflow</div>
+            </div>
+            <div class="connector-action">
+              <span class="perm-badge unknown" id="conn-screen-status">Checking...</span>
+              <button class="btn btn-outline btn-sm" id="conn-screen-request">Grant</button>
+              <button class="btn btn-outline btn-sm" id="conn-screen-settings" style="display:none;">Settings</button>
+            </div>
+          </div>
+
+          <!-- Google Calendar -->
+          <div class="connector-row" id="conn-calendar">
+            <div class="connector-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M2 6.5h12" stroke="currentColor" stroke-width="1.3"/><path d="M5 1.5v3M11 1.5v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </div>
+            <div class="connector-info">
+              <div class="connector-name">Google Calendar</div>
+              <div class="connector-desc">Read your upcoming events for context</div>
+              <div class="connector-desc" id="conn-google-status" style="display:none;font-weight:500;"></div>
+            </div>
+            <div class="connector-action">
+              <span class="connected-badge" id="conn-google-badge" style="display:none;">Connected</span>
+              <button class="btn btn-outline btn-sm" id="conn-google-btn">Connect</button>
+            </div>
+          </div>
+
+          <!-- Gmail -->
+          <div class="connector-row" id="conn-gmail">
+            <div class="connector-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 4.5L8 9l6.5-4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="connector-info">
+              <div class="connector-name">Gmail</div>
+              <div class="connector-desc">Read recent emails for context</div>
+              <div class="connector-desc" id="conn-gmail-status" style="display:none;font-weight:500;"></div>
+            </div>
+            <div class="connector-action">
+              <span class="connected-badge" id="conn-gmail-badge" style="display:none;">Connected</span>
+              <button class="btn btn-outline btn-sm" id="conn-gmail-btn">Connect</button>
+            </div>
+          </div>
+
+          <!-- Notifications -->
+          <div class="connector-row" id="conn-notifications">
+            <div class="connector-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6a4 4 0 018 0v3l1.5 2H2.5L4 9V6z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.5 13a1.5 1.5 0 003 0" stroke="currentColor" stroke-width="1.3"/></svg>
+            </div>
+            <div class="connector-info">
+              <div class="connector-name">Notifications</div>
+              <div class="connector-desc">Read macOS notification history</div>
+            </div>
+            <div class="connector-action">
+              <label class="toggle">
+                <input type="checkbox" id="conn-notif-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Filesystem -->
+          <div class="connector-row" id="conn-filesystem">
+            <div class="connector-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="connector-info">
+              <div class="connector-name">Filesystem</div>
+              <div class="connector-desc">Watch Desktop, Documents, Downloads</div>
+            </div>
+            <div class="connector-action">
+              <label class="toggle">
+                <input type="checkbox" id="conn-fs-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
 
       <div class="btn-row">
         <button class="btn btn-ghost" id="btn-back-to-1">Back</button>
-        <button class="btn btn-primary" id="btn-perm-continue" disabled>Continue</button>
+        <button class="btn btn-primary" id="btn-connectors-continue" disabled>Continue</button>
       </div>
     </div>
 
@@ -487,8 +643,11 @@
         if (i === idx) d.classList.add('active');
       });
 
-      // Check permission when arriving at page 2
-      if (idx === 2) checkPermission();
+      // Check connectors when arriving at page 2
+      if (idx === 2) {
+        checkPermission();
+        checkConnectorAvailability();
+      }
     }
 
     // ── Navigation buttons ────────────────────────────────
@@ -496,7 +655,7 @@
     document.getElementById('btn-back-to-0').addEventListener('click', () => goTo(0));
     document.getElementById('btn-google-continue').addEventListener('click', () => goTo(2));
     document.getElementById('btn-back-to-1').addEventListener('click', () => goTo(1));
-    document.getElementById('btn-perm-continue').addEventListener('click', () => goTo(3));
+    document.getElementById('btn-connectors-continue').addEventListener('click', () => goTo(3));
     document.getElementById('btn-back-to-2').addEventListener('click', () => goTo(2));
     document.getElementById('btn-model-continue').addEventListener('click', () => goTo(4));
     document.getElementById('btn-back-to-3').addEventListener('click', () => goTo(3));
@@ -525,48 +684,137 @@
       }
     });
 
-    // ── Permission (Page 2) ────────────────────────────────
-    const permStatus = document.getElementById('perm-status');
-    const btnPermContinue = document.getElementById('btn-perm-continue');
+    // ── Connectors (Page 2) ──────────────────────────────────
+    const connScreenStatus = document.getElementById('conn-screen-status');
+    const btnConnectorsContinue = document.getElementById('btn-connectors-continue');
     let screenPermGranted = false;
+    let calendarConnected = false;
+    let gmailConnected = false;
 
-    function updatePermBadge(status) {
-      permStatus.className = 'perm-badge';
+    function updateScreenBadge(status) {
+      connScreenStatus.className = 'perm-badge';
       screenPermGranted = (status === 'granted');
-      btnPermContinue.disabled = !screenPermGranted;
+      btnConnectorsContinue.disabled = !screenPermGranted;
+
+      const grantBtn = document.getElementById('conn-screen-request');
+      const settingsBtn = document.getElementById('conn-screen-settings');
 
       if (status === 'granted') {
-        permStatus.classList.add('granted');
-        permStatus.textContent = 'Granted';
+        connScreenStatus.classList.add('granted');
+        connScreenStatus.textContent = 'Granted';
+        grantBtn.style.display = 'none';
+        settingsBtn.style.display = 'none';
       } else if (status === 'denied' || status === 'restricted') {
-        permStatus.classList.add('denied');
-        permStatus.textContent = status === 'restricted' ? 'Restricted' : 'Not Granted';
+        connScreenStatus.classList.add('denied');
+        connScreenStatus.textContent = status === 'restricted' ? 'Restricted' : 'Not Granted';
+        grantBtn.style.display = 'none';
+        settingsBtn.style.display = '';
       } else {
-        permStatus.classList.add('unknown');
-        permStatus.textContent = status === 'not-determined' ? 'Not Determined' : status;
+        connScreenStatus.classList.add('unknown');
+        connScreenStatus.textContent = status === 'not-determined' ? 'Not Determined' : status;
+        grantBtn.style.display = '';
+        settingsBtn.style.display = 'none';
       }
     }
 
     async function checkPermission() {
       const status = await window.powernap.checkScreenPermission();
-      updatePermBadge(status);
+      updateScreenBadge(status);
     }
 
-    document.getElementById('btn-request-perm').addEventListener('click', async () => {
-      const btn = document.getElementById('btn-request-perm');
+    document.getElementById('conn-screen-request').addEventListener('click', async () => {
+      const btn = document.getElementById('conn-screen-request');
       btn.disabled = true;
       btn.textContent = 'Requesting...';
       try {
         const status = await window.powernap.requestScreenPermission();
-        updatePermBadge(status);
+        updateScreenBadge(status);
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Request Permission';
+        btn.textContent = 'Grant';
       }
     });
-    document.getElementById('btn-open-settings').addEventListener('click', () => {
+
+    document.getElementById('conn-screen-settings').addEventListener('click', () => {
       window.powernap.openScreenSettings();
     });
+
+    // Google Calendar Connect button
+    document.getElementById('conn-google-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('conn-google-btn');
+      const statusEl = document.getElementById('conn-google-status');
+      btn.disabled = true;
+      btn.textContent = 'Connecting...';
+      statusEl.textContent = 'Complete sign-in in your browser...';
+      statusEl.style.display = '';
+      statusEl.style.color = 'var(--sage)';
+      try {
+        const scope = gmailConnected ? 'calendar,gmail' : 'calendar';
+        const ok = await window.powernap.connectGoogle(scope);
+        if (ok) {
+          calendarConnected = true;
+          btn.style.display = 'none';
+          statusEl.style.display = 'none';
+          document.getElementById('conn-google-badge').style.display = '';
+        } else {
+          statusEl.textContent = 'Connection failed. Please try again.';
+          statusEl.style.color = 'var(--danger)';
+          btn.textContent = 'Retry';
+          btn.disabled = false;
+        }
+      } catch {
+        statusEl.textContent = 'Connection failed. Please try again.';
+        statusEl.style.color = 'var(--danger)';
+        btn.textContent = 'Retry';
+        btn.disabled = false;
+      }
+    });
+
+    // Gmail Connect button
+    document.getElementById('conn-gmail-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('conn-gmail-btn');
+      const statusEl = document.getElementById('conn-gmail-status');
+      btn.disabled = true;
+      btn.textContent = 'Connecting...';
+      statusEl.textContent = 'Complete sign-in in your browser...';
+      statusEl.style.display = '';
+      statusEl.style.color = 'var(--sage)';
+      try {
+        const scope = calendarConnected ? 'calendar,gmail' : 'gmail';
+        const ok = await window.powernap.connectGoogle(scope);
+        if (ok) {
+          gmailConnected = true;
+          btn.style.display = 'none';
+          statusEl.style.display = 'none';
+          document.getElementById('conn-gmail-badge').style.display = '';
+        } else {
+          statusEl.textContent = 'Connection failed. Please try again.';
+          statusEl.style.color = 'var(--danger)';
+          btn.textContent = 'Retry';
+          btn.disabled = false;
+        }
+      } catch {
+        statusEl.textContent = 'Connection failed. Please try again.';
+        statusEl.style.color = 'var(--danger)';
+        btn.textContent = 'Retry';
+        btn.disabled = false;
+      }
+    });
+
+    // Check notifications/filesystem availability on page enter
+    async function checkConnectorAvailability() {
+      // Notifications — enable and auto-check if DB is readable
+      const notifAvailable = await window.powernap.checkNotifications();
+      const notifToggle = document.getElementById('conn-notif-toggle');
+      notifToggle.disabled = !notifAvailable;
+      if (notifAvailable) notifToggle.checked = true;
+
+      // Filesystem — enable and auto-check if dirs exist
+      const fsAvailable = await window.powernap.checkFilesystem();
+      const fsToggle = document.getElementById('conn-fs-toggle');
+      fsToggle.disabled = !fsAvailable;
+      if (fsAvailable) fsToggle.checked = true;
+    }
 
     // ── Model (Page 2) ──────────────────────────────────────
     const modelInput = document.getElementById('model');
@@ -606,6 +854,9 @@
     tinkerKeyInput.addEventListener('input', updateSubmitState);
 
     btnSubmit.addEventListener('click', () => {
+      const notifToggle = document.getElementById('conn-notif-toggle');
+      const fsToggle = document.getElementById('conn-fs-toggle');
+
       const data = {
         reward_llm: modelInput.value.trim() || 'gemini/gemini-3-flash-preview',
         gemini_api_key: geminiKeyInput.value.trim(),
@@ -613,12 +864,17 @@
         wandb_api_key: document.getElementById('wandb-key').value.trim() || undefined,
         user_name: googleUserName || undefined,
         user_email: googleUserEmail || undefined,
+        connectors: {
+          screen: screenPermGranted,
+          calendar: calendarConnected,
+          gmail: gmailConnected,
+          notifications: notifToggle.checked,
+          filesystem: fsToggle.checked,
+        },
       };
       window.powernap.submitOnboarding(data);
     });
 
-    // Initial permission check
-    checkPermission();
   </script>
 </body>
 </html>
