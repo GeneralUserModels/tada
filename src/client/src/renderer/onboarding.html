@@ -717,9 +717,30 @@
       }
     }
 
+    let screenPollInterval = null;
+
+    function startScreenPoll() {
+      if (screenPollInterval) return;
+      screenPollInterval = setInterval(async () => {
+        const s = await window.powernap.checkScreenPermission();
+        if (s === 'granted') {
+          clearInterval(screenPollInterval);
+          screenPollInterval = null;
+          updateScreenBadge(s);
+        }
+      }, 1000);
+    }
+
     async function checkPermission() {
       const status = await window.powernap.checkScreenPermission();
       updateScreenBadge(status);
+      // Auto-request if not granted — triggers capture attempt + opens Settings
+      if (status !== 'granted') {
+        const newStatus = await window.powernap.requestScreenPermission();
+        updateScreenBadge(newStatus);
+        // Poll until user grants it in System Settings
+        if (newStatus !== 'granted') startScreenPoll();
+      }
     }
 
     document.getElementById('conn-screen-request').addEventListener('click', async () => {
@@ -729,6 +750,7 @@
       try {
         const status = await window.powernap.requestScreenPermission();
         updateScreenBadge(status);
+        if (status !== 'granted') startScreenPoll();
       } finally {
         btn.disabled = false;
         btn.textContent = 'Grant';
