@@ -21,6 +21,18 @@ function saveConnectorState(connectors: ConnectorState): void {
   }
 }
 
+function saveGoogleConfigured(googleConfigured: { calendar: boolean; gmail: boolean }): void {
+  const configPath = path.join(getDataDir(), "powernap-config.json");
+  try {
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const config = JSON.parse(raw);
+    config.google_configured = googleConfigured;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+  } catch {
+    // Config file missing or corrupt — skip
+  }
+}
+
 export function setupConnectorIpc(): void {
   ipcMain.handle(IPC.CONNECTOR_STATUS, () => {
     const config = getConfig();
@@ -30,28 +42,40 @@ export function setupConnectorIpc(): void {
     };
     const googleConnected = isGoogleConnected();
     return {
-      screen: { enabled: connectors.screen, available: true },
-      calendar: { enabled: connectors.calendar, available: googleConnected },
-      gmail: { enabled: connectors.gmail, available: googleConnected },
-      notifications: { enabled: connectors.notifications, available: canReadNotifications() },
-      filesystem: { enabled: connectors.filesystem, available: true },
+      screen: { enabled: connectors.screen, available: true, configured: true },
+      calendar: { enabled: connectors.calendar, available: googleConnected, configured: config?.google_configured?.calendar ?? false },
+      gmail: { enabled: connectors.gmail, available: googleConnected, configured: config?.google_configured?.gmail ?? false },
+      notifications: { enabled: connectors.notifications, available: canReadNotifications(), configured: true },
+      filesystem: { enabled: connectors.filesystem, available: true, configured: true },
     };
   });
 
   ipcMain.handle(IPC.CONNECTOR_CONNECT_GOOGLE, async (_e, scope?: string) => {
-    return connectGoogle(scope || "calendar,gmail");
+    const s = scope || "calendar,gmail";
+    const ok = await connectGoogle(s);
+    if (ok) {
+      const cfg = getConfig();
+      if (cfg) {
+        const gc = cfg.google_configured ?? { calendar: false, gmail: false };
+        if (s.includes("calendar")) gc.calendar = true;
+        if (s.includes("gmail")) gc.gmail = true;
+        saveGoogleConfigured(gc);
+      }
+    }
+    return ok;
   });
 
   ipcMain.handle(IPC.CONNECTOR_DISCONNECT_GOOGLE, async () => {
     const ok = await disconnectGoogle();
     if (ok) {
-      // Credentials removed — mark both Google services as disabled
+      // Credentials removed — mark both Google services as disabled and unconfigured
       const config = getConfig();
       if (config?.connectors) {
         config.connectors.calendar = false;
         config.connectors.gmail = false;
         saveConnectorState(config.connectors);
       }
+      saveGoogleConfigured({ calendar: false, gmail: false });
     }
     return ok;
   });
