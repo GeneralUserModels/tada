@@ -473,6 +473,30 @@ async function loadConnectors() {
   }
 }
 
+// ── Auto-update banner ───────────────────────────────────────
+
+const updateBanner = $("update-banner");
+const updateMessage = $("update-message");
+const btnUpdateDownload = $("btn-update-download") as HTMLButtonElement;
+const btnUpdateDismiss = $("btn-update-dismiss") as HTMLButtonElement;
+let pendingReleaseUrl = "";
+
+powernap.onUpdateAvailable((data: any) => {
+  pendingReleaseUrl = data.releaseUrl || "";
+  updateMessage.textContent = `Version ${data.version} is available`;
+  updateBanner.style.display = "flex";
+});
+
+btnUpdateDownload.addEventListener("click", () => {
+  if (pendingReleaseUrl) {
+    powernap.openReleasePage(pendingReleaseUrl);
+  }
+});
+
+btnUpdateDismiss.addEventListener("click", () => {
+  updateBanner.style.display = "none";
+});
+
 // ── Initial fetch ────────────────────────────────────────────
 
 powernap.onServerReady(async () => {

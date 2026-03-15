@@ -17,6 +17,7 @@ import { isDev, getDataDir, getPythonPath, getUvPath, getLogDir, getPythonSrcDir
 import * as bootstrap from "./bootstrap";
 import * as onboarding from "./onboarding";
 import { setupConnectorIpc } from "./connector-manager";
+import { initAutoUpdater, openReleasePage, checkForUpdates } from "./updater";
 
 let serverProc: ChildProcess | null = null;
 
@@ -292,6 +293,10 @@ function setupIpc() {
   ipcMain.on("overlay:resize", (_e, height: number) => {
     resizeOverlay(height);
   });
+
+  // Auto-update
+  ipcMain.handle(IPC.UPDATE_OPEN_RELEASE, (_e, url: string) => openReleasePage(url));
+  ipcMain.handle(IPC.UPDATE_CHECK, () => checkForUpdates());
 }
 
 // ── Bootstrap ────────────────────────────────────────────────
@@ -336,6 +341,10 @@ function launchApp(port: number) {
   createDashboard();
   createOverlay();
   setupWsForwarding();
+
+  if (!isDev() && dashboardWindow) {
+    initAutoUpdater(dashboardWindow);
+  }
 
   startServer(port);
 
