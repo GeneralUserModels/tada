@@ -88,6 +88,7 @@ async def run_context_logging_service(state) -> None:
         items = await asyncio.to_thread(_fetch_email, config.gws_path, seen_email)
         _save_seen(seen_dir / "email.json", seen_email)
         if not items:
+            logger.info("Email: no new items")
             return
         filtered = await asyncio.to_thread(_filter_with_llm, items, "email", config.label_model)
         for item in filtered:
@@ -103,6 +104,7 @@ async def run_context_logging_service(state) -> None:
         items = await asyncio.to_thread(_fetch_notifications, seen_notif)
         _save_seen(seen_dir / "notifications.json", seen_notif)
         if not items:
+            logger.info("Notifications: no new items")
             return
         filtered = await asyncio.to_thread(_filter_with_llm, items, "notifications", config.label_model)
         for item in filtered:
@@ -114,12 +116,12 @@ async def run_context_logging_service(state) -> None:
         logger.info(f"Notifications: fetched {len(items)}, kept {len(filtered)}")
 
     async def do_filesystem():
-        if not state.filesystem_watcher:
-            return
+        logger.info("Polling filesystem...")
         events = state.filesystem_watcher.drain_events()
         items = _dedup_filesys_events(events, seen_filesys)
         _save_seen(seen_dir / "filesys.json", seen_filesys)
         if not items:
+            logger.info("Filesystem: no new events")
             return
         logger.info(f"Filtering {len(items)} filesystem events...")
         filtered = await asyncio.to_thread(_filter_with_llm, items, "filesystem changes", config.label_model)
@@ -143,6 +145,8 @@ async def run_context_logging_service(state) -> None:
             })
         if events:
             logger.info(f"Calendar: saved {len(events)} events")
+        else:
+            logger.info("Calendar: no new events")
 
     logger.info("Context logging service started")
     await asyncio.gather(
@@ -156,6 +160,7 @@ async def run_context_logging_service(state) -> None:
 def _fetch_email(gws_path: str, seen: set[str]) -> list[dict]:
     from connectors.gmail import get_recent_emails
     emails = get_recent_emails(gws_path)
+    logger.info("_fetch_email: get_recent_emails returned %d, seen set size %d", len(emails), len(seen))
     new = [e for e in emails if e["id"] and e["id"] not in seen]
     for e in new:
         seen.add(e["id"])
