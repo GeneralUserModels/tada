@@ -40,16 +40,20 @@ def _save_seen(path: Path, seen: set) -> None:
     path.write_text(json.dumps(list(seen)))
 
 
-def _filter_with_llm(items: list[dict], source: str, model: str) -> list[dict]:
+def _filter_with_llm(items: list[dict], source: str, model: str, batch_size: int = 20) -> list[dict]:
     if not items:
         return []
-    response = litellm_completion(
-        model=f"gemini/{model}",
-        messages=[{"role": "user", "content": FILTER_PROMPT.format(
-            source=source, items_json=json.dumps(items)
-        )}],
-    )
-    return json.loads(response.choices[0].message.content)
+    results = []
+    for i in range(0, len(items), batch_size):
+        batch = items[i:i + batch_size]
+        response = litellm_completion(
+            model=f"gemini/{model}",
+            messages=[{"role": "user", "content": FILTER_PROMPT.format(
+                source=source, items_json=json.dumps(batch)
+            )}],
+        )
+        results.extend(json.loads(response.choices[0].message.content))
+    return results
 
 
 async def run_context_logging_service(state) -> None:
@@ -86,7 +90,6 @@ async def run_context_logging_service(state) -> None:
     async def do_email():
         logger.info("Polling email...")
         items = await asyncio.to_thread(_fetch_email, config.gws_path, seen_email)
-        _save_seen(seen_dir / "email.json", seen_email)
         if not items:
             logger.info("Email: no new items")
             return
@@ -97,12 +100,15 @@ async def run_context_logging_service(state) -> None:
                 "text": item.get("summary", ""),
                 "source": item,
             })
+        for item in items:
+            seen_email.add(item["id"])
+        _trim_seen(seen_email)
+        _save_seen(seen_dir / "email.json", seen_email)
         logger.info(f"Email: fetched {len(items)}, kept {len(filtered)}")
 
     async def do_notifications():
         logger.info("Polling notifications...")
         items = await asyncio.to_thread(_fetch_notifications, seen_notif)
-        _save_seen(seen_dir / "notifications.json", seen_notif)
         if not items:
             logger.info("Notifications: no new items")
             return
@@ -113,13 +119,16 @@ async def run_context_logging_service(state) -> None:
                 "text": item.get("summary", ""),
                 "source": item,
             })
+        for item in items:
+            seen_notif.add(item["id"])
+        _trim_seen(seen_notif)
+        _save_seen(seen_dir / "notifications.json", seen_notif)
         logger.info(f"Notifications: fetched {len(items)}, kept {len(filtered)}")
 
     async def do_filesystem():
         logger.info("Polling filesystem...")
         events = state.filesystem_watcher.drain_events()
         items = _dedup_filesys_events(events, seen_filesys)
-        _save_seen(seen_dir / "filesys.json", seen_filesys)
         if not items:
             logger.info("Filesystem: no new events")
             return
@@ -131,12 +140,15 @@ async def run_context_logging_service(state) -> None:
                 "text": item.get("summary", ""),
                 "source": item,
             })
+        for item in items:
+            seen_filesys.add(item["_seen_key"])
+        _trim_seen(seen_filesys)
+        _save_seen(seen_dir / "filesys.json", seen_filesys)
         logger.info(f"Filesystem: fetched {len(items)}, kept {len(filtered)}")
 
     async def do_calendar():
         logger.info("Polling calendar...")
         events = await asyncio.to_thread(_fetch_calendar, config.gws_path, seen_calendar)
-        _save_seen(seen_dir / "calendar.json", seen_calendar)
         for evt in events:
             _append_jsonl(calendar_path, {
                 "timestamp": time.time(),
@@ -144,6 +156,10 @@ async def run_context_logging_service(state) -> None:
                 "source": evt,
             })
         if events:
+            for evt in events:
+                seen_calendar.add(evt["id"])
+            _trim_seen(seen_calendar)
+            _save_seen(seen_dir / "calendar.json", seen_calendar)
             logger.info(f"Calendar: saved {len(events)} events")
         else:
             logger.info("Calendar: no new events")
@@ -161,31 +177,19 @@ def _fetch_email(gws_path: str, seen: set[str]) -> list[dict]:
     from connectors.gmail import get_recent_emails
     emails = get_recent_emails(gws_path)
     logger.info("_fetch_email: get_recent_emails returned %d, seen set size %d", len(emails), len(seen))
-    new = [e for e in emails if e["id"] and e["id"] not in seen]
-    for e in new:
-        seen.add(e["id"])
-    _trim_seen(seen)
-    return new
+    return [e for e in emails if e["id"] and e["id"] not in seen]
 
 
 def _fetch_notifications(seen: set[int]) -> list[dict]:
     from connectors.notifications.reader import get_recent_notifications
     notifs = get_recent_notifications()
-    new = [n for n in notifs if n["id"] not in seen]
-    for n in new:
-        seen.add(n["id"])
-    _trim_seen(seen)
-    return new
+    return [n for n in notifs if n["id"] not in seen]
 
 
 def _fetch_calendar(gws_path: str, seen: set[str]) -> list[dict]:
     from connectors.calendar import get_upcoming_events
     events = get_upcoming_events(gws_path)
-    new = [e for e in events if e["id"] and e["id"] not in seen]
-    for e in new:
-        seen.add(e["id"])
-    _trim_seen(seen)
-    return new
+    return [e for e in events if e["id"] and e["id"] not in seen]
 
 
 def _dedup_filesys_events(events: list[dict], seen: set[str]) -> list[dict]:
@@ -193,9 +197,8 @@ def _dedup_filesys_events(events: list[dict], seen: set[str]) -> list[dict]:
     for e in events:
         key = hashlib.md5(f"{e['path']}:{e['type']}:{e['timestamp']}".encode()).hexdigest()
         if key not in seen:
-            seen.add(key)
+            e["_seen_key"] = key
             new.append(e)
-    _trim_seen(seen)
     return new
 
 
