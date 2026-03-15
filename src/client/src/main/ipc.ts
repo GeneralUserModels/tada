@@ -56,4 +56,10 @@ export const IPC = {
   CONNECTOR_CONNECT_GOOGLE: "connector:connect-google",
   CONNECTOR_DISCONNECT_GOOGLE: "connector:disconnect-google",
   CONNECTOR_UPDATE: "connector:update",
+
+  // Auto-update
+  UPDATE_AVAILABLE: "update:available",
+  UPDATE_ERROR: "update:error",
+  UPDATE_OPEN_RELEASE: "update:open-release",
+  UPDATE_CHECK: "update:check",
 } as const;

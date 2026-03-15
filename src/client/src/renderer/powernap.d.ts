@@ -41,6 +41,12 @@ interface PowerNapAPI {
   connectorConnectGoogle: (scope?: string) => Promise<unknown>;
   connectorDisconnectGoogle: () => Promise<unknown>;
   updateConnector: (name: string, enabled: boolean) => Promise<unknown>;
+
+  // Auto-update
+  onUpdateAvailable: (cb: (data: any) => void) => void;
+  onUpdateError: (cb: (msg: string) => void) => void;
+  openReleasePage: (url: string) => Promise<unknown>;
+  checkForUpdates: () => Promise<unknown>;
 }
 
 declare const powernap: PowerNapAPI;
