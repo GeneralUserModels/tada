@@ -202,6 +202,7 @@ def _dedup_filesys_events(events: list[dict], seen: set[str]) -> list[dict]:
     return new
 
 
-def _trim_seen(seen: set, max_size: int = 10_000) -> None:
+def _trim_seen(seen: set, max_size: int = 10_000, keep: int = 9_000) -> None:
     if len(seen) > max_size:
-        seen.clear()
+        to_remove = list(seen)[: len(seen) - keep]
+        seen.difference_update(to_remove)
