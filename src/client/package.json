@@ -1,6 +1,6 @@
 {
   "name": "powernap",
-  "version": "0.1.0",
+  "version": "0.0.1-alpha",
   "description": "PowerNap — predict what you'll do next",
   "author": "PowerNap",
   "main": "dist/main/index.js",
@@ -9,18 +9,20 @@
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && npm run copy-static",
     "start": "npm run build && electron dist/main/index.js",
     "dev": "npm run build && electron dist/main/index.js",
-    "dist": "npm run build && npx electron-builder --mac --publish never"
+    "dist": "npm run build && npx electron-builder --mac --publish never",
+    "release": "npm run build && npx electron-builder --mac --publish always"
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "electron": "^33.0.0",
-    "typescript": "^5.6.0",
+    "@electron/notarize": "^2.0.0",
     "@types/node": "^22.0.0",
     "@types/ws": "^8.5.0",
+    "electron": "^33.0.0",
     "electron-builder": "^25.0.0",
-    "@electron/notarize": "^2.0.0"
+    "typescript": "^5.6.0"
   },
   "build": {
     "appId": "com.powernap.app",
@@ -36,21 +38,37 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": "dmg",
-      "hardenedRuntime": true,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
+      "target": ["dmg", "zip"],
+      "identity": null,
       "extendInfo": {
         "NSScreenCaptureUsageDescription": "PowerNap needs screen recording to observe your workflow.",
         "NSAccessibilityUsageDescription": "PowerNap needs accessibility access to track input events."
       }
     },
     "extraResources": [
-      { "from": "../../src/powernap", "to": "python-src/powernap" },
-      { "from": "../../src/connectors", "to": "python-src/connectors" },
-      { "from": "bootstrap/requirements.txt", "to": "python-src/requirements.txt" },
-      { "from": "../../pyproject.toml", "to": "python-src/pyproject.toml" }
+      {
+        "from": "../../src/powernap",
+        "to": "python-src/powernap"
+      },
+      {
+        "from": "../../src/connectors",
+        "to": "python-src/connectors"
+      },
+      {
+        "from": "bootstrap/requirements.txt",
+        "to": "python-src/requirements.txt"
+      },
+      {
+        "from": "../../pyproject.toml",
+        "to": "python-src/pyproject.toml"
+      }
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "GeneralUserModels",
+      "repo": "powernap-release"
+    },
+    "afterPack": "./build/afterPack.js",
     "dmg": {
       "title": "PowerNap",
       "iconSize": 80,
@@ -59,8 +77,16 @@
         "height": 380
       },
       "contents": [
-        { "x": 140, "y": 190 },
-        { "x": 400, "y": 190, "type": "link", "path": "/Applications" }
+        {
+          "x": 140,
+          "y": 190
+        },
+        {
+          "x": 400,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     }
   }
