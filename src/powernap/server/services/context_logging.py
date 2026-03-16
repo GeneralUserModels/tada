@@ -71,12 +71,16 @@ async def run_context_logging_service(state) -> None:
     notif_path = log_dir / "notifications" / "filtered.jsonl"
     filesys_path = log_dir / "filesys" / "filtered.jsonl"
     calendar_path = log_dir / "calendar" / "events.jsonl"
+    outlook_email_path = log_dir / "outlook_email" / "filtered.jsonl"
+    outlook_calendar_path = log_dir / "outlook_calendar" / "events.jsonl"
 
     seen_dir = log_dir / ".seen"
     seen_email = _load_seen(seen_dir / "email.json")
     seen_notif = _load_seen(seen_dir / "notifications.json")
     seen_calendar = _load_seen(seen_dir / "calendar.json")
     seen_filesys = _load_seen(seen_dir / "filesys.json")
+    seen_outlook_email = _load_seen(seen_dir / "outlook_email.json")
+    seen_outlook_calendar = _load_seen(seen_dir / "outlook_calendar.json")
 
     async def poll_loop(name: str, interval: int, fn):
         """Run fn() immediately then every interval seconds. Log errors, keep retrying."""
@@ -164,12 +168,55 @@ async def run_context_logging_service(state) -> None:
         else:
             logger.info("Calendar: no new events")
 
+    async def do_outlook_email():
+        if not config.outlook_token_path:
+            return
+        logger.info("Polling Outlook email...")
+        items = await asyncio.to_thread(_fetch_outlook_email, config.outlook_token_path, seen_outlook_email)
+        if not items:
+            logger.info("Outlook email: no new items")
+            return
+        filtered = await asyncio.to_thread(_filter_with_llm, items, "email", config.label_model)
+        for item in filtered:
+            _append_jsonl(outlook_email_path, {
+                "timestamp": time.time(),
+                "text": item.get("summary", ""),
+                "source": item,
+            })
+        for item in items:
+            seen_outlook_email.add(item["id"])
+        _trim_seen(seen_outlook_email)
+        _save_seen(seen_dir / "outlook_email.json", seen_outlook_email)
+        logger.info(f"Outlook email: fetched {len(items)}, kept {len(filtered)}")
+
+    async def do_outlook_calendar():
+        if not config.outlook_token_path:
+            return
+        logger.info("Polling Outlook calendar...")
+        events = await asyncio.to_thread(_fetch_outlook_calendar, config.outlook_token_path, seen_outlook_calendar)
+        for evt in events:
+            _append_jsonl(outlook_calendar_path, {
+                "timestamp": time.time(),
+                "text": evt.get("summary", ""),
+                "source": evt,
+            })
+        if events:
+            for evt in events:
+                seen_outlook_calendar.add(evt["id"])
+            _trim_seen(seen_outlook_calendar)
+            _save_seen(seen_dir / "outlook_calendar.json", seen_outlook_calendar)
+            logger.info(f"Outlook calendar: saved {len(events)} events")
+        else:
+            logger.info("Outlook calendar: no new events")
+
     logger.info("Context logging service started")
     await asyncio.gather(
         poll_loop("email", 300, do_email),
         poll_loop("notifications", 120, do_notifications),
         poll_loop("filesystem", 120, do_filesystem),
         poll_loop("calendar", 900, do_calendar),
+        poll_loop("outlook_email", 300, do_outlook_email),
+        poll_loop("outlook_calendar", 900, do_outlook_calendar),
     )
 
 
@@ -200,6 +247,19 @@ def _dedup_filesys_events(events: list[dict], seen: set[str]) -> list[dict]:
             e["_seen_key"] = key
             new.append(e)
     return new
+
+
+def _fetch_outlook_email(token_path: str, seen: set[str]) -> list[dict]:
+    from connectors.outlook_email import get_recent_emails
+    emails = get_recent_emails(token_path)
+    logger.info("_fetch_outlook_email: returned %d, seen set size %d", len(emails), len(seen))
+    return [e for e in emails if e["id"] and e["id"] not in seen]
+
+
+def _fetch_outlook_calendar(token_path: str, seen: set[str]) -> list[dict]:
+    from connectors.outlook_calendar import get_upcoming_events
+    events = get_upcoming_events(token_path)
+    return [e for e in events if e["id"] and e["id"] not in seen]
 
 
 def _trim_seen(seen: set, max_size: int = 10_000, keep: int = 9_000) -> None:

@@ -40,6 +40,8 @@ interface PowerNapAPI {
   getConnectorStatus: () => Promise<unknown>;
   connectorConnectGoogle: (scope?: string) => Promise<unknown>;
   connectorDisconnectGoogle: () => Promise<unknown>;
+  connectorConnectOutlook: () => Promise<unknown>;
+  connectorDisconnectOutlook: () => Promise<unknown>;
   updateConnector: (name: string, enabled: boolean) => Promise<unknown>;
 
   // Auto-update

@@ -48,6 +48,7 @@ export const IPC = {
 
   // Connectors (onboarding)
   ONBOARDING_CONNECT_GOOGLE: "onboarding:connect-google",
+  ONBOARDING_CONNECT_OUTLOOK: "onboarding:connect-outlook",
   ONBOARDING_CHECK_NOTIFICATIONS: "onboarding:check-notifications",
   ONBOARDING_CHECK_FILESYSTEM: "onboarding:check-filesystem",
 
@@ -55,6 +56,8 @@ export const IPC = {
   CONNECTOR_STATUS: "connector:status",
   CONNECTOR_CONNECT_GOOGLE: "connector:connect-google",
   CONNECTOR_DISCONNECT_GOOGLE: "connector:disconnect-google",
+  CONNECTOR_CONNECT_OUTLOOK: "connector:connect-outlook",
+  CONNECTOR_DISCONNECT_OUTLOOK: "connector:disconnect-outlook",
   CONNECTOR_UPDATE: "connector:update",
 
   // Auto-update

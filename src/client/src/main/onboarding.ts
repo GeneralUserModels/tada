@@ -8,6 +8,7 @@ import { getDataDir } from "./paths";
 import { IPC } from "./ipc";
 import { startGoogleLogin } from "./google-auth";
 import { connectGoogle } from "./gws-auth";
+import { connectOutlook } from "./outlook-auth";
 import { canReadNotifications } from "./notifications";
 import { upsertUser } from "./supabase";
 import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth-config";
@@ -16,6 +17,8 @@ export interface ConnectorState {
   screen: boolean;
   calendar: boolean;
   gmail: boolean;
+  outlook_calendar: boolean;
+  outlook_email: boolean;
   notifications: boolean;
   filesystem: boolean;
 }
@@ -29,6 +32,7 @@ interface OnboardingConfig {
   user_email?: string;
   connectors: ConnectorState;
   google_configured?: { calendar: boolean; gmail: boolean };
+  outlook_configured?: { calendar: boolean; email: boolean };
 }
 
 function getSentinelPath(): string {
@@ -129,6 +133,10 @@ export function runOnboarding(): Promise<void> {
       return connectGoogle(scope || "calendar,gmail");
     };
 
+    const handleConnectOutlook = async () => {
+      return connectOutlook();
+    };
+
     const handleCheckNotifications = () => {
       return canReadNotifications();
     };
@@ -150,6 +158,7 @@ export function runOnboarding(): Promise<void> {
       ipcMain.removeHandler(IPC.ONBOARDING_REQUEST_SCREEN_PERMISSION);
       ipcMain.removeHandler(IPC.ONBOARDING_GOOGLE_LOGIN);
       ipcMain.removeHandler(IPC.ONBOARDING_CONNECT_GOOGLE);
+      ipcMain.removeHandler(IPC.ONBOARDING_CONNECT_OUTLOOK);
       ipcMain.removeHandler(IPC.ONBOARDING_CHECK_NOTIFICATIONS);
       ipcMain.removeHandler(IPC.ONBOARDING_CHECK_FILESYSTEM);
       ipcMain.removeHandler(IPC.ONBOARDING_SUBMIT);
@@ -160,6 +169,7 @@ export function runOnboarding(): Promise<void> {
     ipcMain.handle(IPC.ONBOARDING_REQUEST_SCREEN_PERMISSION, handleRequestScreenPermission);
     ipcMain.handle(IPC.ONBOARDING_GOOGLE_LOGIN, handleGoogleLogin);
     ipcMain.handle(IPC.ONBOARDING_CONNECT_GOOGLE, handleConnectGoogle);
+    ipcMain.handle(IPC.ONBOARDING_CONNECT_OUTLOOK, handleConnectOutlook);
     ipcMain.handle(IPC.ONBOARDING_CHECK_NOTIFICATIONS, handleCheckNotifications);
     ipcMain.handle(IPC.ONBOARDING_CHECK_FILESYSTEM, handleCheckFilesystem);
     ipcMain.handle(IPC.ONBOARDING_SUBMIT, handleSubmit);

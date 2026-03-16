@@ -2,6 +2,7 @@
 
 import { app } from "electron";
 import * as path from "path";
+import * as os from "os";
 
 export function isDev(): boolean {
   return !app.isPackaged;
@@ -37,4 +38,8 @@ export function getPythonSrcDir(): string {
   return isDev()
     ? path.join(getDataDir(), "src")
     : path.join(process.resourcesPath!, "python-src");
+}
+
+export function getOutlookTokenPath(): string {
+  return path.join(os.homedir(), ".config", "powernap", "outlook-token.json");
 }
