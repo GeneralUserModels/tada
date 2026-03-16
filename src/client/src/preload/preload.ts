@@ -62,6 +62,7 @@ contextBridge.exposeInMainWorld("powernap", {
 
   // Onboarding connectors
   connectGoogle: (scope?: string) => ipcRenderer.invoke("onboarding:connect-google", scope),
+  connectOutlook: () => ipcRenderer.invoke("onboarding:connect-outlook"),
   checkNotifications: () => ipcRenderer.invoke("onboarding:check-notifications"),
   checkFilesystem: () => ipcRenderer.invoke("onboarding:check-filesystem"),
 
@@ -69,6 +70,8 @@ contextBridge.exposeInMainWorld("powernap", {
   getConnectorStatus: () => ipcRenderer.invoke("connector:status"),
   connectorConnectGoogle: (scope?: string) => ipcRenderer.invoke("connector:connect-google", scope),
   connectorDisconnectGoogle: () => ipcRenderer.invoke("connector:disconnect-google"),
+  connectorConnectOutlook: () => ipcRenderer.invoke("connector:connect-outlook"),
+  connectorDisconnectOutlook: () => ipcRenderer.invoke("connector:disconnect-outlook"),
   updateConnector: (name: string, enabled: boolean) =>
     ipcRenderer.invoke("connector:update", name, enabled),
 

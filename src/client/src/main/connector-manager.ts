@@ -5,6 +5,7 @@ import { ipcMain } from "electron";
 import { IPC } from "./ipc";
 import { getConfig, ConnectorState } from "./onboarding";
 import { isGoogleConnected, connectGoogle, disconnectGoogle } from "./gws-auth";
+import { isOutlookConnected, connectOutlook, disconnectOutlook } from "./outlook-auth";
 import { canReadNotifications } from "./notifications";
 import { getDataDir } from "./paths";
 import * as path from "path";
@@ -33,18 +34,34 @@ function saveGoogleConfigured(googleConfigured: { calendar: boolean; gmail: bool
   }
 }
 
+function saveOutlookConfigured(outlookConfigured: { calendar: boolean; email: boolean }): void {
+  const configPath = path.join(getDataDir(), "powernap-config.json");
+  try {
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const config = JSON.parse(raw);
+    config.outlook_configured = outlookConfigured;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+  } catch {
+    // Config file missing or corrupt — skip
+  }
+}
+
 export function setupConnectorIpc(): void {
   ipcMain.handle(IPC.CONNECTOR_STATUS, () => {
     const config = getConfig();
     const connectors = config?.connectors ?? {
       screen: false, calendar: false, gmail: false,
+      outlook_calendar: false, outlook_email: false,
       notifications: false, filesystem: false,
     };
     const googleConnected = isGoogleConnected();
+    const outlookConnected = isOutlookConnected();
     return {
       screen: { enabled: connectors.screen, available: true, configured: true },
       calendar: { enabled: connectors.calendar, available: googleConnected, configured: config?.google_configured?.calendar ?? false },
       gmail: { enabled: connectors.gmail, available: googleConnected, configured: config?.google_configured?.gmail ?? false },
+      outlook_calendar: { enabled: connectors.outlook_calendar, available: outlookConnected, configured: (config as any)?.outlook_configured?.calendar ?? false },
+      outlook_email: { enabled: connectors.outlook_email, available: outlookConnected, configured: (config as any)?.outlook_configured?.email ?? false },
       notifications: { enabled: connectors.notifications, available: canReadNotifications(), configured: true },
       filesystem: { enabled: connectors.filesystem, available: true, configured: true },
     };
@@ -76,6 +93,34 @@ export function setupConnectorIpc(): void {
         saveConnectorState(config.connectors);
       }
       saveGoogleConfigured({ calendar: false, gmail: false });
+    }
+    return ok;
+  });
+
+  ipcMain.handle(IPC.CONNECTOR_CONNECT_OUTLOOK, async () => {
+    const ok = await connectOutlook();
+    if (ok) {
+      saveOutlookConfigured({ calendar: true, email: true });
+      const config = getConfig();
+      if (config?.connectors) {
+        config.connectors.outlook_calendar = true;
+        config.connectors.outlook_email = true;
+        saveConnectorState(config.connectors);
+      }
+    }
+    return ok;
+  });
+
+  ipcMain.handle(IPC.CONNECTOR_DISCONNECT_OUTLOOK, async () => {
+    const ok = await disconnectOutlook();
+    if (ok) {
+      const config = getConfig();
+      if (config?.connectors) {
+        config.connectors.outlook_calendar = false;
+        config.connectors.outlook_email = false;
+        saveConnectorState(config.connectors);
+      }
+      saveOutlookConfigured({ calendar: false, email: false });
     }
     return ok;
   });

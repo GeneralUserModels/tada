@@ -48,6 +48,9 @@ class ServerConfig(BaseModel):
     # GWS CLI path (for Gmail / Calendar connectors)
     gws_path: str = Field(default_factory=lambda: os.getenv("POWERNAP_GWS_PATH", "gws"))
 
+    # Outlook token path (for Outlook Email / Calendar connectors)
+    outlook_token_path: str = Field(default_factory=lambda: os.getenv("POWERNAP_OUTLOOK_TOKEN_PATH", ""))
+
     # Recording persistence
     save_recordings: bool = Field(default_factory=lambda: os.getenv("POWERNAP_SAVE_RECORDINGS", "") == "1")
 

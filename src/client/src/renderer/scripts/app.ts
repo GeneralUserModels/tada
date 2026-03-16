@@ -369,11 +369,13 @@ interface ConnectorInfo {
 }
 
 const connectorMeta: Record<string, { label: string; desc: string; icon: string }> = {
-  screen:        { label: "Screen Recording",  desc: "Captures your screen to observe workflow",       icon: "monitor" },
-  calendar:      { label: "Google Calendar",    desc: "Read your upcoming events for context",          icon: "calendar" },
-  gmail:         { label: "Gmail",              desc: "Read recent emails for context",                 icon: "mail" },
-  notifications: { label: "Notifications",      desc: "Read macOS notification history",                icon: "bell" },
-  filesystem:    { label: "Filesystem",         desc: "Watch Desktop, Documents, Downloads",            icon: "folder" },
+  screen:           { label: "Screen Recording",  desc: "Captures your screen to observe workflow",       icon: "monitor" },
+  calendar:         { label: "Google Calendar",    desc: "Read your upcoming events for context",          icon: "calendar" },
+  gmail:            { label: "Gmail",              desc: "Read recent emails for context",                 icon: "mail" },
+  outlook_calendar: { label: "Outlook Calendar",   desc: "Read your upcoming Outlook events for context",  icon: "calendar" },
+  outlook_email:    { label: "Outlook Email",      desc: "Read recent Outlook emails for context",         icon: "mail" },
+  notifications:    { label: "Notifications",      desc: "Read macOS notification history",                icon: "bell" },
+  filesystem:       { label: "Filesystem",         desc: "Watch Desktop, Documents, Downloads",            icon: "folder" },
 };
 
 const connectorIcons: Record<string, string> = {
@@ -410,6 +412,9 @@ async function loadConnectors() {
         actionHtml = info.enabled
           ? '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:rgba(162,203,139,0.2);color:#5DA34E;">Active</span>'
           : '<span style="font-size:10px;color:#9BA896;">Inactive</span>';
+      } else if (!info.configured && name.startsWith("outlook_")) {
+        // Outlook — use shared Microsoft auth
+        actionHtml = `<button class="pill-btn pill-start" style="font-size:10px;padding:3px 10px;" data-connect-outlook="${name}">Connect</button>`;
       } else if (!info.configured) {
         // Never went through OAuth / setup — show Connect button
         actionHtml = `<button class="pill-btn pill-start" style="font-size:10px;padding:3px 10px;" data-connect-scope="${name}">Connect</button>`;
@@ -450,6 +455,20 @@ async function loadConnectors() {
         if (ok) {
           // Mark this service as enabled in config
           await powernap.updateConnector(svc, true);
+        }
+        loadConnectors();
+      });
+    });
+
+    // Bind Outlook connect buttons
+    dashConnectors.querySelectorAll<HTMLElement>("[data-connect-outlook]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.textContent = "Connecting...";
+        (btn as HTMLButtonElement).disabled = true;
+        const ok = await powernap.connectorConnectOutlook();
+        if (ok) {
+          await powernap.updateConnector("outlook_calendar", true);
+          await powernap.updateConnector("outlook_email", true);
         }
         loadConnectors();
       });

@@ -528,6 +528,38 @@
             </div>
           </div>
 
+          <!-- Outlook Calendar -->
+          <div class="connector-row" id="conn-outlook-calendar">
+            <div class="connector-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M2 6.5h12" stroke="currentColor" stroke-width="1.3"/><path d="M5 1.5v3M11 1.5v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </div>
+            <div class="connector-info">
+              <div class="connector-name">Outlook Calendar</div>
+              <div class="connector-desc">Read your upcoming Outlook events for context</div>
+              <div class="connector-desc" id="conn-outlook-status" style="display:none;font-weight:500;"></div>
+            </div>
+            <div class="connector-action">
+              <span class="connected-badge" id="conn-outlook-badge" style="display:none;">Connected</span>
+              <button class="btn btn-outline btn-sm" id="conn-outlook-btn">Connect</button>
+            </div>
+          </div>
+
+          <!-- Outlook Email -->
+          <div class="connector-row" id="conn-outlook-email">
+            <div class="connector-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 4.5L8 9l6.5-4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="connector-info">
+              <div class="connector-name">Outlook Email</div>
+              <div class="connector-desc">Read recent Outlook emails for context</div>
+              <div class="connector-desc" id="conn-outlook-email-status" style="display:none;font-weight:500;"></div>
+            </div>
+            <div class="connector-action">
+              <span class="connected-badge" id="conn-outlook-email-badge" style="display:none;">Connected</span>
+              <button class="btn btn-outline btn-sm" id="conn-outlook-email-btn">Connect</button>
+            </div>
+          </div>
+
           <!-- Notifications -->
           <div class="connector-row" id="conn-notifications">
             <div class="connector-icon">
@@ -690,6 +722,7 @@
     let screenPermGranted = false;
     let calendarConnected = false;
     let gmailConnected = false;
+    let outlookConnected = false;
 
     function updateScreenBadge(status) {
       connScreenStatus.className = 'perm-badge';
@@ -823,6 +856,72 @@
       }
     });
 
+    // Outlook Calendar Connect button
+    document.getElementById('conn-outlook-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('conn-outlook-btn');
+      const statusEl = document.getElementById('conn-outlook-status');
+      btn.disabled = true;
+      btn.textContent = 'Connecting...';
+      statusEl.textContent = 'Complete sign-in in your browser...';
+      statusEl.style.display = '';
+      statusEl.style.color = 'var(--sage)';
+      try {
+        const ok = await window.powernap.connectOutlook();
+        if (ok) {
+          outlookConnected = true;
+          btn.style.display = 'none';
+          statusEl.style.display = 'none';
+          document.getElementById('conn-outlook-badge').style.display = '';
+          // Also mark email as connected (shared auth)
+          document.getElementById('conn-outlook-email-btn').style.display = 'none';
+          document.getElementById('conn-outlook-email-badge').style.display = '';
+        } else {
+          statusEl.textContent = 'Connection failed. Please try again.';
+          statusEl.style.color = 'var(--danger)';
+          btn.textContent = 'Retry';
+          btn.disabled = false;
+        }
+      } catch {
+        statusEl.textContent = 'Connection failed. Please try again.';
+        statusEl.style.color = 'var(--danger)';
+        btn.textContent = 'Retry';
+        btn.disabled = false;
+      }
+    });
+
+    // Outlook Email Connect button (shared auth with calendar)
+    document.getElementById('conn-outlook-email-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('conn-outlook-email-btn');
+      const statusEl = document.getElementById('conn-outlook-email-status');
+      btn.disabled = true;
+      btn.textContent = 'Connecting...';
+      statusEl.textContent = 'Complete sign-in in your browser...';
+      statusEl.style.display = '';
+      statusEl.style.color = 'var(--sage)';
+      try {
+        const ok = await window.powernap.connectOutlook();
+        if (ok) {
+          outlookConnected = true;
+          btn.style.display = 'none';
+          statusEl.style.display = 'none';
+          document.getElementById('conn-outlook-email-badge').style.display = '';
+          // Also mark calendar as connected (shared auth)
+          document.getElementById('conn-outlook-btn').style.display = 'none';
+          document.getElementById('conn-outlook-badge').style.display = '';
+        } else {
+          statusEl.textContent = 'Connection failed. Please try again.';
+          statusEl.style.color = 'var(--danger)';
+          btn.textContent = 'Retry';
+          btn.disabled = false;
+        }
+      } catch {
+        statusEl.textContent = 'Connection failed. Please try again.';
+        statusEl.style.color = 'var(--danger)';
+        btn.textContent = 'Retry';
+        btn.disabled = false;
+      }
+    });
+
     // Check notifications/filesystem availability on page enter
     async function checkConnectorAvailability() {
       // Notifications — enable and auto-check if DB is readable
@@ -890,12 +989,18 @@
           screen: screenPermGranted,
           calendar: calendarConnected,
           gmail: gmailConnected,
+          outlook_calendar: outlookConnected,
+          outlook_email: outlookConnected,
           notifications: notifToggle.checked,
           filesystem: fsToggle.checked,
         },
         google_configured: {
           calendar: calendarConnected,
           gmail: gmailConnected,
+        },
+        outlook_configured: {
+          calendar: outlookConnected,
+          email: outlookConnected,
         },
       };
       window.powernap.submitOnboarding(data);
