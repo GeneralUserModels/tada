@@ -25,8 +25,8 @@ def main():
     parser.add_argument("--loss-mode", type=str, default="llm_judge",
                         choices=["llm_judge", "logprob_elbo"],
                         help="Training loss mode (default: llm_judge)")
-    parser.add_argument("--gws-path", type=str, default=None,
-                        help="Path to gws CLI binary")
+    parser.add_argument("--google-token-path", type=str, default=None,
+                        help="Path to Google OAuth token JSON file")
     parser.add_argument("--outlook-token-path", type=str, default=None,
                         help="Path to Outlook OAuth token JSON file")
     parser.add_argument("--log-to-wandb", action="store_true",
@@ -41,8 +41,8 @@ def main():
         os.environ["POWERNAP_RESUME_FROM_CHECKPOINT"] = args.resume_from_checkpoint
     if args.retriever_checkpoint:
         os.environ["POWERNAP_RETRIEVER_CHECKPOINT"] = args.retriever_checkpoint
-    if args.gws_path:
-        os.environ["POWERNAP_GWS_PATH"] = args.gws_path
+    if args.google_token_path:
+        os.environ["POWERNAP_GOOGLE_TOKEN_PATH"] = args.google_token_path
     if args.outlook_token_path:
         os.environ["POWERNAP_OUTLOOK_TOKEN_PATH"] = args.outlook_token_path
     os.environ["POWERNAP_LOG_DIR"] = args.log_dir

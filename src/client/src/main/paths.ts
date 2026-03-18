@@ -30,10 +30,6 @@ export function getLogDir(): string {
   return path.join(getDataDir(), "logs-app");
 }
 
-export function getGwsPath(): string {
-  return path.join(getDataDir(), "gws");
-}
-
 export function getPythonSrcDir(): string {
   return isDev()
     ? path.join(getDataDir(), "src")
@@ -42,4 +38,8 @@ export function getPythonSrcDir(): string {
 
 export function getOutlookTokenPath(): string {
   return path.join(os.homedir(), ".config", "powernap", "outlook-token.json");
+}
+
+export function getGoogleTokenPath(): string {
+  return path.join(os.homedir(), ".config", "powernap", "google-token.json");
 }

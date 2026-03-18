@@ -4,11 +4,12 @@ import * as fs from "fs";
 import { ipcMain } from "electron";
 import { IPC } from "./ipc";
 import { getConfig, ConnectorState } from "./onboarding";
-import { isGoogleConnected, connectGoogle, disconnectGoogle } from "./gws-auth";
+import { isGoogleConnected, connectGoogle, disconnectGoogle } from "./google-auth";
 import { isOutlookConnected, connectOutlook, disconnectOutlook } from "./outlook-auth";
 import { canReadNotifications } from "./notifications";
 import { getDataDir } from "./paths";
 import * as path from "path";
+import * as api from "./api";
 
 function saveConnectorState(connectors: ConnectorState): void {
   const configPath = path.join(getDataDir(), "powernap-config.json");
@@ -125,11 +126,16 @@ export function setupConnectorIpc(): void {
     return ok;
   });
 
-  ipcMain.handle(IPC.CONNECTOR_UPDATE, (_e, name: string, enabled: boolean) => {
+  ipcMain.handle(IPC.CONNECTOR_UPDATE, async (_e, name: string, enabled: boolean) => {
     const config = getConfig();
     if (config && config.connectors) {
       (config.connectors as unknown as Record<string, boolean>)[name] = enabled;
       saveConnectorState(config.connectors);
+    }
+    try {
+      await api.updateConnector(name, enabled);
+    } catch {
+      // Server may not be ready yet; state will be applied on next launch via config push
     }
     return { ok: true };
   });

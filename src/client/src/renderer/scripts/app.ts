@@ -408,11 +408,7 @@ async function loadConnectors() {
       const connected = info.enabled && info.available;
 
       let actionHtml = "";
-      if (name === "screen") {
-        actionHtml = info.enabled
-          ? '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:rgba(162,203,139,0.2);color:#5DA34E;">Active</span>'
-          : '<span style="font-size:10px;color:#9BA896;">Inactive</span>';
-      } else if (!info.configured && name.startsWith("outlook_")) {
+      if (!info.configured && name.startsWith("outlook_")) {
         // Outlook — use shared Microsoft auth
         actionHtml = `<button class="pill-btn pill-start" style="font-size:10px;padding:3px 10px;" data-connect-outlook="${name}">Connect</button>`;
       } else if (!info.configured) {

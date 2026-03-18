@@ -41,8 +41,8 @@ class ServerState:
     training_task: asyncio.Task | None = None
     context_logging_task: asyncio.Task | None = None
 
-    # Connector instances
-    filesystem_watcher: Any = None
+    # Connector instances (populated by context_logging service)
+    connectors: dict = field(default_factory=dict)
 
     # Inference buffer trimming (logical offset for absolute indexing)
     inference_buffer_trim_offset: int = 0

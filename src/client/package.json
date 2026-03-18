@@ -7,8 +7,8 @@
   "scripts": {
     "copy-static": "cp -r src/renderer/*.html dist/renderer/ && cp -r src/renderer/styles dist/renderer/",
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && npm run copy-static",
-    "start": "npm run build && electron dist/main/index.js",
-    "dev": "npm run build && electron dist/main/index.js",
+    "start": "npm run build && DOTENV_CONFIG_PATH=../../.env electron -r dotenv/config dist/main/index.js",
+    "dev": "npm run build && DOTENV_CONFIG_PATH=../../.env electron -r dotenv/config dist/main/index.js",
     "dist": "npm run build && npx electron-builder --mac --publish never",
     "release": "npm run build && npx electron-builder --mac --publish always"
   },

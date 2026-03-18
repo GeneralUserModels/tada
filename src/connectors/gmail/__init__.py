@@ -1,54 +1,53 @@
-"""Gmail connector — uses gws CLI to fetch recent messages from primary inbox."""
+"""Gmail connector — fetches recent messages from the primary inbox via the Gmail REST API."""
 
-import json
 import logging
-import subprocess
+
+import requests
+
+from connectors.base import TokenConnector
 
 logger = logging.getLogger(__name__)
 
+GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
 
-def get_recent_emails(gws_path: str, max_results: int = 100) -> list[dict]:
-    """Fetch recent primary inbox emails via the gws CLI."""
-    # List message IDs from primary inbox
-    list_params = json.dumps({
-        "userId": "me", "maxResults": max_results, "labelIds": ["INBOX"],
-        "q": "-category:promotions -category:social",
-    })
-    result = subprocess.run(
-        [gws_path, "gmail", "users", "messages", "list",
-         "--params", list_params, "--format", "json"],
-        capture_output=True, text=True, timeout=30,
-    )
-    logger.info("gmail list stdout: %s", result.stdout[:500])
-    if result.stderr:
-        logger.warning("gmail list stderr: %s", result.stderr[:500])
-    data = json.loads(result.stdout)
-    msg_ids = [m["id"] for m in (data.get("messages") or [])]
-    logger.info("gmail list returned %d message IDs", len(msg_ids))
 
-    # Fetch metadata for each message
-    emails = []
-    for msg_id in msg_ids:
-        get_params = json.dumps({
-            "userId": "me", "id": msg_id,
-            "format": "metadata",
-            "metadataHeaders": ["Subject", "From", "Date"],
-        })
-        result = subprocess.run(
-            [gws_path, "gmail", "users", "messages", "get",
-             "--params", get_params, "--format", "json"],
-            capture_output=True, text=True, timeout=30,
-        )
-        msg = json.loads(result.stdout)
-        headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
-        subject = headers.get("Subject", "")
-        logger.info("gmail fetched email: %s", subject)
-        emails.append({
-            "id": msg_id,
-            "subject": subject,
-            "from": headers.get("From", ""),
-            "snippet": msg.get("snippet", ""),
-            "date": headers.get("Date", ""),
-        })
+class GmailConnector(TokenConnector):
+    def __init__(self, token_path: str, max_results: int = 100) -> None:
+        super().__init__(token_path)
+        self.max_results = max_results
 
-    return emails
+    def fetch(self) -> list[dict]:
+        """Fetch recent primary inbox emails via the Gmail REST API."""
+        headers = {"Authorization": f"Bearer {self._access_token()}"}
+        list_params = {
+            "maxResults": self.max_results,
+            "labelIds": "INBOX",
+            "q": "-category:promotions -category:social",
+        }
+        resp = requests.get(f"{GMAIL_BASE}/messages", headers=headers, params=list_params, timeout=30)
+        resp.raise_for_status()
+        msg_ids = [m["id"] for m in resp.json().get("messages") or []]
+        logger.info("gmail list returned %d message IDs", len(msg_ids))
+
+        emails = []
+        for msg_id in msg_ids:
+            msg_resp = requests.get(
+                f"{GMAIL_BASE}/messages/{msg_id}",
+                headers=headers,
+                params={"format": "METADATA", "metadataHeaders": ["Subject", "From", "Date"]},
+                timeout=30,
+            )
+            msg_resp.raise_for_status()
+            msg = msg_resp.json()
+            header_map = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+            subject = header_map.get("Subject", "")
+            logger.info("gmail fetched email: %s", subject)
+            emails.append({
+                "id": msg_id,
+                "subject": subject,
+                "from": header_map.get("From", ""),
+                "snippet": msg.get("snippet", ""),
+                "date": header_map.get("Date", ""),
+            })
+
+        return emails
