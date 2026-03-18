@@ -52,10 +52,17 @@
     <!-- Main Content -->
     <main id="content">
 
-      <div id="update-banner" class="update-banner" style="display:none">
-        <span id="update-message">A new version is available</span>
-        <button id="btn-update-download" class="pill-btn pill-start">Download Update</button>
-        <button id="btn-update-dismiss" class="update-dismiss">&times;</button>
+      <!-- Update modal -->
+      <div id="update-modal-overlay" class="update-modal-overlay" style="display:none">
+        <div class="update-modal">
+          <div class="update-modal-title">Update Ready</div>
+          <div id="update-modal-message" class="update-modal-message">A new version is available</div>
+          <div class="update-modal-actions">
+            <button id="btn-update-now" class="pill-btn pill-start">Install Now</button>
+            <button id="btn-update-on-quit" class="pill-btn">Next Launch</button>
+            <button id="btn-update-later" class="update-dismiss">Later</button>
+          </div>
+        </div>
       </div>
 
       <div class="status-bar">

@@ -45,9 +45,11 @@ interface PowerNapAPI {
   updateConnector: (name: string, enabled: boolean) => Promise<unknown>;
 
   // Auto-update
-  onUpdateAvailable: (cb: (data: any) => void) => void;
+  onUpdateDownloaded: (cb: (data: any) => void) => void;
   onUpdateError: (cb: (msg: string) => void) => void;
-  openReleasePage: (url: string) => Promise<unknown>;
+  installNow: () => Promise<unknown>;
+  installOnNextLaunch: () => Promise<unknown>;
+  dismissUpdate: () => Promise<unknown>;
   checkForUpdates: () => Promise<unknown>;
 }
 

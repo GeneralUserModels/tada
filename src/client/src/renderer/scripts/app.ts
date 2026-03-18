@@ -492,28 +492,32 @@ async function loadConnectors() {
   }
 }
 
-// ── Auto-update banner ───────────────────────────────────────
+// ── Auto-update modal ────────────────────────────────────────
 
-const updateBanner = $("update-banner");
-const updateMessage = $("update-message");
-const btnUpdateDownload = $("btn-update-download") as HTMLButtonElement;
-const btnUpdateDismiss = $("btn-update-dismiss") as HTMLButtonElement;
-let pendingReleaseUrl = "";
+const updateModalOverlay = $("update-modal-overlay");
+const updateModalMessage = $("update-modal-message");
+const btnUpdateNow = $("btn-update-now") as HTMLButtonElement;
+const btnUpdateOnQuit = $("btn-update-on-quit") as HTMLButtonElement;
+const btnUpdateLater = $("btn-update-later") as HTMLButtonElement;
 
-powernap.onUpdateAvailable((data: any) => {
-  pendingReleaseUrl = data.releaseUrl || "";
-  updateMessage.textContent = `Version ${data.version} is available`;
-  updateBanner.style.display = "flex";
+powernap.onUpdateDownloaded((data: any) => {
+  updateModalMessage.textContent = `Version ${data.version} has been downloaded and is ready to install.`;
+  updateModalOverlay.style.display = "flex";
 });
 
-btnUpdateDownload.addEventListener("click", () => {
-  if (pendingReleaseUrl) {
-    powernap.openReleasePage(pendingReleaseUrl);
-  }
+btnUpdateNow.addEventListener("click", () => {
+  updateModalOverlay.style.display = "none";
+  powernap.installNow();
 });
 
-btnUpdateDismiss.addEventListener("click", () => {
-  updateBanner.style.display = "none";
+btnUpdateOnQuit.addEventListener("click", () => {
+  powernap.installOnNextLaunch();
+  updateModalOverlay.style.display = "none";
+});
+
+btnUpdateLater.addEventListener("click", () => {
+  powernap.dismissUpdate();
+  updateModalOverlay.style.display = "none";
 });
 
 // ── Initial fetch ────────────────────────────────────────────

@@ -17,7 +17,7 @@ import { isDev, getDataDir, getPythonPath, getUvPath, getLogDir, getPythonSrcDir
 import * as bootstrap from "./bootstrap";
 import * as onboarding from "./onboarding";
 import { setupConnectorIpc } from "./connector-manager";
-import { initAutoUpdater, openReleasePage, checkForUpdates } from "./updater";
+import { initAutoUpdater, installNow, installOnNextLaunch, dismissUpdate, checkForUpdates } from "./updater";
 
 let serverProc: ChildProcess | null = null;
 
@@ -299,7 +299,9 @@ function setupIpc() {
   });
 
   // Auto-update
-  ipcMain.handle(IPC.UPDATE_OPEN_RELEASE, (_e, url: string) => openReleasePage(url));
+  ipcMain.handle(IPC.UPDATE_INSTALL_NOW, () => installNow());
+  ipcMain.handle(IPC.UPDATE_INSTALL_ON_QUIT, () => installOnNextLaunch());
+  ipcMain.handle(IPC.UPDATE_DISMISS, () => dismissUpdate());
   ipcMain.handle(IPC.UPDATE_CHECK, () => checkForUpdates());
 }
 
