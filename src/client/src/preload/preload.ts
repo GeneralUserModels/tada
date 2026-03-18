@@ -76,11 +76,13 @@ contextBridge.exposeInMainWorld("powernap", {
     ipcRenderer.invoke("connector:update", name, enabled),
 
   // Auto-update
-  onUpdateAvailable: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("update:available", (_e, data) => cb(data)),
+  onUpdateDownloaded: (cb: (data: unknown) => void) =>
+    ipcRenderer.on("update:downloaded", (_e, data) => cb(data)),
   onUpdateError: (cb: (msg: string) => void) =>
     ipcRenderer.on("update:error", (_e, msg) => cb(msg)),
-  openReleasePage: (url: string) => ipcRenderer.invoke("update:open-release", url),
+  installNow: () => ipcRenderer.invoke("update:install-now"),
+  installOnNextLaunch: () => ipcRenderer.invoke("update:install-on-quit"),
+  dismissUpdate: () => ipcRenderer.invoke("update:dismiss"),
   checkForUpdates: () => ipcRenderer.invoke("update:check"),
 
   // Bootstrap

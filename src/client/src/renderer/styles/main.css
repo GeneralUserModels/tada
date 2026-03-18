@@ -191,38 +191,59 @@ body {
   color: var(--sage);
 }
 
-/* ── Update banner ────────────────────────────────────────── */
+/* ── Update modal ─────────────────────────────────────────── */
 
-.update-banner {
+.update-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  margin-bottom: 12px;
-  background: rgba(var(--sage-rgb), 0.12);
-  border: 1px solid rgba(var(--sage-rgb), 0.25);
-  border-radius: var(--r-md);
+  justify-content: center;
+  z-index: 1000;
   -webkit-app-region: no-drag;
-  user-select: auto;
 }
 
-.update-banner span {
-  font-size: 12.5px;
-  font-weight: 550;
+.update-modal {
+  background: var(--surface);
+  border: 1px solid rgba(var(--sage-rgb), 0.25);
+  border-radius: var(--r-md);
+  padding: 24px 28px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.update-modal-title {
+  font-size: 14px;
+  font-weight: 650;
   color: var(--text);
-  flex: 1;
+}
+
+.update-modal-message {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.update-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .update-dismiss {
   background: none;
   border: none;
-  font-size: 16px;
-  line-height: 1;
+  font-size: 12.5px;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 4px 8px;
   border-radius: 4px;
   transition: background 0.15s;
+  margin-left: auto;
 }
 
 .update-dismiss:hover {

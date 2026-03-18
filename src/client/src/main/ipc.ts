@@ -61,8 +61,10 @@ export const IPC = {
   CONNECTOR_UPDATE: "connector:update",
 
   // Auto-update
-  UPDATE_AVAILABLE: "update:available",
+  UPDATE_DOWNLOADED: "update:downloaded",
   UPDATE_ERROR: "update:error",
-  UPDATE_OPEN_RELEASE: "update:open-release",
+  UPDATE_INSTALL_NOW: "update:install-now",
+  UPDATE_INSTALL_ON_QUIT: "update:install-on-quit",
+  UPDATE_DISMISS: "update:dismiss",
   UPDATE_CHECK: "update:check",
 } as const;
