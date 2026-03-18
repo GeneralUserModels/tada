@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from "path";
 import * as https from "https";
-import { getDataDir, getUvPath, getPythonPath, getPythonSrcDir, getGwsPath } from "./paths";
+import { getDataDir, getUvPath, getPythonPath, getPythonSrcDir } from "./paths";
 
 type ProgressCallback = (msg: string, pct: number) => void;
 type LogCallback = (line: string) => void;
@@ -142,25 +142,6 @@ export async function run(onProgress: ProgressCallback, onLog?: LogCallback): Pr
   // Step 3: Create venv
   onProgress("Creating virtual environment...", 25);
   await runCommand(uvPath, ["venv", venvDir, "--python", "3.12"], onLog);
-
-  // Step 3.5: Download gws CLI
-  const gwsPath = getGwsPath();
-  if (!fs.existsSync(gwsPath)) {
-    onProgress("Downloading Google Workspace CLI...", 30);
-    const gwsArch = process.arch === "arm64" ? "aarch64" : "x86_64";
-    const gwsUrl = `https://github.com/googleworkspace/cli/releases/download/v0.13.3/gws-${gwsArch}-apple-darwin.tar.gz`;
-    const gwsTarPath = path.join(dataDir, "gws.tar.gz");
-    await downloadFile(gwsUrl, gwsTarPath);
-    await runCommand("tar", ["xzf", gwsTarPath, "-C", dataDir], onLog);
-    fs.unlinkSync(gwsTarPath);
-    // Binary extracts as gws-{arch}-apple-darwin/gws, move it
-    const extractedDir = path.join(dataDir, `gws-${gwsArch}-apple-darwin`);
-    if (fs.existsSync(path.join(extractedDir, "gws"))) {
-      fs.renameSync(path.join(extractedDir, "gws"), gwsPath);
-      fs.rmSync(extractedDir, { recursive: true });
-    }
-    fs.chmodSync(gwsPath, 0o755);
-  }
 
   // Step 4: Install requirements
   onProgress("Installing Python dependencies (this may take a few minutes)...", 40);

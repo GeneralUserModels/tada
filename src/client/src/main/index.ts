@@ -13,7 +13,7 @@ import { IPC } from "./ipc";
 import * as api from "./api";
 import * as ws from "./ws";
 import * as recorder from "./recorder";
-import { isDev, getDataDir, getPythonPath, getUvPath, getLogDir, getPythonSrcDir, getGwsPath, getOutlookTokenPath } from "./paths";
+import { isDev, getDataDir, getPythonPath, getUvPath, getLogDir, getPythonSrcDir, getGoogleTokenPath, getOutlookTokenPath } from "./paths";
 import * as bootstrap from "./bootstrap";
 import * as onboarding from "./onboarding";
 import { setupConnectorIpc } from "./connector-manager";
@@ -40,8 +40,7 @@ function startServer(port: number): void {
   const pythonPath = getPythonPath();
   const pythonSrcDir = getPythonSrcDir();
 
-  const gwsPath = getGwsPath();
-
+  const googleTokenPath = getGoogleTokenPath();
   const outlookTokenPath = getOutlookTokenPath();
 
   if (isDev()) {
@@ -51,7 +50,7 @@ function startServer(port: number): void {
       "run", "python", "-m", "powernap.server",
       "--port", String(port),
       "--log-dir", logDirPath,
-      "--gws-path", gwsPath,
+      "--google-token-path", googleTokenPath,
       "--outlook-token-path", outlookTokenPath,
       "--save-recordings",
       "--resume-from-checkpoint", "auto",
@@ -63,7 +62,7 @@ function startServer(port: number): void {
       "-m", "powernap.server",
       "--port", String(port),
       "--log-dir", logDirPath,
-      "--gws-path", gwsPath,
+      "--google-token-path", googleTokenPath,
       "--outlook-token-path", outlookTokenPath,
       "--save-recordings",
       "--resume-from-checkpoint", "auto",
