@@ -17,7 +17,7 @@ class GoogleCalendarConnector(TokenConnector):
         super().__init__(token_path)
         self.max_results = max_results
 
-    def fetch(self) -> list[dict]:
+    def fetch(self, since: float | None = None) -> list[dict]:
         """Fetch upcoming calendar events via the Google Calendar REST API."""
         headers = {"Authorization": f"Bearer {self._access_token()}"}
         params = {
@@ -27,6 +27,8 @@ class GoogleCalendarConnector(TokenConnector):
             "singleEvents": "true",
             "orderBy": "startTime",
         }
+        if since:
+            params["updatedMin"] = datetime.fromtimestamp(since, tz=timezone.utc).isoformat()
         resp = requests.get(
             f"{CALENDAR_BASE}/calendars/primary/events",
             headers=headers,

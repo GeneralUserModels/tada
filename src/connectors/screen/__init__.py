@@ -53,7 +53,7 @@ class ScreenConnector(Connector):
         )
         logger.info("ScreenConnector started")
 
-    def fetch(self) -> list[dict]:
+    def fetch(self, since: float | None = None) -> list[dict]:
         # Drain whatever aggregations have accumulated
         while True:
             try:

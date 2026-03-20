@@ -1,6 +1,7 @@
 """Outlook Email connector — fetches recent messages via Microsoft Graph REST API."""
 
 import logging
+from datetime import datetime
 
 import requests
 
@@ -16,14 +17,18 @@ class OutlookEmailConnector(TokenConnector):
         super().__init__(token_path)
         self.max_results = max_results
 
-    def fetch(self) -> list[dict]:
+    def fetch(self, since: float | None = None) -> list[dict]:
         """Fetch recent inbox emails via the Microsoft Graph API."""
         headers = {"Authorization": f"Bearer {self._access_token()}"}
+        filter_clause = "isDraft eq false"
+        if since:
+            since_dt = datetime.utcfromtimestamp(since).strftime("%Y-%m-%dT%H:%M:%SZ")
+            filter_clause = f"isDraft eq false and receivedDateTime ge {since_dt}"
         params = {
             "$top": str(self.max_results),
             "$orderby": "receivedDateTime desc",
             "$select": "id,subject,from,bodyPreview,receivedDateTime",
-            "$filter": "isDraft eq false",
+            "$filter": filter_clause,
         }
         resp = requests.get(f"{GRAPH_BASE}/me/messages", headers=headers, params=params, timeout=30)
         resp.raise_for_status()

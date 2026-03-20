@@ -16,13 +16,16 @@ class GmailConnector(TokenConnector):
         super().__init__(token_path)
         self.max_results = max_results
 
-    def fetch(self) -> list[dict]:
+    def fetch(self, since: float | None = None) -> list[dict]:
         """Fetch recent primary inbox emails via the Gmail REST API."""
         headers = {"Authorization": f"Bearer {self._access_token()}"}
+        q = "-category:promotions -category:social"
+        if since:
+            q += f" after:{int(since)}"
         list_params = {
             "maxResults": self.max_results,
             "labelIds": "INBOX",
-            "q": "-category:promotions -category:social",
+            "q": q,
         }
         resp = requests.get(f"{GMAIL_BASE}/messages", headers=headers, params=list_params, timeout=30)
         resp.raise_for_status()

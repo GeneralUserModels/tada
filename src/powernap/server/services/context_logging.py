@@ -10,6 +10,13 @@ from pathlib import Path
 from litellm import completion as litellm_completion
 
 from connectors.base import Connector
+from connectors.calendar import GoogleCalendarConnector
+from connectors.filesystem import FilesystemConnector
+from connectors.gmail import GmailConnector
+from connectors.notifications import NotificationsConnector
+from connectors.outlook_calendar import OutlookCalendarConnector
+from connectors.outlook_email import OutlookEmailConnector
+from connectors.screen import ScreenConnector
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +58,15 @@ def _save_seen(path: Path, seen: set) -> None:
     path.write_text(json.dumps(list(seen)))
 
 
+def _load_last_fetched(path: Path) -> float | None:
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def _save_last_fetched(path: Path, ts: float) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(ts))
+
+
 def _trim_seen(seen: set, max_size: int = 10_000, keep: int = 9_000) -> None:
     if len(seen) > max_size:
         to_remove = list(seen)[: len(seen) - keep]
@@ -76,15 +92,18 @@ def _filter_with_llm(items: list[dict], source: str, model: str, batch_size: int
 async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, label_model: str) -> None:
     """Poll a single connector forever: fetch → filter? → write JSONL → update seen."""
     seen_path = seen_dir / f"{cfg.name}.json"
+    last_fetched_path = seen_dir / f"{cfg.name}_last_fetched.json"
     seen = _load_seen(seen_path)
     out_path = log_dir / cfg.log_subdir / "filtered.jsonl"
 
     async def poll():
         if cfg.connector.paused:
             return
-        logger.info(f"Polling {cfg.name}...")
-        all_items = await asyncio.to_thread(cfg.connector.fetch)
+        since = _load_last_fetched(last_fetched_path)
+        logger.info(f"Polling {cfg.name} (since={since})...")
+        all_items = await asyncio.to_thread(cfg.connector.fetch, since)
         items = [i for i in all_items if i.get("id") and i["id"] not in seen]
+        _save_last_fetched(last_fetched_path, time.time())
         if not items:
             logger.info(f"{cfg.name}: no new items")
             return
@@ -110,13 +129,6 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, la
 
 async def run_context_logging_service(state) -> None:
     """Poll all connectors on intervals, filter via LLM, write JSONL."""
-    from connectors.calendar import GoogleCalendarConnector
-    from connectors.filesystem import FilesystemConnector
-    from connectors.gmail import GmailConnector
-    from connectors.notifications import NotificationsConnector
-    from connectors.outlook_calendar import OutlookCalendarConnector
-    from connectors.outlook_email import OutlookEmailConnector
-    from connectors.screen import ScreenConnector
 
     config = state.config
 

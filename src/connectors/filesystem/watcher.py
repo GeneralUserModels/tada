@@ -81,7 +81,7 @@ class FilesystemConnector(Connector):
         self._watcher = FilesystemWatcher()
         self._watcher.start()
 
-    def fetch(self) -> list[dict]:
+    def fetch(self, since: float | None = None) -> list[dict]:
         events = self._watcher.drain_events()
         result = []
         for e in events:
