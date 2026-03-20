@@ -9,8 +9,8 @@ class Connector(ABC):
         self._paused = False
 
     @abstractmethod
-    def fetch(self) -> list[dict]:
-        """Fetch items. Each item must have an 'id' field."""
+    def fetch(self, since: float | None = None) -> list[dict]:
+        """Fetch items new/updated since Unix timestamp `since`, or recent if None. Each item must have an 'id' field."""
         ...
 
     def pause(self) -> None:

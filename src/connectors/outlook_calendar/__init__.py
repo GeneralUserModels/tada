@@ -17,18 +17,34 @@ class OutlookCalendarConnector(TokenConnector):
         super().__init__(token_path)
         self.max_results = max_results
 
-    def fetch(self) -> list[dict]:
+    def fetch(self, since: float | None = None) -> list[dict]:
         """Fetch upcoming calendar events via the Microsoft Graph API."""
         headers = {"Authorization": f"Bearer {self._access_token()}", "Prefer": 'outlook.timezone="UTC"'}
         now = datetime.now(timezone.utc)
         end = now + timedelta(days=7)
-        params = {
-            "startDateTime": now.isoformat(),
-            "endDateTime": end.isoformat(),
-            "$top": str(self.max_results),
-            "$select": "id,subject,start,end,bodyPreview,location",
-        }
-        resp = requests.get(f"{GRAPH_BASE}/me/calendarView", headers=headers, params=params, timeout=30)
+        if since:
+            # Switch to /me/events with a compound filter: upcoming + modified since last fetch
+            since_dt = datetime.fromtimestamp(since, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            now_dt = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            end_dt = end.strftime("%Y-%m-%dT%H:%M:%SZ")
+            params = {
+                "$top": str(self.max_results),
+                "$select": "id,subject,start,end,bodyPreview,location",
+                "$filter": (
+                    f"lastModifiedDateTime ge {since_dt}"
+                    f" and start/dateTime ge '{now_dt}'"
+                    f" and start/dateTime le '{end_dt}'"
+                ),
+            }
+            resp = requests.get(f"{GRAPH_BASE}/me/events", headers=headers, params=params, timeout=30)
+        else:
+            params = {
+                "startDateTime": now.isoformat(),
+                "endDateTime": end.isoformat(),
+                "$top": str(self.max_results),
+                "$select": "id,subject,start,end,bodyPreview,location",
+            }
+            resp = requests.get(f"{GRAPH_BASE}/me/calendarView", headers=headers, params=params, timeout=30)
         resp.raise_for_status()
         events = resp.json().get("value", [])
         logger.info("outlook calendar: fetched %d events", len(events))
