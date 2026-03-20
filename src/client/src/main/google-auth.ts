@@ -249,7 +249,11 @@ function stopTokenRefreshTimer(): void {
   }
 }
 
-// Start refresh timer on module load if already connected
+// Start refresh timer on module load if already connected; refresh immediately if expired
 if (isGoogleConnected()) {
+  const token = readToken();
+  if (token && token.expires_at - Date.now() < 5 * 60 * 1000) {
+    refreshToken().catch((err) => console.error("[google-auth] startup token refresh failed:", err));
+  }
   startTokenRefreshTimer();
 }

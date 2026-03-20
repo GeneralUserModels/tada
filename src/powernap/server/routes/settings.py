@@ -67,4 +67,5 @@ async def update_settings(update: SettingsUpdate, request: Request):
         if field_name in env_map:
             os.environ[env_map[field_name]] = value
 
+    cfg.save()
     return {"status": "ok", "updated": updated}

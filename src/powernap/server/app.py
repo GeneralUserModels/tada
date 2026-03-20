@@ -57,6 +57,7 @@ async def lifespan(app: FastAPI):
     from powernap.server.services.context_logging import run_context_logging_service
 
     state = ServerState()
+    state.config.load_persisted()
     if state.config.resume_from_checkpoint:
         _restore_step_from_checkpoint(state)
 
