@@ -358,7 +358,7 @@ function launchApp(port: number) {
     const config = onboarding.getConfig();
     if (config) {
       try {
-        const { user_name, user_email, connectors, ...serverConfig } = config as unknown as Record<string, unknown>;
+        const { user_name, user_email, connectors: _connectors, ...serverConfig } = config as unknown as Record<string, unknown>;
         await api.updateSettings(serverConfig);
       } catch (err) {
         console.error("[onboarding] failed to push config to server:", err);

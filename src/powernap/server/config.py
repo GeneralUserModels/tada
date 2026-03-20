@@ -1,8 +1,21 @@
 """Server configuration — mirrors run_online.py args as a Pydantic model."""
 
+import json
 import os
+from pathlib import Path
 
 from pydantic import BaseModel, Field
+
+CONFIG_PATH = Path.home() / ".config" / "powernap" / "server-config.json"
+
+# Fields that are user-settable via the API and persisted to disk.
+# CLI-arg fields (log_dir, token paths, etc.) are excluded — they always win.
+_PERSISTED_FIELDS = {
+    "gemini_api_key", "tinker_api_key", "hf_token", "wandb_api_key",
+    "model", "reward_llm", "label_model", "fps", "num_generations",
+    "learning_rate", "batch_size", "past_len", "future_len", "loss_mode",
+    "disabled_connectors",
+}
 
 
 class ServerConfig(BaseModel):
@@ -59,3 +72,27 @@ class ServerConfig(BaseModel):
     resume_from_checkpoint: str | None = Field(default_factory=lambda: os.getenv("POWERNAP_RESUME_FROM_CHECKPOINT") or None)
     retriever_checkpoint: str | None = Field(default_factory=lambda: os.getenv("POWERNAP_RETRIEVER_CHECKPOINT") or None)
     sampler_ttl_seconds: int = 60
+
+    # Connectors: names of connectors that are disabled (paused)
+    disabled_connectors: list[str] = Field(default_factory=list)
+
+    def load_persisted(self) -> None:
+        """Load user-settable fields from the config file, if it exists.
+
+        CLI-arg-derived fields (log_dir, token paths, etc.) are not overwritten.
+        """
+        if not CONFIG_PATH.exists():
+            return
+        try:
+            data = json.loads(CONFIG_PATH.read_text())
+        except Exception:
+            return
+        for field in _PERSISTED_FIELDS:
+            if field in data:
+                setattr(self, field, data[field])
+
+    def save(self) -> None:
+        """Persist user-settable fields to the config file."""
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        data = {f: getattr(self, f) for f in _PERSISTED_FIELDS}
+        CONFIG_PATH.write_text(json.dumps(data, indent=2))

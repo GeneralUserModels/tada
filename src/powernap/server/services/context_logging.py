@@ -182,6 +182,11 @@ async def run_context_logging_service(state) -> None:
     # Expose connectors on state so routes can pause/resume them
     state.connectors = {c.name: c.connector for c in connector_configs}
 
+    # Apply persisted enabled/disabled state from server config
+    for cfg in connector_configs:
+        if cfg.name in config.disabled_connectors:
+            cfg.connector.pause()
+
     logger.info("Context logging service started")
     await asyncio.gather(*[
         _run_connector(c, log_dir, seen_dir, config.label_model) for c in connector_configs
