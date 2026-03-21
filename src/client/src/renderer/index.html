@@ -52,6 +52,32 @@
     <!-- Main Content -->
     <main id="content">
 
+      <!-- Permission modal -->
+      <div id="perm-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(44,58,40,0.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:2000;align-items:center;justify-content:center;">
+        <div style="background:#F4F2EE;border-radius:16px;padding:28px 28px 22px;max-width:340px;width:calc(100% - 48px);box-shadow:0 12px 48px rgba(44,58,40,0.18);border:1px solid rgba(132,177,121,0.15);">
+          <div style="width:38px;height:38px;border-radius:10px;background:rgba(199,234,187,0.35);color:#84B179;display:flex;align-items:center;justify-content:center;margin-bottom:14px;">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M8 2a3 3 0 00-3 3v2H4a1 1 0 00-1 1v5a1 1 0 001 1h8a1 1 0 001-1V8a1 1 0 00-1-1h-1V5a3 3 0 00-3-3zm0 1.5A1.5 1.5 0 019.5 5v2h-3V5A1.5 1.5 0 018 3.5z" fill="currentColor"/></svg>
+          </div>
+          <div id="perm-modal-title" style="font-size:15px;font-weight:700;letter-spacing:-0.01em;color:#2C3A28;margin-bottom:6px;"></div>
+          <p id="perm-modal-body" style="font-size:12px;color:#6B7A65;line-height:1.6;margin-bottom:14px;"></p>
+          <ol id="perm-modal-steps" style="font-size:11.5px;color:#2C3A28;line-height:1.8;padding-left:18px;margin-bottom:16px;"></ol>
+          <div id="perm-modal-status" style="font-size:11px;color:#9BA896;margin-bottom:18px;display:flex;align-items:center;gap:6px;">
+            <span id="perm-modal-spinner" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#A2CB8B;animation:perm-pulse 1.2s ease-in-out infinite;"></span>
+            <span id="perm-modal-status-text">Waiting for access…</span>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button id="perm-modal-open-settings" style="flex:1;padding:8px 0;border-radius:20px;border:1px solid rgba(132,177,121,0.25);background:rgba(199,234,187,0.2);font-size:11.5px;font-weight:600;color:#84B179;cursor:pointer;font-family:inherit;">Open Settings</button>
+            <button id="perm-modal-skip" style="padding:8px 16px;border-radius:20px;border:1px solid transparent;background:transparent;font-size:11.5px;color:#9BA896;cursor:pointer;font-family:inherit;">Skip</button>
+          </div>
+        </div>
+      </div>
+      <style>
+        @keyframes perm-pulse {
+          0%, 100% { opacity: 0.3; transform: scale(0.85); }
+          50%       { opacity: 1;   transform: scale(1.1); }
+        }
+      </style>
+
       <!-- Update modal -->
       <div id="update-modal-overlay" class="update-modal-overlay" style="display:none">
         <div class="update-modal">
@@ -81,20 +107,6 @@
             <h2>Pipeline</h2>
           </div>
           <div class="controls-grid">
-            <div class="control-tile" id="tile-recording">
-              <div class="tile-top">
-                <div class="tile-icon recording-icon">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="7" r="2.5" fill="currentColor"/></svg>
-                </div>
-                <span class="tile-label">Recording</span>
-              </div>
-              <div class="tile-status" id="recording-indicator">Idle</div>
-              <div class="tile-actions">
-                <button id="btn-record-start" class="pill-btn pill-start">Start</button>
-                <button id="btn-record-stop" class="pill-btn pill-stop" disabled>Stop</button>
-              </div>
-            </div>
-
             <div class="control-tile" id="tile-training">
               <div class="tile-top">
                 <div class="tile-icon training-icon">

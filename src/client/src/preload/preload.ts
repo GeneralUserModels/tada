@@ -4,8 +4,6 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("powernap", {
   // Control
-  startRecording: () => ipcRenderer.invoke("control:recording:start"),
-  stopRecording: () => ipcRenderer.invoke("control:recording:stop"),
   startTraining: () => ipcRenderer.invoke("control:training:start"),
   stopTraining: () => ipcRenderer.invoke("control:training:stop"),
   startInference: () => ipcRenderer.invoke("control:inference:start"),
@@ -65,6 +63,7 @@ contextBridge.exposeInMainWorld("powernap", {
   connectOutlook: () => ipcRenderer.invoke("onboarding:connect-outlook"),
   checkNotifications: () => ipcRenderer.invoke("onboarding:check-notifications"),
   checkFilesystem: () => ipcRenderer.invoke("onboarding:check-filesystem"),
+  openNotifSettings: () => ipcRenderer.invoke("onboarding:open-fda-settings"),
 
   // Dashboard connectors
   getConnectorStatus: () => ipcRenderer.invoke("connector:status"),
@@ -74,6 +73,10 @@ contextBridge.exposeInMainWorld("powernap", {
   connectorDisconnectOutlook: () => ipcRenderer.invoke("connector:disconnect-outlook"),
   updateConnector: (name: string, enabled: boolean) =>
     ipcRenderer.invoke("connector:update", name, enabled),
+  openFdaSettings: (name?: string) => ipcRenderer.invoke("connector:open-fda-settings", name),
+  getConnectorPermissionInfo: (name: string) => ipcRenderer.invoke("connector:get-permission-info", name),
+  checkConnectorPermission: (name: string) => ipcRenderer.invoke("connector:check-permission", name),
+  requestConnectorPermission: (name: string) => ipcRenderer.invoke("connector:request-permission", name),
 
   // Auto-update
   onUpdateDownloaded: (cb: (data: unknown) => void) =>

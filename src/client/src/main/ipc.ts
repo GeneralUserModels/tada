@@ -2,8 +2,6 @@
 
 export const IPC = {
   // Dashboard -> Main
-  CONTROL_RECORDING_START: "control:recording:start",
-  CONTROL_RECORDING_STOP: "control:recording:stop",
   CONTROL_TRAINING_START: "control:training:start",
   CONTROL_TRAINING_STOP: "control:training:stop",
   CONTROL_INFERENCE_START: "control:inference:start",
@@ -51,9 +49,14 @@ export const IPC = {
   ONBOARDING_CONNECT_OUTLOOK: "onboarding:connect-outlook",
   ONBOARDING_CHECK_NOTIFICATIONS: "onboarding:check-notifications",
   ONBOARDING_CHECK_FILESYSTEM: "onboarding:check-filesystem",
+  ONBOARDING_OPEN_FDA_SETTINGS: "onboarding:open-fda-settings",
 
   // Connectors (dashboard)
   CONNECTOR_STATUS: "connector:status",
+  CONNECTOR_OPEN_FDA_SETTINGS: "connector:open-fda-settings",
+  CONNECTOR_GET_PERMISSION_INFO: "connector:get-permission-info",
+  CONNECTOR_CHECK_PERMISSION: "connector:check-permission",
+  CONNECTOR_REQUEST_PERMISSION: "connector:request-permission",
   CONNECTOR_CONNECT_GOOGLE: "connector:connect-google",
   CONNECTOR_DISCONNECT_GOOGLE: "connector:disconnect-google",
   CONNECTOR_CONNECT_OUTLOOK: "connector:connect-outlook",

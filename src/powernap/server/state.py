@@ -28,6 +28,9 @@ class ServerState:
     # Inference buffer (list of labeled dicts, shared with inference service)
     inference_buffer: list = field(default_factory=list)
 
+    # Unified context buffer: all connector events, each with a prediction_event flag
+    context_buffer: list = field(default_factory=list)
+
     # Recording persistence
     recordings_dir: Path | None = None
 

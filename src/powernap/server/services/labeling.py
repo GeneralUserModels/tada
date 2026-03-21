@@ -89,6 +89,28 @@ async def run_labeling_service(state: Any):
     agg_queue = state.aggregation_queue
     max_inference_buf = config.past_len + config.future_len + 50  # generous margin for pending evals
 
+    async def _push_label(labeled: dict, latency: float) -> None:
+        nonlocal label_count
+        label_count += 1
+        state.labels_processed = label_count
+        logger.info(f"Labeled action #{label_count}: {labeled['text'][:80]}... ({latency:.2f}s)")
+        state.inference_buffer.append(labeled)
+        if len(state.inference_buffer) > max_inference_buf:
+            trim = len(state.inference_buffer) - max_inference_buf
+            del state.inference_buffer[:trim]
+            state.inference_buffer_trim_offset += trim
+        await state.label_queue.put(labeled)
+        state.untrained_batches = state.label_queue.qsize()
+        ts = datetime.strptime(labeled["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
+        state.context_buffer.append({
+            "timestamp": ts,
+            "text": labeled.get("text", ""),
+            "source": "screen",
+            "prediction_event": True,
+            "img": labeled.get("img"),
+        })
+        await broadcast(state, "label", {"count": label_count, "text": labeled["text"][:200]})
+
     label_count = 0
     chunk_count = 0
     chunk_buffer = []
@@ -108,23 +130,8 @@ async def run_labeling_service(state: Any):
                         continue
                     latency = time.time() - t0
                     for labeled in labeled_list:
-                        if not labeled.get("text"):
-                            continue
-                        label_count += 1
-                        state.labels_processed = label_count
-                        text_preview = labeled["text"][:80]
-                        logger.info(f"Labeled action #{label_count}: {text_preview}... ({latency:.2f}s)")
-                        state.inference_buffer.append(labeled)
-                        if len(state.inference_buffer) > max_inference_buf:
-                            trim = len(state.inference_buffer) - max_inference_buf
-                            del state.inference_buffer[:trim]
-                            state.inference_buffer_trim_offset += trim
-                        await state.label_queue.put(labeled)
-                        state.untrained_batches = state.label_queue.qsize()
-                        await broadcast(state, "label", {
-                            "count": label_count,
-                            "text": labeled["text"][:200],
-                        })
+                        if labeled.get("text"):
+                            await _push_label(labeled, latency)
 
                 await state.recording_resumed.wait()
                 continue
@@ -171,29 +178,8 @@ async def run_labeling_service(state: Any):
                 latency = time.time() - t0
 
                 for labeled in labeled_list:
-                    if not labeled.get("text"):
-                        continue
-
-                    label_count += 1
-                    state.labels_processed = label_count
-
-                    text_preview = labeled["text"][:80]
-                    logger.info(f"Labeled action #{label_count}: {text_preview}... ({latency:.2f}s)")
-
-                    # Push to both queues
-                    state.inference_buffer.append(labeled)
-                    if len(state.inference_buffer) > max_inference_buf:
-                        trim = len(state.inference_buffer) - max_inference_buf
-                        del state.inference_buffer[:trim]
-                        state.inference_buffer_trim_offset += trim
-                    await state.label_queue.put(labeled)
-                    state.untrained_batches = state.label_queue.qsize()
-
-                    # Broadcast label event
-                    await broadcast(state, "label", {
-                        "count": label_count,
-                        "text": labeled["text"][:200],
-                    })
+                    if labeled.get("text"):
+                        await _push_label(labeled, latency)
 
             # Broadcast status update periodically
             await broadcast(state, "status", {

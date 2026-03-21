@@ -54,7 +54,7 @@ export const getTrainingHistory = () => request("GET", "/api/training/history");
 
 // ── Connectors ───────────────────────────────────────────────
 export const getConnectors = () =>
-  request("GET", "/api/connectors") as Promise<Record<string, { enabled: boolean }>>;
+  request("GET", "/api/connectors") as Promise<Record<string, { enabled: boolean; error?: string | null }>>;
 
 export const updateConnector = (name: string, enabled: boolean) =>
   request("PUT", `/api/connectors/${name}`, { enabled });

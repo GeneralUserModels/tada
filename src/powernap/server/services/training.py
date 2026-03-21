@@ -89,16 +89,15 @@ async def run_training_service(state: Any):
     from powernap.longnap.trainer import make_sample
 
     min_required = past_len + future_len
-    buffer = []
 
     while True:
         try:
-            # When paused: idle, preserve buffer
+            # When paused: idle
             if not state.training_active:
                 await state.training_resumed.wait()
                 continue
 
-            # Collect enough labels for a sample
+            # Wait for a new screen label (used as trigger only)
             try:
                 item = await asyncio.wait_for(label_queue.get(), timeout=2.0)
             except asyncio.TimeoutError:
@@ -107,9 +106,9 @@ async def run_training_service(state: Any):
             if item is None:
                 continue  # ignore stale sentinels
 
-            buffer.append(item)
             state.untrained_batches = label_queue.qsize()
-            logger.info(f"Training buffer: {len(buffer)}/{min_required}")
+            predict_count = sum(1 for e in state.context_buffer if e.get("prediction_event"))
+            logger.info(f"Training buffer: {predict_count}/{min_required} prediction events")
             await broadcast(state, "status", {
                 "recording_active": state.recording_active,
                 "training_active": state.training_active,
@@ -119,18 +118,18 @@ async def run_training_service(state: Any):
                 "inference_buffer_size": len(state.inference_buffer),
             })
 
-            if len(buffer) < min_required:
+            if predict_count < min_required:
                 continue
 
             # Build sample and run one training step
             step_start = time.time()
-            sample = make_sample(buffer, past_len, future_len, num_imgs_per_sample)
+            sample = make_sample(state.context_buffer, past_len, future_len, num_imgs_per_sample)
 
             # Run batch_size rollouts concurrently
             rollout_tasks = []
             for i in range(batch_size):
-                if len(buffer) >= min_required:
-                    s = make_sample(buffer, past_len, future_len, num_imgs_per_sample)
+                if sum(1 for e in state.context_buffer if e.get("prediction_event")) >= min_required:
+                    s = make_sample(state.context_buffer, past_len, future_len, num_imgs_per_sample)
                     rollout_tasks.append(asyncio.create_task(trainer._rollout_one_sample(s)))
 
             if not rollout_tasks:
