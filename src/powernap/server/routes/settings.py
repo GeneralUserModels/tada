@@ -30,10 +30,10 @@ async def get_settings(request: Request):
     state = request.app.state.server
     cfg = state.config
     return {
-        "gemini_api_key": "***" if cfg.gemini_api_key else "",
-        "tinker_api_key": "***" if cfg.tinker_api_key else "",
-        "hf_token": "***" if cfg.hf_token else "",
-        "wandb_api_key": "***" if cfg.wandb_api_key else "",
+        "gemini_api_key": cfg.gemini_api_key,
+        "tinker_api_key": cfg.tinker_api_key,
+        "hf_token": cfg.hf_token,
+        "wandb_api_key": cfg.wandb_api_key,
         "model": cfg.model,
         "reward_llm": cfg.reward_llm,
         "label_model": cfg.label_model,

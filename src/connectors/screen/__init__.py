@@ -37,7 +37,6 @@ class ScreenConnector(Connector):
         self._buffer: list = []
         self._recorder = None
         self._labeler = None
-        self._start()
 
     def _start(self) -> None:
         self._recorder = OnlineRecorder(
@@ -54,6 +53,10 @@ class ScreenConnector(Connector):
         logger.info("ScreenConnector started")
 
     def fetch(self, since: float | None = None) -> list[dict]:
+        # Lazy-start the recorder on first fetch (supports connectors created in a paused state)
+        if not self._recorder:
+            self._start()
+
         # Drain whatever aggregations have accumulated
         while True:
             try:

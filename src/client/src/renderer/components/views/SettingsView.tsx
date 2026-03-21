@@ -2,20 +2,19 @@ import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 
 const SETTINGS_FIELDS: { id: string; key: string; label: string; type: string; placeholder: string }[] = [
-  { id: "set-gemini-key",   key: "gemini_api_key",  label: "Gemini",            type: "password", placeholder: "sk-..." },
-  { id: "set-tinker-key",   key: "tinker_api_key",  label: "Tinker",            type: "password", placeholder: "tk-..." },
-  { id: "set-hf-token",     key: "hf_token",        label: "HuggingFace",       type: "password", placeholder: "hf_..." },
-  { id: "set-wandb-key",    key: "wandb_api_key",   label: "Weights & Biases",  type: "password", placeholder: "wandb-..." },
-  { id: "set-model",        key: "model",           label: "Base Model",        type: "text",     placeholder: "Qwen/Qwen3-VL-30B-A3B-Instruct" },
-  { id: "set-reward-llm",   key: "reward_llm",      label: "Reward LLM",        type: "text",     placeholder: "gemini/gemini-3-flash-preview" },
-  { id: "set-fps",          key: "fps",             label: "Recording FPS",     type: "number",   placeholder: "5" },
+  { id: "set-gemini-key",   key: "gemini_api_key",  label: "Gemini",            type: "text",   placeholder: "sk-..." },
+  { id: "set-tinker-key",   key: "tinker_api_key",  label: "Tinker",            type: "text",   placeholder: "tk-..." },
+  { id: "set-hf-token",     key: "hf_token",        label: "HuggingFace",       type: "text",   placeholder: "hf_..." },
+  { id: "set-wandb-key",    key: "wandb_api_key",   label: "Weights & Biases",  type: "text",   placeholder: "wandb-..." },
+  { id: "set-model",        key: "model",           label: "Base Model",        type: "text",   placeholder: "Qwen/Qwen3-VL-30B-A3B-Instruct" },
+  { id: "set-reward-llm",   key: "reward_llm",      label: "Reward LLM",        type: "text",   placeholder: "gemini/gemini-3-flash-preview" },
+  { id: "set-fps",          key: "fps",             label: "Recording FPS",     type: "number", placeholder: "5" },
 ];
 
 export function SettingsView() {
   const { state } = useAppContext();
   const [values, setValues] = useState<Record<string, string>>({});
 
-  // Pre-populate from server settings
   useEffect(() => {
     const populated: Record<string, string> = {};
     for (const f of SETTINGS_FIELDS) {
@@ -56,7 +55,7 @@ export function SettingsView() {
               <label key={f.id} className="field">
                 <span>{f.label}</span>
                 <input
-                  type={f.type}
+                  type="text"
                   id={f.id}
                   placeholder={f.placeholder}
                   value={values[f.key] ?? ""}
