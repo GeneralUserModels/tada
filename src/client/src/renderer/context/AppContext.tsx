@@ -2,7 +2,7 @@ import { createContext, useContext, useReducer, useRef, useEffect, ReactNode } f
 
 // ── Types ─────────────────────────────────────────────────────
 
-export type ActiveView = "dashboard" | "history" | "connectors" | "settings";
+export type ActiveView = "connectors" | "settings";
 
 export interface HistoryItem {
   id: number;
@@ -73,7 +73,7 @@ const initialState: AppState = {
   queue: 0,
   step: 0,
   buffer: 0,
-  activeView: "dashboard",
+  activeView: "connectors",
   prediction: null,
   generating: false,
   rewardHistory: [],
