@@ -4,7 +4,7 @@
     "module": "commonjs",
     "lib": ["ES2022"],
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": "src/client/src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -14,7 +14,7 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["src/main/**/*", "src/preload/**/*"],
+  "include": ["src/client/src/main/**/*", "src/client/src/preload/**/*"],
   "exclude": ["node_modules", "dist"],
   "references": [{ "path": "./tsconfig.renderer.json" }]
 }
