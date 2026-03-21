@@ -150,7 +150,7 @@ export function ConnectorItem({
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 8 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderRadius: 8 }}>
       <div style={{
         width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center",
         justifyContent: "center", background: "rgba(199,234,187,0.3)", color: "#84B179", flexShrink: 0,

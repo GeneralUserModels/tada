@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { useAppContext } from "../../context/AppContext";
+import { useAppContext, HistoryItem } from "../../context/AppContext";
 import { useConnectors } from "../../hooks/useConnectors";
 import { ConnectorItem, CONNECTOR_META } from "../connectors/ConnectorItem";
+
+const BADGE_CLASS: Record<HistoryItem["type"], string> = {
+  prediction: "badge-prediction",
+  label: "badge-label",
+  training: "badge-training",
+};
 
 export function ConnectorsView() {
   const { state, dispatch } = useAppContext();
@@ -47,6 +53,9 @@ export function ConnectorsView() {
   return (
     <div id="connectors-view" className="view active">
       <section className="glass-card">
+        <div className="card-header">
+          <h2>Connectors</h2>
+        </div>
         {loading ? (
           <div style={{ color: "#9BA896", fontSize: 12, padding: 12 }}>Loading...</div>
         ) : Object.keys(connectors).length === 0 ? (
@@ -76,6 +85,31 @@ export function ConnectorsView() {
               ))}
           </div>
         )}
+      </section>
+
+      <section className="glass-card">
+        <div className="card-header">
+          <h2>Activity Log</h2>
+        </div>
+        <div className="history-feed">
+          {state.historyItems.length === 0 ? (
+            <span className="empty-state" style={{ padding: "12px 0", display: "block" }}>
+              No activity yet...
+            </span>
+          ) : (
+            state.historyItems.map((item) => (
+              <div key={item.id} className="history-item">
+                <span className={`history-badge ${BADGE_CLASS[item.type]}`}>{item.type}</span>
+                <div>
+                  <div className="history-text">{item.text.substring(0, 140)}</div>
+                  {item.timestamp && (
+                    <div className="history-meta">{item.timestamp}</div>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </section>
     </div>
   );
