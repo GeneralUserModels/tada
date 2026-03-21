@@ -3,6 +3,7 @@ import { useState, useCallback } from "react";
 export function useConnectors() {
   const [connectors, setConnectors] = useState<Record<string, ConnectorInfo>>({});
   const [loading, setLoading] = useState(false);
+  const [toggling, setToggling] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -17,8 +18,13 @@ export function useConnectors() {
   }, []);
 
   const toggle = async (name: string, enabled: boolean) => {
-    await window.powernap.updateConnector(name, enabled);
-    await load();
+    setToggling(prev => new Set(prev).add(name));
+    try {
+      await window.powernap.updateConnector(name, enabled);
+      await load();
+    } finally {
+      setToggling(prev => { const next = new Set(prev); next.delete(name); return next; });
+    }
   };
 
   const connectGoogle = async (svc: string, otherIsOn: boolean) => {
@@ -46,5 +52,5 @@ export function useConnectors() {
     await load();
   };
 
-  return { connectors, loading, load, toggle, connectGoogle, connectOutlook, retry };
+  return { connectors, loading, load, toggle, toggling, connectGoogle, connectOutlook, retry };
 }

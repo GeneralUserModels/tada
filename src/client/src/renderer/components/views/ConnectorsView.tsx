@@ -5,7 +5,7 @@ import { ConnectorItem, CONNECTOR_META } from "../connectors/ConnectorItem";
 
 export function ConnectorsView() {
   const { state, dispatch } = useAppContext();
-  const { connectors, loading, load, toggle, connectGoogle, connectOutlook, retry } = useConnectors();
+  const { connectors, loading, load, toggle, toggling, connectGoogle, connectOutlook, retry } = useConnectors();
   const [connectingName, setConnectingName] = useState<string | null>(null);
   const prevPermModal = useRef(state.permModal);
 
@@ -64,6 +64,7 @@ export function ConnectorsView() {
                   info={info}
                   calendarOn={calendarOn}
                   gmailOn={gmailOn}
+                  toggling={toggling.has(name)}
                   onToggle={toggle}
                   onConnectGoogle={handleConnectGoogle}
                   onConnectOutlook={handleConnectOutlook}

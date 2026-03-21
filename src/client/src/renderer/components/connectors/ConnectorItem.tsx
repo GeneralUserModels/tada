@@ -46,6 +46,7 @@ interface Props {
   info: ConnectorInfo;
   calendarOn: boolean;
   gmailOn: boolean;
+  toggling: boolean;
   onToggle: (name: string, enabled: boolean) => Promise<void>;
   onConnectGoogle: (svc: string, otherIsOn: boolean) => Promise<void>;
   onConnectOutlook: () => Promise<void>;
@@ -56,7 +57,7 @@ interface Props {
 }
 
 export function ConnectorItem({
-  name, info, calendarOn, gmailOn,
+  name, info, calendarOn, gmailOn, toggling,
   onToggle, onConnectGoogle, onConnectOutlook,
   onFix, onRetry, onCheckPermission, onOpenPermModal,
 }: Props) {
@@ -101,6 +102,21 @@ export function ConnectorItem({
         style={{ fontSize: 10, padding: "3px 10px" }}
         onClick={() => onConnectGoogle(name, name === "calendar" ? gmailOn : calendarOn)}
       >Connect</button>
+    );
+  } else if (toggling) {
+    action = (
+      <span style={{
+        width: 36, height: 20,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <span style={{
+          width: 14, height: 14, borderRadius: "50%",
+          border: "2px solid rgba(132,177,121,0.3)",
+          borderTopColor: "#84B179",
+          animation: "spin 0.6s linear infinite",
+          display: "inline-block",
+        }} />
+      </span>
     );
   } else {
     const bg = info.enabled ? "#84B179" : "rgba(132,177,121,0.15)";

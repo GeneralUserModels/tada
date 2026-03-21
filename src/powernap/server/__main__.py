@@ -2,12 +2,34 @@
 """Uvicorn launcher for the PowerNap FastAPI server."""
 
 import argparse
+import json
 import logging
 import os
+from pathlib import Path
 import uvicorn
-from dotenv import load_dotenv
 
-load_dotenv()
+
+def _load_config_env() -> None:
+    """Load API keys from powernap-config.json (cwd = project root in dev)."""
+    config_path = Path.cwd() / "powernap-config.json"
+    if not config_path.exists():
+        return
+    try:
+        data = json.loads(config_path.read_text())
+    except Exception:
+        return
+    mapping = {
+        "gemini_api_key": "GEMINI_API_KEY",
+        "tinker_api_key": "TINKER_API_KEY",
+        "wandb_api_key": "WANDB_API_KEY",
+        "hf_token": "HF_TOKEN",
+    }
+    for key, env_var in mapping.items():
+        if data.get(key) and not os.environ.get(env_var):
+            os.environ[env_var] = data[key]
+
+
+_load_config_env()
 
 logging.basicConfig(level=logging.INFO, format="%(name)s - %(levelname)s - %(message)s")
 

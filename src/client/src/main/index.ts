@@ -13,7 +13,7 @@ import { IPC } from "./ipc";
 import * as api from "./api";
 import * as ws from "./ws";
 import * as recorder from "./recorder";
-import { isDev, getDataDir, getPythonPath, getUvPath, getLogDir, getPythonSrcDir, getGoogleTokenPath, getOutlookTokenPath } from "./paths";
+import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogleTokenPath, getOutlookTokenPath } from "./paths";
 import * as bootstrap from "./bootstrap";
 import * as onboarding from "./onboarding";
 import { setupConnectorIpc } from "./connector-manager";
