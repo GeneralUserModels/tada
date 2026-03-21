@@ -14,7 +14,7 @@ class ConnectorUpdate(BaseModel):
 async def get_connectors(request: Request):
     state = request.app.state.server
     return {
-        name: {"enabled": not conn.paused}
+        name: {"enabled": not conn.paused, "error": conn.error}
         for name, conn in state.connectors.items()
     }
 
@@ -26,7 +26,7 @@ async def update_connector(name: str, update: ConnectorUpdate, request: Request)
     if connector is None:
         raise HTTPException(status_code=404, detail=f"Unknown connector: {name}")
     if update.enabled:
-        connector.resume()
+        connector.resume()  # also clears connector.error
         if name in state.config.disabled_connectors:
             state.config.disabled_connectors.remove(name)
     else:

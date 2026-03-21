@@ -115,6 +115,12 @@ export function runOnboarding(): Promise<void> {
       );
     };
 
+    const handleOpenFdaSettings = () => {
+      shell.openExternal(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+      );
+    };
+
     const handleGoogleLogin = async () => {
       try {
         const user = await startGoogleLogin(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
@@ -160,6 +166,7 @@ export function runOnboarding(): Promise<void> {
       ipcMain.removeHandler(IPC.ONBOARDING_CONNECT_OUTLOOK);
       ipcMain.removeHandler(IPC.ONBOARDING_CHECK_NOTIFICATIONS);
       ipcMain.removeHandler(IPC.ONBOARDING_CHECK_FILESYSTEM);
+      ipcMain.removeHandler(IPC.ONBOARDING_OPEN_FDA_SETTINGS);
       ipcMain.removeHandler(IPC.ONBOARDING_SUBMIT);
     }
 
@@ -171,6 +178,7 @@ export function runOnboarding(): Promise<void> {
     ipcMain.handle(IPC.ONBOARDING_CONNECT_OUTLOOK, handleConnectOutlook);
     ipcMain.handle(IPC.ONBOARDING_CHECK_NOTIFICATIONS, handleCheckNotifications);
     ipcMain.handle(IPC.ONBOARDING_CHECK_FILESYSTEM, handleCheckFilesystem);
+    ipcMain.handle(IPC.ONBOARDING_OPEN_FDA_SETTINGS, handleOpenFdaSettings);
     ipcMain.handle(IPC.ONBOARDING_SUBMIT, handleSubmit);
 
     win.on("closed", () => {

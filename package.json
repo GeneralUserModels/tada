@@ -1,6 +1,7 @@
 {
   "scripts": {
     "install:client": "cd src/client && npm install",
-    "dev": "cd src/client && npm run dev"
+    "dev": "cd src/client && npm run dev",
+    "reset": "rm -f .onboarding-complete powernap-config.json ~/.config/powernap/server-config.json"
   }
 }

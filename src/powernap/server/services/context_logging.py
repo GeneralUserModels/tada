@@ -3,9 +3,11 @@
 import asyncio
 import json
 import logging
+import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
 
 from litellm import completion as litellm_completion
 
@@ -38,7 +40,8 @@ class ConnectorConfig:
     interval: int        # poll interval in seconds
     log_subdir: str      # subdirectory under log_dir
     connector: Connector
-    filter: bool = True  # run LLM filter?
+    filter: bool = True           # run LLM filter?
+    prediction_event: bool = False  # events from this connector are prediction targets
 
 
 def _append_jsonl(path: Path, entry: dict) -> None:
@@ -89,7 +92,7 @@ def _filter_with_llm(items: list[dict], source: str, model: str, batch_size: int
     return results
 
 
-async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, label_model: str) -> None:
+async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, label_model: str, state=None) -> None:
     """Poll a single connector forever: fetch → filter? → write JSONL → update seen."""
     seen_path = seen_dir / f"{cfg.name}.json"
     last_fetched_path = seen_dir / f"{cfg.name}_last_fetched.json"
@@ -111,8 +114,16 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, la
             to_write = await asyncio.to_thread(_filter_with_llm, items, cfg.name, label_model)
         else:
             to_write = items
+        now = time.time()
         for item in to_write:
-            _append_jsonl(out_path, {"timestamp": time.time(), "text": item.get("summary", ""), "source": item})
+            _append_jsonl(out_path, {"timestamp": now, "text": item.get("summary", ""), "source": item})
+            if state is not None and hasattr(state, "context_buffer"):
+                state.context_buffer.append({
+                    "timestamp": now,
+                    "text": item.get("summary", ""),
+                    "source": cfg.name,
+                    "prediction_event": cfg.prediction_event,
+                })
         for item in items:
             seen.add(item["id"])
         _trim_seen(seen)
@@ -122,8 +133,20 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, la
     while True:
         try:
             await poll()
-        except Exception:
-            logger.exception(f"{cfg.name} poll failed")
+        except FileNotFoundError:
+            logger.warning(f"{cfg.name}: token file missing, pausing connector")
+            cfg.connector.pause()
+        except sqlite3.OperationalError as e:
+            logger.warning(f"{cfg.name}: DB permission error, pausing connector: {e}")
+            cfg.connector.pause(error=f"Permission denied — grant Full Disk Access in System Settings → Privacy & Security")
+        except Exception as e:
+            # Auto-pause on auth errors (401) so we stop spamming retries
+            msg = str(e)
+            if "401" in msg or "Unauthorized" in msg:
+                logger.warning(f"{cfg.name}: auth error, pausing connector until re-authenticated")
+                cfg.connector.pause()
+            else:
+                logger.exception(f"{cfg.name} poll failed")
         await asyncio.sleep(cfg.interval)
 
 
@@ -149,7 +172,8 @@ async def run_context_logging_service(state) -> None:
                 buffer_seconds=config.buffer_seconds,
                 chunk_size=config.chunk_size,
             ),
-            filter=False,  # Gemini already provides captions
+            filter=False,           # Gemini already provides captions
+            prediction_event=True,  # screen actions are what the model predicts
         ),
         ConnectorConfig(
             name="email", interval=300, log_subdir="email",
@@ -189,5 +213,5 @@ async def run_context_logging_service(state) -> None:
 
     logger.info("Context logging service started")
     await asyncio.gather(*[
-        _run_connector(c, log_dir, seen_dir, config.label_model) for c in connector_configs
+        _run_connector(c, log_dir, seen_dir, config.label_model, state) for c in connector_configs
     ])

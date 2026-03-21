@@ -17,6 +17,8 @@ import { isDev, getDataDir, getPythonPath, getUvPath, getLogDir, getPythonSrcDir
 import * as bootstrap from "./bootstrap";
 import * as onboarding from "./onboarding";
 import { setupConnectorIpc } from "./connector-manager";
+import { initGoogleAuth } from "./google-auth";
+import { initOutlookAuth } from "./outlook-auth";
 import { initAutoUpdater, installNow, installOnNextLaunch, dismissUpdate, checkForUpdates } from "./updater";
 
 let serverProc: ChildProcess | null = null;
@@ -272,14 +274,6 @@ function setupWsForwarding() {
 // ── IPC handlers ─────────────────────────────────────────────
 
 function setupIpc() {
-  ipcMain.handle(IPC.CONTROL_RECORDING_START, async () => {
-    recorder.startRecording();
-    return api.startRecording();
-  });
-  ipcMain.handle(IPC.CONTROL_RECORDING_STOP, async () => {
-    recorder.stopRecording();
-    return api.stopRecording();
-  });
   ipcMain.handle(IPC.CONTROL_TRAINING_START, () => api.startTraining());
   ipcMain.handle(IPC.CONTROL_TRAINING_STOP, () => api.stopTraining());
   ipcMain.handle(IPC.CONTROL_INFERENCE_START, () => api.startInference());
@@ -377,6 +371,8 @@ app.whenReady().then(async () => {
   app.dock?.show();
   setupIpc();
   setupConnectorIpc();
+  initGoogleAuth();
+  initOutlookAuth();
 
   // In packaged mode, check if bootstrap is needed
   if (!isDev() && !bootstrap.isReady()) {

@@ -5,18 +5,14 @@ export {};
 
 const $ = (id: string) => document.getElementById(id)!;
 
-const btnRecordStart = $("btn-record-start") as HTMLButtonElement;
-const btnRecordStop = $("btn-record-stop") as HTMLButtonElement;
 const btnTrainStart = $("btn-train-start") as HTMLButtonElement;
 const btnTrainStop = $("btn-train-stop") as HTMLButtonElement;
 const btnGenerate = $("btn-generate") as HTMLButtonElement;
 const btnSaveSettings = $("btn-save-settings") as HTMLButtonElement;
 
-const recordingIndicator = $("recording-indicator");
 const trainingIndicator = $("training-indicator");
 const inferenceIndicator = $("inference-indicator");
 
-const tileRecording = $("tile-recording");
 const tileTraining = $("tile-training");
 const tileInference = $("tile-inference");
 
@@ -182,16 +178,6 @@ function setControlState(
   tile.classList.toggle("running", state === "running");
 }
 
-btnRecordStart.addEventListener("click", async () => {
-  setControlState(btnRecordStart, btnRecordStop, recordingIndicator, tileRecording, "starting");
-  await powernap.startRecording();
-  setControlState(btnRecordStart, btnRecordStop, recordingIndicator, tileRecording, "running");
-});
-btnRecordStop.addEventListener("click", async () => {
-  setControlState(btnRecordStart, btnRecordStop, recordingIndicator, tileRecording, "stopping");
-  await powernap.stopRecording();
-  setControlState(btnRecordStart, btnRecordStop, recordingIndicator, tileRecording, "idle");
-});
 btnTrainStart.addEventListener("click", async () => {
   setControlState(btnTrainStart, btnTrainStop, trainingIndicator, tileTraining, "starting");
   await powernap.startTraining();
@@ -353,7 +339,6 @@ powernap.onLabel((data: any) => {
 });
 
 powernap.onStatusUpdate((data: any) => {
-  setControlState(btnRecordStart, btnRecordStop, recordingIndicator, tileRecording, data.recording_active ? "running" : "idle");
   setControlState(btnTrainStart, btnTrainStop, trainingIndicator, tileTraining, data.training_active ? "running" : "idle");
   statQueue.textContent = String(data.untrained_batches ?? 0);
   statLabels.textContent = String(data.labels_processed ?? 0);
@@ -366,6 +351,7 @@ interface ConnectorInfo {
   enabled: boolean;
   available: boolean;
   configured: boolean;
+  error?: string | null;
 }
 
 const connectorMeta: Record<string, { label: string; desc: string; icon: string }> = {
@@ -408,7 +394,13 @@ async function loadConnectors() {
       const connected = info.enabled && info.available;
 
       let actionHtml = "";
-      if (!info.configured && name.startsWith("outlook_")) {
+      if (info.error) {
+        // Connector is paused due to a runtime error — show error badge + Fix/Retry
+        actionHtml = `
+          <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:rgba(201,89,75,0.1);color:#C9594B;white-space:nowrap;">Error</span>
+          <button class="pill-btn" style="font-size:10px;padding:3px 10px;background:rgba(201,89,75,0.06);color:#C9594B;border:1px solid rgba(201,89,75,0.2);" data-fix-connector="${name}">Fix</button>
+          <button class="pill-btn" style="font-size:10px;padding:3px 10px;" data-retry-connector="${name}">Retry</button>`;
+      } else if (!info.configured && name.startsWith("outlook_")) {
         // Outlook — use shared Microsoft auth
         actionHtml = `<button class="pill-btn pill-start" style="font-size:10px;padding:3px 10px;" data-connect-outlook="${name}">Connect</button>`;
       } else if (!info.configured) {
@@ -426,11 +418,15 @@ async function loadConnectors() {
         </label>`;
       }
 
+      const errorLine = info.error
+        ? `<div style="font-size:10px;color:#C9594B;margin-top:2px;">${escapeHtml(info.error)}</div>`
+        : "";
       row.innerHTML = `
         <div style="width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:rgba(199,234,187,0.3);color:#84B179;flex-shrink:0;">${iconHtml}</div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:12.5px;font-weight:600;">${escapeHtml(meta.label)}</div>
           <div style="font-size:11px;color:#9BA896;">${escapeHtml(meta.desc)}</div>
+          ${errorLine}
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">${actionHtml}</div>
       `;
@@ -470,8 +466,42 @@ async function loadConnectors() {
       });
     });
 
+    // Bind Fix buttons — open the permission modal
+    dashConnectors.querySelectorAll<HTMLElement>("[data-fix-connector]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await openPermissionModal(btn.dataset.fixConnector!);
+      });
+    });
+
+    // Bind Retry buttons (re-enable connector after fixing permissions)
+    dashConnectors.querySelectorAll<HTMLElement>("[data-retry-connector]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        (btn as HTMLButtonElement).disabled = true;
+        await powernap.updateConnector(btn.dataset.retryConnector!, true);
+        loadConnectors();
+      });
+    });
+
     dashConnectors.querySelectorAll<HTMLInputElement>("[data-connector]").forEach((input) => {
       input.addEventListener("change", async () => {
+        const name = input.dataset.connector!;
+
+        // If enabling, check whether the connector needs a permission we don't have
+        if (input.checked) {
+          const granted = await (powernap as any).checkConnectorPermission(name) as boolean;
+          if (!granted) {
+            // Revert toggle visuals and show the permission modal instead
+            input.checked = false;
+            const label = input.closest("label");
+            if (label) {
+              (label.children[1] as HTMLElement).style.background = 'rgba(132,177,121,0.15)';
+              (label.children[2] as HTMLElement).style.transform = 'translateX(0)';
+            }
+            await openPermissionModal(name);
+            return;
+          }
+        }
+
         // Immediately update toggle visuals
         const label = input.closest("label");
         if (label) {
@@ -480,7 +510,7 @@ async function loadConnectors() {
           if (track) track.style.background = input.checked ? '#84B179' : 'rgba(132,177,121,0.15)';
           if (knob) knob.style.transform = input.checked ? 'translateX(16px)' : 'translateX(0)';
         }
-        await powernap.updateConnector(input.dataset.connector!, input.checked);
+        await powernap.updateConnector(name, input.checked);
       });
     });
   } catch {
@@ -488,7 +518,77 @@ async function loadConnectors() {
   }
 }
 
-// ── Auto-update modal ────────────────────────────────────────
+// ── Permission modal ─────────────────────────────────────────
+
+const permModalOverlay = $("perm-modal-overlay") as HTMLElement;
+const permModalTitle   = $("perm-modal-title") as HTMLElement;
+const permModalBody    = $("perm-modal-body") as HTMLElement;
+const permModalSteps   = $("perm-modal-steps") as HTMLElement;
+const permModalStatusText = $("perm-modal-status-text") as HTMLElement;
+const permModalSpinner = $("perm-modal-spinner") as HTMLElement;
+const btnPermOpenSettings = $("perm-modal-open-settings") as HTMLButtonElement;
+const btnPermSkip      = $("perm-modal-skip") as HTMLButtonElement;
+
+let permPollTimer: ReturnType<typeof setInterval> | null = null;
+let permConnectorName = "";
+
+function closePermissionModal() {
+  permModalOverlay.style.display = "none";
+  if (permPollTimer) { clearInterval(permPollTimer); permPollTimer = null; }
+}
+
+async function openPermissionModal(connectorName: string) {
+  const info = await (powernap as any).getConnectorPermissionInfo(connectorName) as {
+    title: string; body: string; steps: string[]; fixUrl: string; hasRequest: boolean;
+  } | null;
+  if (!info) return;
+
+  permConnectorName = connectorName;
+  permModalTitle.textContent = info.title;
+  permModalBody.textContent = info.body;
+  permModalSteps.innerHTML = info.steps.map(s => `<li>${escapeHtml(s)}</li>`).join("");
+  permModalStatusText.textContent = "Waiting for access…";
+  permModalSpinner.style.background = "#A2CB8B";
+  permModalSpinner.style.display = "inline-block";
+  permModalOverlay.style.display = "flex";
+
+  btnPermOpenSettings.onclick = () => (powernap as any).openFdaSettings(connectorName);
+  btnPermSkip.onclick = closePermissionModal;
+
+  // If the connector supports a programmatic request (e.g. screen recording),
+  // fire it immediately — this triggers the native macOS dialog.
+  if (info.hasRequest) {
+    const granted = await (powernap as any).requestConnectorPermission(connectorName) as boolean;
+    if (granted) {
+      await handlePermissionGranted(connectorName);
+      return;
+    }
+    // Still denied — fall through to the settings walkthrough + polling below
+  }
+
+  // Poll until the OS permission is granted
+  if (permPollTimer) clearInterval(permPollTimer);
+  permPollTimer = setInterval(async () => {
+    const granted = await (powernap as any).checkConnectorPermission(connectorName) as boolean;
+    if (granted) {
+      clearInterval(permPollTimer!);
+      permPollTimer = null;
+      await handlePermissionGranted(connectorName);
+    }
+  }, 1500);
+}
+
+async function handlePermissionGranted(connectorName: string) {
+  permModalStatusText.textContent = "Access granted!";
+  permModalSpinner.style.background = "#84B179";
+  await powernap.updateConnector(connectorName, true);
+  setTimeout(async () => {
+    closePermissionModal();
+    await loadConnectors();
+  }, 800);
+}
+
+// ── Auto-update modal ─────────────────────────────────────────
 
 const updateModalOverlay = $("update-modal-overlay");
 const updateModalMessage = $("update-modal-message");
@@ -522,7 +622,6 @@ powernap.onServerReady(async () => {
   try {
     const status = (await powernap.getStatus()) as any;
     if (status) {
-      setControlState(btnRecordStart, btnRecordStop, recordingIndicator, tileRecording, status.recording_active ? "running" : "idle");
       setControlState(btnTrainStart, btnTrainStop, trainingIndicator, tileTraining, status.training_active ? "running" : "idle");
       statLabels.textContent = String(status.labels_processed ?? 0);
       statQueue.textContent = String(status.untrained_batches ?? 0);
