@@ -64,7 +64,7 @@ async def run_labeling_service(state: Any):
     When recording_active is False (paused): drains pending chunks, then idles.
     chunk_buffer and pending_chunks are preserved across pause/resume cycles.
     """
-    from powernap.server.ws.handler import broadcast
+    from server.ws.handler import broadcast
 
     config = state.config
 

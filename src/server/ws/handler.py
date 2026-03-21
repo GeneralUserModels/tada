@@ -25,7 +25,7 @@ async def ws_endpoint(websocket: WebSocket, state):
             event = msg.get("event")
             if event == "request_prediction":
                 # Import here to avoid circular imports
-                from powernap.server.services.inference import handle_prediction_request
+                from server.services.inference import handle_prediction_request
                 await handle_prediction_request(state)
     except WebSocketDisconnect:
         pass

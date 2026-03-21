@@ -9,9 +9,9 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
-from powernap.server.state import ServerState
-from powernap.server.routes import connectors, control, recordings, settings, status, training
-from powernap.server.ws.handler import ws_endpoint
+from server.state import ServerState
+from server.routes import connectors, control, recordings, settings, status, training
+from server.ws.handler import ws_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def _restore_step_from_checkpoint(state: ServerState) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize shared state on startup, clean up on shutdown."""
-    from powernap.server.services.context_logging import run_context_logging_service
+    from server.services.context_logging import run_context_logging_service
 
     state = ServerState()
     state.config.load_persisted()

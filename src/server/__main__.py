@@ -75,7 +75,7 @@ def main():
     os.environ["POWERNAP_WANDB_RUN_NAME"] = args.wandb_run_name
 
     uvicorn.run(
-        "powernap.server.app:create_app",
+        "server.app:create_app",
         factory=True,
         host=args.host,
         port=args.port,
