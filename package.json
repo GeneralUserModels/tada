@@ -64,7 +64,7 @@
         "to": "python-src/connectors"
       },
       {
-        "from": "./src/client/bootstrap/requirements.txt",
+        "from": "./bootstrap/requirements.txt",
         "to": "python-src/requirements.txt"
       },
       {
