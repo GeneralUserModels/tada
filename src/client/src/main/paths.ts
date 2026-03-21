@@ -10,7 +10,7 @@ export function isDev(): boolean {
 
 export function getDataDir(): string {
   return isDev()
-    ? path.resolve(__dirname, "..", "..", "..", "..")
+    ? path.resolve(__dirname, "..", "..")
     : app.getPath("userData");
 }
 
@@ -27,7 +27,7 @@ export function getUvPath(): string {
 }
 
 export function getLogDir(): string {
-  return path.join(getDataDir(), "logs-app");
+  return path.join(getDataDir(), "logs");
 }
 
 export function getPythonSrcDir(): string {
