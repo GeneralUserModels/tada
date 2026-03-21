@@ -19,7 +19,7 @@ async def handle_prediction_request(state: Any):
     Triggered by a WebSocket 'request_prediction' event. Runs the prediction
     in a thread pool, then broadcasts the result + schedules background eval.
     """
-    from powernap.server.ws.handler import broadcast
+    from server.ws.handler import broadcast
 
     if not state.inference_active:
         await broadcast(state, "prediction", {"error": "inference not active"})
@@ -102,7 +102,7 @@ async def handle_prediction_request(state: Any):
 
 async def _score_prediction(state: Any, result: dict, logical_pos: int, future_len: int):
     """Background task: wait for enough ground truth, then score the prediction."""
-    from powernap.server.ws.handler import broadcast
+    from server.ws.handler import broadcast
     from powernap.longnap.trainer_utils import build_actions_block
 
     # Wait for enough future items to accumulate

@@ -49,7 +49,7 @@ function startServer(port: number): void {
     // Dev mode: use uv run from repo root
     const projectRoot = getDataDir();
     serverProc = spawn("uv", [
-      "run", "python", "-m", "powernap.server",
+      "run", "python", "-m", "server",
       "--port", String(port),
       "--log-dir", logDirPath,
       "--google-token-path", googleTokenPath,
@@ -61,7 +61,7 @@ function startServer(port: number): void {
   } else {
     // Packaged mode: use venv python directly
     serverProc = spawn(pythonPath, [
-      "-m", "powernap.server",
+      "-m", "server",
       "--port", String(port),
       "--log-dir", logDirPath,
       "--google-token-path", googleTokenPath,

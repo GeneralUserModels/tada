@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from powernap.server.config import ServerConfig
+from server.config import ServerConfig
 
 
 @dataclass

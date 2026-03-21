@@ -16,7 +16,7 @@ async def run_training_service(state: Any):
     Reads from state.label_queue (populated by the labeling service), constructs
     samples, runs rollouts + forward_backward + optim_step, and broadcasts metrics.
     """
-    from powernap.server.ws.handler import broadcast
+    from server.ws.handler import broadcast
 
     config = state.config
 
