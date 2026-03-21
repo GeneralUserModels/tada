@@ -1,0 +1,156 @@
+const CONNECTOR_ICONS: Record<string, JSX.Element> = {
+  monitor: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+      <circle cx="8" cy="8" r="2" fill="currentColor"/>
+    </svg>
+  ),
+  calendar: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  ),
+  mail: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <rect x="1.5" y="3.5" width="13" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M1.5 4.5L8 9l6.5-4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  bell: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M4 6a4 4 0 018 0v3l1.5 2H2.5L4 9V6z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+      <path d="M6.5 13a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3"/>
+    </svg>
+  ),
+  folder: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+    </svg>
+  ),
+};
+
+export const CONNECTOR_META: Record<string, { label: string; desc: string; icon: string }> = {
+  screen:           { label: "Screen Recording",  desc: "Captures your screen to observe workflow",       icon: "monitor" },
+  calendar:         { label: "Google Calendar",    desc: "Read your upcoming events for context",          icon: "calendar" },
+  gmail:            { label: "Gmail",              desc: "Read recent emails for context",                 icon: "mail" },
+  outlook_calendar: { label: "Outlook Calendar",   desc: "Read your upcoming Outlook events for context",  icon: "calendar" },
+  outlook_email:    { label: "Outlook Email",      desc: "Read recent Outlook emails for context",         icon: "mail" },
+  notifications:    { label: "Notifications",      desc: "Read macOS notification history",                icon: "bell" },
+  filesystem:       { label: "Filesystem",         desc: "Watch Desktop, Documents, Downloads",            icon: "folder" },
+};
+
+interface Props {
+  name: string;
+  info: ConnectorInfo;
+  calendarOn: boolean;
+  gmailOn: boolean;
+  onToggle: (name: string, enabled: boolean) => Promise<void>;
+  onConnectGoogle: (svc: string, otherIsOn: boolean) => Promise<void>;
+  onConnectOutlook: () => Promise<void>;
+  onFix: (name: string) => void;
+  onRetry: (name: string) => Promise<void>;
+  onCheckPermission: (name: string) => Promise<boolean>;
+  onOpenPermModal: (name: string) => void;
+}
+
+export function ConnectorItem({
+  name, info, calendarOn, gmailOn,
+  onToggle, onConnectGoogle, onConnectOutlook,
+  onFix, onRetry, onCheckPermission, onOpenPermModal,
+}: Props) {
+  const meta = CONNECTOR_META[name];
+  if (!meta) return null;
+
+  const icon = CONNECTOR_ICONS[meta.icon];
+
+  let action: JSX.Element;
+
+  if (info.error) {
+    action = (
+      <>
+        <span style={{
+          fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
+          background: "rgba(201,89,75,0.1)", color: "#C9594B", whiteSpace: "nowrap",
+        }}>Error</span>
+        <button
+          className="pill-btn"
+          style={{ fontSize: 10, padding: "3px 10px", background: "rgba(201,89,75,0.06)", color: "#C9594B", border: "1px solid rgba(201,89,75,0.2)" }}
+          onClick={() => onFix(name)}
+        >Fix</button>
+        <button
+          className="pill-btn"
+          style={{ fontSize: 10, padding: "3px 10px" }}
+          onClick={() => onRetry(name)}
+        >Retry</button>
+      </>
+    );
+  } else if (!info.configured && name.startsWith("outlook_")) {
+    action = (
+      <button
+        className="pill-btn pill-start"
+        style={{ fontSize: 10, padding: "3px 10px" }}
+        onClick={onConnectOutlook}
+      >Connect</button>
+    );
+  } else if (!info.configured) {
+    action = (
+      <button
+        className="pill-btn pill-start"
+        style={{ fontSize: 10, padding: "3px 10px" }}
+        onClick={() => onConnectGoogle(name, name === "calendar" ? gmailOn : calendarOn)}
+      >Connect</button>
+    );
+  } else {
+    const bg = info.enabled ? "#84B179" : "rgba(132,177,121,0.15)";
+    const knobX = info.enabled ? "translateX(16px)" : "translateX(0)";
+    action = (
+      <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={info.enabled}
+          style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
+          onChange={async (e) => {
+            const checked = e.target.checked;
+            if (checked) {
+              const granted = await onCheckPermission(name);
+              if (!granted) {
+                onOpenPermModal(name);
+                return;
+              }
+            }
+            await onToggle(name, checked);
+          }}
+        />
+        <span style={{ position: "absolute", inset: 0, background: bg, borderRadius: 20, transition: "background 0.2s" }}></span>
+        <span style={{
+          position: "absolute", height: 14, width: 14, left: 3, bottom: 3,
+          background: "#fff", borderRadius: "50%", transition: "transform 0.2s",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.15)", transform: knobX,
+        }}></span>
+      </label>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 8 }}>
+      <div style={{
+        width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center",
+        justifyContent: "center", background: "rgba(199,234,187,0.3)", color: "#84B179", flexShrink: 0,
+      }}>
+        {icon}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{meta.label}</div>
+        <div style={{ fontSize: 11, color: "#9BA896" }}>{meta.desc}</div>
+        {info.error && (
+          <div style={{ fontSize: 10, color: "#C9594B", marginTop: 2 }}>{info.error}</div>
+        )}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        {action}
+      </div>
+    </div>
+  );
+}

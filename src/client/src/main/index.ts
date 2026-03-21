@@ -125,6 +125,7 @@ let setupWindow: BrowserWindow | null = null;
 let dashboardWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
 let overlayVisible = false;
+let isQuitting = false;
 
 // ── Window creation ──────────────────────────────────────────
 
@@ -168,8 +169,11 @@ function createDashboard() {
     path.join(__dirname, "..", "renderer", "index.html")
   );
 
-  dashboardWindow.on("closed", () => {
-    dashboardWindow = null;
+  dashboardWindow.on("close", (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      dashboardWindow?.hide();
+    }
   });
 }
 
@@ -389,11 +393,23 @@ app.whenReady().then(async () => {
   launchApp(port);
 });
 
+app.on("before-quit", () => {
+  isQuitting = true;
+});
+
 app.on("window-all-closed", () => {
-  recorder.stopRecording();
-  ws.disconnect();
-  stopServer();
-  app.quit();
+  if (process.platform !== "darwin") {
+    recorder.stopRecording();
+    ws.disconnect();
+    stopServer();
+    app.quit();
+  }
+});
+
+app.on("activate", () => {
+  if (dashboardWindow) {
+    dashboardWindow.show();
+  }
 });
 
 app.on("will-quit", () => {
