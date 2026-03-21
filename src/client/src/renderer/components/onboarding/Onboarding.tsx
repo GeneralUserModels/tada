@@ -225,7 +225,7 @@ export function Onboarding() {
         notifications: notifEnabled,
         filesystem: fsEnabled,
       },
-      google_configured: { calendar: calendarConnected, gmail: gmailConnected },
+      google_configured: { calendar: !!googleUser, gmail: !!googleUser },
       outlook_configured: { calendar: outlookConnected, email: outlookConnected },
     });
   };

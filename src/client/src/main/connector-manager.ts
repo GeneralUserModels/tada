@@ -2,7 +2,7 @@
 
 import { ipcMain, shell } from "electron";
 import { IPC } from "./ipc";
-import { getConfig } from "./onboarding";
+import { getConfig, markGoogleConfigured } from "./onboarding";
 import { isGoogleConnected, connectGoogle, disconnectGoogle } from "./google-auth";
 import { isOutlookConnected, connectOutlook, disconnectOutlook } from "./outlook-auth";
 import { connectorPermissions, canUseConnector } from "./connector-permissions";
@@ -39,7 +39,7 @@ export function setupConnectorIpc(): void {
     return {
       screen:           { enabled: enabled("screen"),           available: canUseConnector("screen"),  configured: true,  error: permError("screen",        error("screen")) },
       calendar:         { enabled: enabled("calendar"),         available: googleConnected,            configured: config?.google_configured?.calendar ?? false, error: error("calendar") },
-      gmail:            { enabled: enabled("email"),            available: googleConnected,            configured: config?.google_configured?.gmail ?? false,    error: error("email") },
+      gmail:            { enabled: enabled("gmail"),            available: googleConnected,            configured: config?.google_configured?.gmail ?? false,    error: error("gmail") },
       outlook_calendar: { enabled: enabled("outlook_calendar"), available: outlookConnected,           configured: (config as any)?.outlook_configured?.calendar ?? false, error: error("outlook_calendar") },
       outlook_email:    { enabled: enabled("outlook_email"),    available: outlookConnected,           configured: (config as any)?.outlook_configured?.email ?? false,    error: error("outlook_email") },
       notifications:    { enabled: enabled("notifications"),    available: canUseConnector("notifications"), configured: true, error: permError("notifications", error("notifications")) },
@@ -49,7 +49,15 @@ export function setupConnectorIpc(): void {
 
   ipcMain.handle(IPC.CONNECTOR_CONNECT_GOOGLE, async (_e, scope?: string) => {
     const s = scope || "calendar,gmail";
-    return connectGoogle(s);
+    const ok = await connectGoogle(s);
+    if (ok) {
+      const scopes = s.split(",");
+      markGoogleConfigured(
+        scopes.includes("calendar") ? true : undefined,
+        scopes.includes("gmail") ? true : undefined,
+      );
+    }
+    return ok;
   });
 
   ipcMain.handle(IPC.CONNECTOR_DISCONNECT_GOOGLE, async () => {

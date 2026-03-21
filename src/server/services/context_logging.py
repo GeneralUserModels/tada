@@ -176,7 +176,7 @@ async def run_context_logging_service(state) -> None:
             prediction_event=True,  # screen actions are what the model predicts
         ),
         ConnectorConfig(
-            name="email", interval=300, log_subdir="email",
+            name="gmail", interval=300, log_subdir="email",
             connector=GmailConnector(config.google_token_path),
         ),
         ConnectorConfig(

@@ -62,6 +62,16 @@ function saveConfig(data: OnboardingConfig): void {
   fs.writeFileSync(getSentinelPath(), new Date().toISOString(), "utf-8");
 }
 
+/** Mark specific Google connectors as configured (called when user connects from dashboard). */
+export function markGoogleConfigured(calendar?: boolean, gmail?: boolean): void {
+  const config = getConfig();
+  if (!config) return;
+  if (!config.google_configured) config.google_configured = { calendar: false, gmail: false };
+  if (calendar !== undefined) config.google_configured.calendar = calendar;
+  if (gmail !== undefined) config.google_configured.gmail = gmail;
+  fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2), "utf-8");
+}
+
 function canWatchFilesystem(): boolean {
   const dirs = ["Desktop", "Documents", "Downloads"];
   return dirs.some(d => {
