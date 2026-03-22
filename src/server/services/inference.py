@@ -32,13 +32,14 @@ async def handle_prediction_request(state: Any):
     config = state.config
     predictor = state.predictor
     trainer = state.trainer
-    inference_buffer = state.inference_buffer
     past_len = config.past_len
     future_len = config.future_len
 
-    if len(inference_buffer) < past_len:
+    prediction_events = [e for e in state.context_buffer if e.get("prediction_event")]
+
+    if len(prediction_events) < past_len:
         await broadcast(state, "prediction", {
-            "error": f"not enough data ({len(inference_buffer)}/{past_len})"
+            "error": f"not enough data ({len(prediction_events)}/{past_len})"
         })
         return
 
@@ -52,19 +53,14 @@ async def handle_prediction_request(state: Any):
     # Capture cutoff timestamp (exclude events after request)
     cutoff_ts = time.time()
 
-    # Filter buffer for items before cutoff
-    filtered = [
-        item for item in inference_buffer
-        if datetime.strptime(item["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp() < cutoff_ts
-    ]
+    # Filter to prediction events before cutoff and take last past_len
+    snapshot = [e for e in prediction_events if e["timestamp"] < cutoff_ts][-past_len:]
 
-    if len(filtered) < past_len:
+    if len(snapshot) < past_len:
         await broadcast(state, "prediction", {
-            "error": f"not enough pre-cutoff items ({len(filtered)}/{past_len})"
+            "error": f"not enough pre-cutoff items ({len(snapshot)}/{past_len})"
         })
         return
-
-    snapshot = filtered[-past_len:]
 
     # Run prediction in thread pool
     loop = asyncio.get_running_loop()
@@ -93,37 +89,30 @@ async def handle_prediction_request(state: Any):
     # Schedule background eval scoring
     actions_parsed = bool(re.search(r"<action>", result["actions"]))
     if actions_parsed:
-        # Logical position = trim offset + current buffer length
-        logical_pos = state.inference_buffer_trim_offset + len(inference_buffer)
         asyncio.create_task(_score_prediction(
-            state, result, logical_pos, future_len
+            state, result, cutoff_ts, future_len
         ))
 
 
-async def _score_prediction(state: Any, result: dict, logical_pos: int, future_len: int):
+async def _score_prediction(state: Any, result: dict, cutoff_ts: float, future_len: int):
     """Background task: wait for enough ground truth, then score the prediction."""
     from server.ws.handler import broadcast
     from powernap.longnap.trainer_utils import build_actions_block
 
-    # Wait for enough future items to accumulate
+    # Wait for future_len prediction events after cutoff_ts to accumulate
     for _ in range(120):  # 2 minute timeout
-        logical_len = state.inference_buffer_trim_offset + len(state.inference_buffer)
-        if logical_len >= logical_pos + future_len:
+        future = [
+            e for e in state.context_buffer
+            if e.get("prediction_event") and e["timestamp"] > cutoff_ts
+        ]
+        if len(future) >= future_len:
             break
         await asyncio.sleep(1.0)
     else:
         logger.warning("Score timeout: not enough future items")
         return
 
-    # Convert logical position to current buffer index
-    start = logical_pos - state.inference_buffer_trim_offset
-    if start < 0:
-        logger.warning("Score eval: items trimmed away, skipping")
-        return
-
-    ground_truth = build_actions_block(
-        state.inference_buffer[start:start + future_len]
-    )
+    ground_truth = build_actions_block(future[:future_len])
 
     config = state.config
     predictor = state.predictor

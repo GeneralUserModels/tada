@@ -2,7 +2,6 @@
 
 import asyncio
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from server.config import ServerConfig
@@ -21,34 +20,23 @@ class ServerState:
     recording_resumed: asyncio.Event = field(default_factory=asyncio.Event)
     training_resumed: asyncio.Event = field(default_factory=asyncio.Event)
 
-    # Async queues (fed by HTTP endpoint, consumed by services)
+    # Async queues (fed by context_logging, consumed by training)
     aggregation_queue: asyncio.Queue | None = None
     label_queue: asyncio.Queue | None = None
-
-    # Inference buffer (list of labeled dicts, shared with inference service)
-    inference_buffer: list = field(default_factory=list)
 
     # Unified context buffer: all connector events, each with a prediction_event flag
     context_buffer: list = field(default_factory=list)
 
-    # Recording persistence
-    recordings_dir: Path | None = None
-
     # Component instances (lazy-initialized)
-    labeler: Any = None
     trainer: Any = None
     predictor: Any = None
 
     # Service tasks
-    labeling_task: asyncio.Task | None = None
     training_task: asyncio.Task | None = None
     context_logging_task: asyncio.Task | None = None
 
     # Connector instances (populated by context_logging service)
     connectors: dict = field(default_factory=dict)
-
-    # Inference buffer trimming (logical offset for absolute indexing)
-    inference_buffer_trim_offset: int = 0
 
     # Metrics
     step_count: int = 0

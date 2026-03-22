@@ -26,7 +26,7 @@ from tinker_cookbook.image_processing_utils import get_image_processor
 from tinker_cookbook.tokenizer_utils import get_tokenizer
 
 from powernap.longnap.env import LongNAPEnvGroupBuilder
-from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams
+from retrievers import InMemoryBM25Temporal, jaccard_ngrams
 from powernap.longnap.scorer import create_reward_scorer
 from powernap.longnap.trainer_utils import (
     TASK_DESCRIPTION_WITH_IMAGES, TASK_DESCRIPTION_MIXED,

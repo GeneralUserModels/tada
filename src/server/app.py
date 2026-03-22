@@ -10,7 +10,7 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.state import ServerState
-from server.routes import connectors, control, recordings, settings, status, training
+from server.routes import connectors, control, settings, status, training
 from server.ws.handler import ws_endpoint
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
     state.training_active = False
     state.inference_active = False
 
-    for task in [state.labeling_task, state.training_task, state.context_logging_task]:
+    for task in [state.training_task, state.context_logging_task]:
         if task and not task.done():
             task.cancel()
 
@@ -107,7 +107,6 @@ def create_app() -> FastAPI:
     # Register REST routes
     app.include_router(connectors.router)
     app.include_router(control.router)
-    app.include_router(recordings.router)
     app.include_router(settings.router)
     app.include_router(status.router)
     app.include_router(training.router)

@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 from litellm import completion as litellm_completion
+from pydantic import BaseModel
 
 from connectors.base import Connector
 from connectors.calendar import GoogleCalendarConnector
@@ -27,11 +28,13 @@ FILTER_PROMPT = """You are filtering {source} data to keep only items relevant t
 Here are the items:
 {items_json}
 
-Return a JSON array of items that are relevant to predicting the user's next actions.
+Return only the items that are relevant to predicting the user's next actions.
 Exclude: marketing emails, spam, noise, temp files, build artifacts, .DS_Store, __pycache__, node_modules, etc.
-For each kept item, add a "summary" field with a one-line description of why it's relevant.
+For each kept item, add a "summary" field with a one-line description of why it's relevant."""
 
-Return ONLY the JSON array, no other text."""
+
+class _FilterResult(BaseModel):
+    items: list[dict]
 
 
 @dataclass
@@ -87,8 +90,9 @@ def _filter_with_llm(items: list[dict], source: str, model: str, batch_size: int
             messages=[{"role": "user", "content": FILTER_PROMPT.format(
                 source=source, items_json=json.dumps(batch)
             )}],
+            response_format=_FilterResult,
         )
-        results.extend(json.loads(response.choices[0].message.content))
+        results.extend(_FilterResult.model_validate_json(response.choices[0].message.content).items)
     return results
 
 
@@ -118,12 +122,18 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, la
         for item in to_write:
             _append_jsonl(out_path, {"timestamp": now, "text": item.get("summary", ""), "source": item})
             if state is not None and hasattr(state, "context_buffer"):
-                state.context_buffer.append({
+                entry = {
                     "timestamp": now,
                     "text": item.get("summary", ""),
                     "source": cfg.name,
                     "prediction_event": cfg.prediction_event,
-                })
+                    "img": item.get("img") if cfg.prediction_event else None,
+                }
+                state.context_buffer.append(entry)
+                if cfg.prediction_event:
+                    from server.ws.handler import broadcast
+                    await state.label_queue.put(entry)
+                    await broadcast(state, "label", {"text": item.get("summary", "")[:200]})
         for item in items:
             seen.add(item["id"])
         _trim_seen(seen)

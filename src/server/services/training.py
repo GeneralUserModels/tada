@@ -115,7 +115,7 @@ async def run_training_service(state: Any):
                 "inference_active": state.inference_active,
                 "untrained_batches": state.untrained_batches,
                 "labels_processed": state.labels_processed,
-                "inference_buffer_size": len(state.inference_buffer),
+                "context_buffer_size": len(state.context_buffer),
             })
 
             if predict_count < min_required:
@@ -128,7 +128,7 @@ async def run_training_service(state: Any):
             # Run batch_size rollouts concurrently
             rollout_tasks = []
             for i in range(batch_size):
-                if sum(1 for e in state.context_buffer if e.get("prediction_event")) >= min_required:
+                if predict_count >= min_required:
                     s = make_sample(state.context_buffer, past_len, future_len, num_imgs_per_sample)
                     rollout_tasks.append(asyncio.create_task(trainer._rollout_one_sample(s)))
 
@@ -190,8 +190,8 @@ async def run_training_service(state: Any):
                     })
 
             # Trim buffer
-            if len(buffer) > min_required:
-                buffer = buffer[-min_required:]
+            if len(state.context_buffer) > min_required:
+                state.context_buffer = state.context_buffer[-min_required:]
 
         except asyncio.CancelledError:
             logger.info("Training service cancelled")

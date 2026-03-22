@@ -14,7 +14,7 @@ async def get_status(request: Request):
         "inference_active": state.inference_active,
         "aggregation_queue_size": state.aggregation_queue.qsize(),
         "label_queue_size": state.label_queue.qsize(),
-        "inference_buffer_size": len(state.inference_buffer),
+        "context_buffer_size": len(state.context_buffer),
         "untrained_batches": state.untrained_batches,
         "labels_processed": state.labels_processed,
         "step_count": state.step_count,
