@@ -78,6 +78,12 @@ async def lifespan(app: FastAPI):
         if task and not task.done():
             task.cancel()
 
+    # Wait for tasks to actually stop before touching connectors
+    await asyncio.gather(
+        *[t for t in [state.training_task, state.context_logging_task] if t],
+        return_exceptions=True,
+    )
+
     # Pause all connectors (stops active ones like filesystem watcher)
     for connector in state.connectors.values():
         connector.pause()
