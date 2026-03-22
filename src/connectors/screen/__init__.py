@@ -75,6 +75,7 @@ class ScreenConnector(Connector):
             {
                 "id": label["start_time"],
                 "summary": label["text"],
+                "img": label.get("img"),
                 "screenshot_path": label.get("screenshot_path"),
                 "raw_events": label.get("raw_events", []),
             }

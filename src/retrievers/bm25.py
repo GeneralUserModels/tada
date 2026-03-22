@@ -7,6 +7,8 @@ from collections import Counter, defaultdict
 from functools import lru_cache
 from typing import Optional, Iterable, List, Tuple, Dict, Any
 
+from .base import BaseRetriever
+
 # -----------------------
 # Fast token & n-gram cache
 # -----------------------
@@ -16,14 +18,12 @@ _TOK_RE = re.compile(r"\w+")
 
 @lru_cache(maxsize=500_000)
 def _toks_cached(s: str) -> List[str]:
-    # Lowercased, simple word tokenization
     return [t.lower() for t in _TOK_RE.findall(s)]
 
 
 @lru_cache(maxsize=500_000)
 def _ngrams_cached(s: str, n: int = 3):
     xs = _toks_cached(s)
-    # frozenset is hashable (good for caching), supports set ops (&, |)
     return frozenset(tuple(xs[i:i + n]) for i in range(max(0, len(xs) - n + 1)))
 
 
@@ -32,7 +32,6 @@ def jaccard_ngrams(a: str, b: str, n: int = 3) -> float:
     if not A and not B:
         return 1.0
     inter = len(A & B)
-    # Avoid constructing unions explicitly
     return inter / max(1, len(A) + len(B) - inter)
 
 
@@ -40,7 +39,7 @@ def jaccard_ngrams(a: str, b: str, n: int = 3) -> float:
 # In-memory BM25 + temporal + fast dedup
 # -----------------------
 
-class InMemoryBM25Temporal:
+class InMemoryBM25Temporal(BaseRetriever):
     """
     Speedups vs. previous:
       - Inverted index: postings[token] -> list[(doc_id, tf)]
@@ -59,15 +58,15 @@ class InMemoryBM25Temporal:
         self.N: int = 0
 
         # BM25 structures
-        self.df: Counter = Counter()                     # document frequency per token
-        self.idf: Dict[str, float] = {}                 # cached idf per token
-        self.postings: Dict[str, List[Tuple[int, int]]] = defaultdict(list)  # token -> [(doc_id, tf)]
-        self.doc_norm: List[float] = []                 # cached k1*(1-b + b*len/avgdl) per doc
-        self.total_len: int = 0                         # running sum of tokenized lengths
+        self.df: Counter = Counter()
+        self.idf: Dict[str, float] = {}
+        self.postings: Dict[str, List[Tuple[int, int]]] = defaultdict(list)
+        self.doc_norm: List[float] = []
+        self.total_len: int = 0
         self.avgdl: float = 0.0
 
         # Dedup structures
-        self.tri_to_docs: Dict[tuple, List[int]] = defaultdict(list)  # trigram -> [doc_id]
+        self.tri_to_docs: Dict[tuple, List[int]] = defaultdict(list)
 
     # ---- utilities ----
 
@@ -75,17 +74,14 @@ class InMemoryBM25Temporal:
         return _toks_cached(s)
 
     def _recompute_idf_for(self, token: str):
-        # idf = log(1 + (N - df + 0.5) / (df + 0.5))
         df = self.df.get(token, 0)
         N = self.N
         if df == 0:
-            # keep out of idf cache; query code will skip df==0 anyway
             self.idf.pop(token, None)
         else:
             self.idf[token] = math.log(1.0 + (N - df + 0.5) / (df + 0.5))
 
     def _update_avgdl_and_norm(self, doc_id: Optional[int] = None):
-        # Only recompute affected document's norm to avoid O(N) work.
         self.avgdl = (self.total_len / self.N) if self.N else 0.0
         if doc_id is not None and self.N:
             dlen = self.docs[doc_id]["len"]
@@ -98,37 +94,29 @@ class InMemoryBM25Temporal:
 
     def _index_new_doc(self, doc_id: int):
         d = self.docs[doc_id]
-        # update df/postings
         for w, tfw in d["tf"].items():
-            if tfw <= 0:  # safety
+            if tfw <= 0:
                 continue
-            # first time this token appears in this doc, df increments via uniq_toks
         for w in d["uniq_toks"]:
             self.df[w] += 1
             self._recompute_idf_for(w)
         for w, tfw in d["tf"].items():
             self.postings[w].append((doc_id, tfw))
-        # update trigram inverted index
         for tri in d["tri"]:
             self.tri_to_docs[tri].append(doc_id)
-        # update norms
         if doc_id == len(self.doc_norm):
             self.doc_norm.append(0.0)
         self._update_avgdl_and_norm(doc_id)
 
     def _unindex_doc(self, doc_id: int):
-        """Remove a doc from indexes (used when replacing during dedup)."""
         d = self.docs[doc_id]
-        # remove from postings
         for w, tfw in d["tf"].items():
             lst = self.postings.get(w)
             if not lst:
                 continue
-            # filter out pairs for this doc_id (small lists expected; acceptable)
             self.postings[w] = [(i, t) for (i, t) in lst if i != doc_id]
             if not self.postings[w]:
                 del self.postings[w]
-        # df/idf
         for w in d["uniq_toks"]:
             self.df[w] -= 1
             if self.df[w] <= 0:
@@ -136,14 +124,12 @@ class InMemoryBM25Temporal:
                 self.idf.pop(w, None)
             else:
                 self._recompute_idf_for(w)
-        # tri->docs
         for tri in d["tri"]:
             lst = self.tri_to_docs.get(tri)
             if lst:
                 self.tri_to_docs[tri] = [i for i in lst if i != doc_id]
                 if not self.tri_to_docs[tri]:
                     del self.tri_to_docs[tri]
-        # norm stays same length; will be recomputed for replaced doc
 
     # ---- API ----
 
@@ -158,27 +144,20 @@ class InMemoryBM25Temporal:
         uniq_toks = set(tf.keys())
         dlen = len(toks)
 
-        # fast dedup candidate set: union of docs that share any trigram
         cand_docs = set()
         for tri_g in tri:
             for doc_id in self.tri_to_docs.get(tri_g, ()):
-                # filter namespace fast
                 if self.docs[doc_id]["namespace"] == namespace:
                     cand_docs.add(doc_id)
 
-        # check dedup similarity only against candidates
         for doc_id in cand_docs:
             existing = self.docs[doc_id]
-            # jaccard on precomputed tri-sets
             A, B = tri, existing["tri"]
             inter = len(A & B)
             sim = inter / max(1, len(A) + len(B) - inter)
             if sim >= self.dedup_threshold:
-                # replace if newer
                 if event_ts >= existing["event_ts"]:
-                    # unindex existing
                     self._unindex_doc(doc_id)
-                    # overwrite payload (keep list slot)
                     self.total_len -= existing["len"]
                     self.docs[doc_id] = {
                         "text": text, "toks": toks, "tf": tf, "uniq_toks": uniq_toks,
@@ -188,9 +167,8 @@ class InMemoryBM25Temporal:
                     }
                     self.total_len += dlen
                     self._index_new_doc(doc_id)
-                return  # either replaced or ignored (older)
+                return
 
-        # no similar doc; append new
         doc = {
             "text": text, "toks": toks, "tf": tf, "uniq_toks": uniq_toks,
             "tri": tri, "len": dlen,
@@ -215,13 +193,11 @@ class InMemoryBM25Temporal:
 
         ns = set(namespaces) if namespaces else None
 
-        # unique query tokens → avoid double-scoring same term
         q_uniq = []
         seen = set()
         for w in q_tokens:
             if w not in seen:
                 seen.add(w)
-                # skip if df==0 (no postings)
                 if self.df.get(w, 0) > 0:
                     q_uniq.append(w)
 
@@ -230,11 +206,9 @@ class InMemoryBM25Temporal:
 
         scores: Dict[int, float] = {}
 
-        # scoring only docs that contain at least one query term:
         for w in q_uniq:
             idf = self.idf.get(w)
             if idf is None:
-                # compute on-demand (should already be cached)
                 self._recompute_idf_for(w)
                 idf = self.idf.get(w)
                 if idf is None:
@@ -244,12 +218,10 @@ class InMemoryBM25Temporal:
                 continue
             for doc_id, tfw in plist:
                 d = self.docs[doc_id]
-                # cutoffs / namespace filters
                 if d["event_ts"] > cutoff_ts or d["visible_after_ts"] > cutoff_ts:
                     continue
                 if ns and d["namespace"] not in ns:
                     continue
-                # BM25 term contribution
                 denom = tfw + self.doc_norm[doc_id]
                 s = idf * (tfw * (self.k1 + 1.0)) / (denom if denom > 1e-12 else 1e-12)
                 scores[doc_id] = scores.get(doc_id, 0.0) + s
@@ -257,7 +229,6 @@ class InMemoryBM25Temporal:
         if not scores:
             return []
 
-        # optional time decay (age measured in days)
         if time_decay_lambda:
             lam = float(time_decay_lambda)
             for doc_id, s in list(scores.items()):
@@ -265,7 +236,6 @@ class InMemoryBM25Temporal:
                 age_days = age_seconds / 86400.0
                 scores[doc_id] = s * math.exp(-lam * age_days)
 
-        # top-k
         top = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:k]
         out = []
         for doc_id, s in top:
@@ -356,10 +326,10 @@ class InMemoryBM25Temporal:
         for doc_id in range(self.N):
             self._index_new_doc(doc_id)
 
+
 # -----------------------
 # MMR with precomputed tri-grams (fast path)
 # -----------------------
-
 
 def mmr_select(items: List[Tuple[str, float, Any]], top_m: int, alpha: float = 0.7):
     """
@@ -371,7 +341,6 @@ def mmr_select(items: List[Tuple[str, float, Any]], top_m: int, alpha: float = 0
     if not items:
         return []
 
-    # Precompute tri-grams once per item
     tri_by_idx = {i: _ngrams_cached(items[i][0], 3) for i in range(len(items))}
 
     def sim_idx(i: int, j: int) -> float:
@@ -379,7 +348,6 @@ def mmr_select(items: List[Tuple[str, float, Any]], top_m: int, alpha: float = 0
         inter = len(A & B)
         return inter / max(1, len(A) + len(B) - inter)
 
-    # Start with highest-utility item
     order = sorted(range(len(items)), key=lambda i: items[i][1], reverse=True)
     sel = [order.pop(0)]
 
