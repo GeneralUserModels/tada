@@ -15,6 +15,10 @@ class Connector(ABC):
         """Fetch items new/updated since Unix timestamp `since`, or recent if None. Each item must have an 'id' field."""
         ...
 
+    def serialize_item(self, item: dict) -> dict:
+        """Return a JSON-serializable version of a fetch() item. Override to drop non-serializable fields."""
+        return item
+
     def pause(self, error: str | None = None) -> None:
         self._paused = True
         if error is not None:

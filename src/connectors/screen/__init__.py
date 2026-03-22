@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import logging
 from pathlib import Path
 from queue import Empty
@@ -45,6 +46,7 @@ class ScreenConnector(Connector):
             log_dir=self._log_dir,
         )
         self._recorder.start()
+        atexit.register(self._recorder.stop)
         self._labeler = Labeler(
             chunk_size=self._chunk_size,
             log_dir=str(Path(self._log_dir) / "screen"),
@@ -81,6 +83,9 @@ class ScreenConnector(Connector):
             }
             for label in labels
         ]
+
+    def serialize_item(self, item: dict) -> dict:
+        return {k: v for k, v in item.items() if k != "img"}
 
     def pause(self) -> None:
         super().pause()

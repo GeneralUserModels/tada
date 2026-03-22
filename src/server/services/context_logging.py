@@ -8,7 +8,6 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-
 from litellm import completion as litellm_completion
 from pydantic import BaseModel
 
@@ -120,7 +119,7 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, la
             to_write = items
         now = time.time()
         for item in to_write:
-            _append_jsonl(out_path, {"timestamp": now, "text": item.get("summary", ""), "source": item})
+            _append_jsonl(out_path, {"timestamp": now, "text": item.get("summary", ""), "source": cfg.connector.serialize_item(item)})
             if state is not None and hasattr(state, "context_buffer"):
                 entry = {
                     "timestamp": now,
