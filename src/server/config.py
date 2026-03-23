@@ -6,7 +6,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-CONFIG_PATH = Path.home() / ".config" / "powernap" / "server-config.json"
+_default_config_path = str(Path.home() / ".config" / "powernap" / "powernap-config.json")
+CONFIG_PATH = Path(os.environ.get("POWERNAP_CONFIG_PATH", _default_config_path))
 
 # Fields that are user-settable via the API and persisted to disk.
 # CLI-arg fields (log_dir, token paths, etc.) are excluded — they always win.
@@ -117,6 +118,7 @@ class ServerConfig(BaseModel):
         """Load user-settable fields from the config file, if it exists.
 
         CLI-arg-derived fields (log_dir, token paths, etc.) are not overwritten.
+        Also sets env vars for API keys so subprocesses inherit them.
         """
         if not CONFIG_PATH.exists():
             return
@@ -130,9 +132,31 @@ class ServerConfig(BaseModel):
                     setattr(self, field, [MCPConnectorDef.model_validate(item) for item in data[field]])
                 else:
                     setattr(self, field, data[field])
+        _key_env_map = {
+            "gemini_api_key": "GEMINI_API_KEY",
+            "tinker_api_key": "TINKER_API_KEY",
+            "wandb_api_key": "WANDB_API_KEY",
+            "hf_token": "HF_TOKEN",
+        }
+        for field, env_var in _key_env_map.items():
+            val = getattr(self, field, "")
+            if val and not os.environ.get(env_var):
+                os.environ[env_var] = val
 
     def save(self) -> None:
-        """Persist user-settable fields to the config file."""
+        """Persist user-settable fields to the config file.
+
+        Does a read-modify-write to preserve Electron-owned fields
+        (connectors, user info, auth credentials, etc.).
+        """
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        data = {f: getattr(self, f) for f in _PERSISTED_FIELDS}
-        CONFIG_PATH.write_text(json.dumps(data, indent=2))
+        existing: dict = {}
+        if CONFIG_PATH.exists():
+            try:
+                existing = json.loads(CONFIG_PATH.read_text())
+            except Exception:
+                pass
+        for f in _PERSISTED_FIELDS:
+            val = getattr(self, f)
+            existing[f] = [item.model_dump() for item in val] if f == "mcp_connectors" else val
+        CONFIG_PATH.write_text(json.dumps(existing, indent=2))

@@ -1,6 +1,7 @@
 /** Spawns the recording bridge as a child process, reads stdout, POSTs to server. */
 
 import { spawn, ChildProcess } from "child_process";
+import * as path from "path";
 import * as readline from "readline";
 import { postAggregation } from "./api";
 import { isDev, getDataDir, getPythonPath, getPythonSrcDir } from "./paths";
@@ -12,6 +13,8 @@ export function startRecording(fps = 5, bufferSeconds = 12): void {
 
   const pythonPath = getPythonPath();
 
+  const configPath = path.join(getDataDir(), "powernap-config.json");
+
   if (isDev()) {
     // Dev mode: use uv run from repo root
     const projectRoot = getDataDir();
@@ -22,6 +25,7 @@ export function startRecording(fps = 5, bufferSeconds = 12): void {
     ], {
       stdio: ["pipe", "pipe", "pipe"],
       cwd: projectRoot,
+      env: { ...process.env, POWERNAP_CONFIG_PATH: configPath },
     });
   } else {
     // Packaged mode: use venv python directly with PYTHONPATH
@@ -34,6 +38,7 @@ export function startRecording(fps = 5, bufferSeconds = 12): void {
       env: {
         ...process.env,
         PYTHONPATH: getPythonSrcDir(),
+        POWERNAP_CONFIG_PATH: configPath,
       },
     });
   }
