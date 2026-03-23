@@ -4,16 +4,24 @@ import { useTraining } from "../../hooks/useTraining";
 import { TrainingTile, InferenceTile } from "../dashboard/PipelineTile";
 import { PredictionCard } from "../dashboard/PredictionCard";
 import { RewardsChart } from "../dashboard/RewardsChart";
+import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
 
-const SETTINGS_FIELDS: { id: string; key: string; label: string; type: string; placeholder: string }[] = [
-  { id: "set-gemini-key",   key: "gemini_api_key",  label: "Gemini",            type: "text",   placeholder: "sk-..." },
-  { id: "set-tinker-key",   key: "tinker_api_key",  label: "Tinker",            type: "text",   placeholder: "tk-..." },
-  { id: "set-hf-token",     key: "hf_token",        label: "HuggingFace",       type: "text",   placeholder: "hf_..." },
-  { id: "set-wandb-key",    key: "wandb_api_key",   label: "Weights & Biases",  type: "text",   placeholder: "wandb-..." },
-  { id: "set-model",        key: "model",           label: "Base Model",        type: "text",   placeholder: "Qwen/Qwen3-VL-30B-A3B-Instruct" },
-  { id: "set-reward-llm",   key: "reward_llm",      label: "Reward LLM",        type: "text",   placeholder: "gemini/gemini-3-flash-preview" },
-  { id: "set-fps",          key: "fps",             label: "Recording FPS",     type: "number", placeholder: "5" },
+const MODEL_ROWS: { label: string; modelKey: string; modelPlaceholder: string; apiKeyKey: string; apiKeyPlaceholder: string; required?: boolean }[] = [
+  { label: "LLM",    modelKey: "reward_llm",  modelPlaceholder: "gemini/gemini-3-flash-preview",   apiKeyKey: "default_llm_api_key",  apiKeyPlaceholder: "AIza...", required: true },
+  { label: "Tinker", modelKey: "model",       modelPlaceholder: "Qwen/Qwen3-VL-30B-A3B-Instruct", apiKeyKey: "tinker_api_key",  apiKeyPlaceholder: "tk-..." },
 ];
+
+// All keys used across all sections
+function allKeys(): string[] {
+  const keys = new Set<string>();
+  for (const row of MODEL_ROWS) { keys.add(row.modelKey); keys.add(row.apiKeyKey); }
+  for (const row of ADVANCED_ROWS) { keys.add(row.modelKey); keys.add(row.apiKeyKey); }
+  keys.add("hf_token"); keys.add("wandb_api_key");
+  // Also sync LLM model to label_model and filter_model
+  keys.add("label_model");
+  keys.add("filter_model");
+  return Array.from(keys);
+}
 
 
 export function SettingsView() {
@@ -24,10 +32,10 @@ export function SettingsView() {
 
   useEffect(() => {
     const populated: Record<string, string> = {};
-    for (const f of SETTINGS_FIELDS) {
-      const val = state.settings[f.key];
+    for (const key of allKeys()) {
+      const val = state.settings[key];
       if (val !== undefined && val !== null && val !== "") {
-        populated[f.key] = String(val);
+        populated[key] = String(val);
       }
     }
     setValues(populated);
@@ -39,15 +47,20 @@ export function SettingsView() {
 
   const handleSave = async () => {
     const data: Record<string, unknown> = {};
-    for (const f of SETTINGS_FIELDS) {
-      const val = (values[f.key] ?? "").trim();
+    for (const key of allKeys()) {
+      const val = (values[key] ?? "").trim();
       if (val) {
-        data[f.key] = f.key === "fps" ? parseInt(val, 10) : val;
+        data[key] = key === "fps" ? parseInt(val, 10) : val;
       }
     }
     if (Object.keys(data).length > 0) {
       await window.powernap.updateSettings(data);
     }
+  };
+
+  // When the shared LLM model changes, sync it to label_model and filter_model too
+  const handleLLMModelChange = (val: string) => {
+    setValues(v => ({ ...v, reward_llm: val, label_model: val, filter_model: val }));
   };
 
   const handleStartTraining = async () => {
@@ -66,49 +79,88 @@ export function SettingsView() {
     await window.powernap.requestPrediction();
   };
 
-  const apiKeyFields = SETTINGS_FIELDS.slice(0, 4);
-  const modelFields = SETTINGS_FIELDS.slice(4);
-
   return (
     <div id="settings-view" className="view active">
       <section className="glass-card">
         <div className="card-header">
           <h2>Configuration</h2>
         </div>
-        <div className="settings-sections">
-          <div className="settings-group">
-            <h3>API Keys</h3>
-            {apiKeyFields.map((f) => (
-              <label key={f.id} className="field">
-                <span>{f.label}</span>
+
+        {/* Models section */}
+        <div className="settings-group" style={{ marginBottom: "20px" }}>
+          <h3>Models</h3>
+
+          {/* Tinker row */}
+          {/* Shared LLM row */}
+          <div className="model-row">
+            <span className="model-row-label">LLM <span className="required-tag">Required</span> <span style={{ fontWeight: 400, opacity: 0.6, textTransform: "none", fontSize: "10px" }}>(Reward · Labeling · Filter)</span></span>
+            <div className="model-row-fields">
+              <label className="field">
+                <span>Model</span>
                 <input
                   type="text"
-                  id={f.id}
-                  placeholder={f.placeholder}
-                  value={values[f.key] ?? ""}
-                  onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                  placeholder="gemini/gemini-3-flash-preview"
+                  value={values["reward_llm"] ?? ""}
+                  onChange={(e) => handleLLMModelChange(e.target.value)}
                 />
               </label>
-            ))}
-          </div>
-          <div className="settings-group">
-            <h3>Model</h3>
-            {modelFields.map((f) => (
-              <label key={f.id} className="field">
-                <span>{f.label}</span>
+              <label className="field">
+                <span>API Key</span>
                 <input
-                  type={f.type}
-                  id={f.id}
-                  placeholder={f.placeholder}
-                  min={f.key === "fps" ? 1 : undefined}
-                  max={f.key === "fps" ? 60 : undefined}
-                  value={values[f.key] ?? ""}
-                  onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                  type="text"
+                  placeholder="AIza..."
+                  value={values["default_llm_api_key"] ?? ""}
+                  onChange={(e) => setValues(v => ({ ...v, default_llm_api_key: e.target.value }))}
                 />
               </label>
-            ))}
+            </div>
+          </div>
+
+          <AdvancedLLMSection values={values} setValues={setValues} />
+
+          <div className="model-row">
+            <span className="model-row-label">Tinker</span>
+            <div className="model-row-fields">
+              <label className="field">
+                <span>Model</span>
+                <input
+                  type="text"
+                  placeholder="Qwen/Qwen3-VL-30B-A3B-Instruct"
+                  value={values["model"] ?? ""}
+                  onChange={(e) => setValues(v => ({ ...v, model: e.target.value }))}
+                />
+              </label>
+              <label className="field">
+                <span>API Key</span>
+                <input
+                  type="text"
+                  placeholder="tk-..."
+                  value={values["tinker_api_key"] ?? ""}
+                  onChange={(e) => setValues(v => ({ ...v, tinker_api_key: e.target.value }))}
+                />
+              </label>
+            </div>
           </div>
         </div>
+
+        {/* Other section */}
+        <div className="settings-group">
+          <h3>Other</h3>
+          <div className="model-row">
+            <span className="model-row-label">Auth</span>
+            <div className="model-row-fields">
+              <label className="field">
+                <span>HuggingFace Token</span>
+                <input type="text" id="set-hf-token" placeholder="hf_..." value={values["hf_token"] ?? ""} onChange={(e) => setValues(v => ({ ...v, hf_token: e.target.value }))} />
+              </label>
+              <label className="field">
+                <span>Weights &amp; Biases</span>
+                <input type="text" id="set-wandb-key" placeholder="wandb-..." value={values["wandb_api_key"] ?? ""} onChange={(e) => setValues(v => ({ ...v, wandb_api_key: e.target.value }))} />
+              </label>
+            </div>
+          </div>
+        </div>
+
         <div className="settings-footer">
           <button className="pill-btn pill-start" onClick={handleSave}>
             Save Changes

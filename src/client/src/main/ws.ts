@@ -9,6 +9,11 @@ let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 const handlers: Map<string, EventHandler[]> = new Map();
 let connected = false;
+let connectedCallback: (() => void) | null = null;
+
+export function onConnected(cb: () => void) {
+  connectedCallback = cb;
+}
 
 export function isConnected(): boolean {
   return connected;
@@ -38,6 +43,7 @@ export function connect() {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+    connectedCallback?.();
   });
 
   ws.on("message", (raw: WebSocket.Data) => {

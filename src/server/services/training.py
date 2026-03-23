@@ -30,6 +30,7 @@ async def run_training_service(state: Any):
             return OnlineEnvTrainer(
                 model_name=config.model,
                 reward_llm=config.reward_llm,
+                reward_llm_api_key=config.reward_llm_api_key or config.default_llm_api_key,
                 num_generations=config.num_generations,
                 learning_rate=config.learning_rate,
                 max_tokens=config.max_completion_length,

@@ -39,6 +39,7 @@ class RewardScorer:
     def __init__(
         self,
         reward_llm: str = "gemini/gemini-3-flash-preview",
+        api_key: str = "",
         accuracy_weight: float = 0.5,
         formatting_weight: float = 0.5,
         retry_on_failure: bool = True,
@@ -54,6 +55,7 @@ class RewardScorer:
                              If False, return 0.0 immediately on failure (offline).
         """
         self.reward_llm = reward_llm
+        self.api_key = api_key or None
         self.retry_on_failure = retry_on_failure
         self.accuracy_weight = accuracy_weight
         self.formatting_weight = formatting_weight
@@ -202,6 +204,7 @@ class RewardScorer:
                 response = litellm_completion(
                     model=self.reward_llm,
                     messages=[{"role": "user", "content": prompt}],
+                    api_key=self.api_key,
                 )
                 return response.choices[0].message.content
             except Exception as e:
@@ -321,6 +324,7 @@ class RewardScorer:
 
 def create_reward_scorer(
     reward_llm: str = "gemini/gemini-3-flash-preview",
+    api_key: str = "",
     accuracy_weight: float = 0.5,
     formatting_weight: float = 0.5,
     retry_on_failure: bool = True,
@@ -340,6 +344,7 @@ def create_reward_scorer(
     """
     return RewardScorer(
         reward_llm=reward_llm,
+        api_key=api_key,
         accuracy_weight=accuracy_weight,
         formatting_weight=formatting_weight,
         retry_on_failure=retry_on_failure

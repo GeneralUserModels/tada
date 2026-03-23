@@ -11,6 +11,7 @@ export const IPC = {
   GET_SETTINGS: "get:settings",
   UPDATE_SETTINGS: "update:settings",
   GET_TRAINING_HISTORY: "get:training:history",
+  GET_LABEL_HISTORY: "get:label:history",
 
   // Main -> Dashboard
   SERVER_READY: "server:ready",

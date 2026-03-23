@@ -157,7 +157,7 @@ class Predictor:
         return self.predict(messages, ts, future_len=future_len, past_actions=past_actions_block,
                             sampling_client=sampling_client)
 
-    def score_prediction(self, predicted_actions, ground_truth_actions, reward_llm):
+    def score_prediction(self, predicted_actions, ground_truth_actions, reward_llm, api_key=None):
         if not re.search(r"<action>", predicted_actions):
             return 0.0
 
@@ -172,6 +172,7 @@ class Predictor:
         response = litellm_completion(
             model=reward_llm,
             messages=[{"role": "user", "content": prompt}],
+            api_key=api_key or None,
         )
 
         text = response.choices[0].message.content.strip()

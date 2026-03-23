@@ -501,6 +501,23 @@ button, input, select, textarea, canvas, a, label,
   cursor: not-allowed;
 }
 
+.optional-tag {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.required-tag {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(201,89,75,0.08);
+  color: var(--danger);
+}
+
 .pill-start {
   color: var(--sage);
   border-color: rgba(var(--sage-rgb), 0.25);
@@ -713,11 +730,11 @@ button, input, select, textarea, canvas, a, label,
 }
 
 .settings-group h3 {
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-tertiary);
+  color: var(--text);
   margin-bottom: 12px;
 }
 
@@ -759,6 +776,62 @@ button, input, select, textarea, canvas, a, label,
   margin-top: 18px;
   display: flex;
   justify-content: flex-end;
+}
+
+/* Model rows */
+.model-row {
+  margin-bottom: 14px;
+}
+
+.model-row-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.model-row-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.model-row-fields .field {
+  margin-bottom: 0;
+}
+
+/* Advanced toggle */
+.advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.advanced-toggle:hover {
+  color: var(--text);
+}
+
+.advanced-section {
+  margin-top: 6px;
+  padding: 12px;
+  background: rgba(var(--sage-rgb), 0.04);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+}
+
+.advanced-hint {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  margin: 0 0 10px 0;
 }
 
 .settings-footer .pill-btn {
@@ -806,6 +879,9 @@ button, input, select, textarea, canvas, a, label,
     flex-direction: column;
   }
   .settings-sections {
+    grid-template-columns: 1fr;
+  }
+  .model-row-fields {
     grid-template-columns: 1fr;
   }
 }

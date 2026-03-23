@@ -71,7 +71,7 @@ def _trim_seen(seen: set, max_size: int = 10_000, keep: int = 9_000) -> None:
         seen.difference_update(to_remove)
 
 
-def _filter_with_llm(items: list[dict], source: str, model: str, batch_size: int = 20) -> list[dict]:
+def _filter_with_llm(items: list[dict], source: str, model: str, api_key: str = "", batch_size: int = 20) -> list[dict]:
     if not items:
         return []
     results = []
@@ -83,6 +83,7 @@ def _filter_with_llm(items: list[dict], source: str, model: str, batch_size: int
                 source=source, items_json=json.dumps(batch)
             )}],
             response_format=_FilterResult,
+            api_key=api_key or None,
         )
         results.extend(_FilterResult.model_validate_json(response.choices[0].message.content).items)
     return results
@@ -97,7 +98,7 @@ def _load_img(screenshot_path: str | None) -> "Image.Image | None":
         return None
 
 
-async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, label_model: str, state=None) -> None:
+async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, filter_model: str, filter_api_key: str, state) -> None:
     """Poll a single connector forever: fetch → filter? → write JSONL → update seen."""
     seen_path = seen_dir / f"{cfg.name}.json"
     last_fetched_path = seen_dir / f"{cfg.name}_last_fetched.json"
@@ -116,26 +117,33 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, la
             logger.info(f"{cfg.name}: no new items")
             return
         if cfg.filter:
-            to_write = await asyncio.to_thread(_filter_with_llm, items, cfg.name, label_model)
+            to_write = await asyncio.to_thread(_filter_with_llm, items, cfg.name, filter_model, filter_api_key)
         else:
             to_write = items
         now = time.time()
         for item in to_write:
-            _append_jsonl(out_path, {"timestamp": now, "text": item.get("summary", ""), "source": cfg.connector.serialize_item(item)})
-            if state is not None and hasattr(state, "context_buffer"):
-                entry = {
-                    "timestamp": now,
-                    "text": item.get("summary", ""),
-                    "source": cfg.name,
-                    "prediction_event": cfg.prediction_event,
-                    "img": _load_img(item.get("screenshot_path")) if cfg.prediction_event else None,
-                }
-                state.context_buffer.append(entry)
-                if cfg.prediction_event:
-                    from server.ws.handler import broadcast
-                    await state.label_queue.put(entry)
-                    state.labels_processed += 1
-                    await broadcast(state, "label", {"text": item.get("summary", "")[:200], "count": state.labels_processed})
+            _append_jsonl(out_path, {
+                "timestamp": now,
+                "text": item.get("summary", ""),
+                "source": cfg.connector.serialize_item(item),
+                "source_name": cfg.name,
+                "prediction_event": cfg.prediction_event,
+            })
+            entry = {
+                "timestamp": now,
+                "text": item.get("summary", ""),
+                "source": cfg.name,
+                "prediction_event": cfg.prediction_event,
+                "img": _load_img(item.get("screenshot_path")) if cfg.prediction_event else None,
+            }
+            state.context_buffer.append(entry)
+            from server.ws.handler import broadcast
+            if cfg.prediction_event:
+                await state.label_queue.put(entry)
+                state.labels_processed += 1
+                await broadcast(state, "label", {"text": item.get("summary", "")[:200], "count": state.labels_processed})
+            else:
+                await broadcast(state, "label", {"text": f"[{cfg.name}] {item.get('summary', '')}"[:200]})
         for item in items:
             seen.add(item["id"])
         _trim_seen(seen)
@@ -160,7 +168,7 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, la
             else:
                 user_msg = raw
             logger.warning(f"{cfg.name}: pausing — {user_msg}")
-            cfg.connector.pause(error=user_msg)
+            await cfg.connector.stop(error=user_msg)
             if state is not None:
                 from server.ws.handler import broadcast
                 await broadcast(state, "connectors", {"name": cfg.name, "error": user_msg, "enabled": False})
@@ -174,8 +182,8 @@ async def run_context_logging_service(state) -> None:
 
     config = state.config
 
-    while not config.gemini_api_key:
-        logger.info("Waiting for Gemini API key...")
+    while not config.default_llm_api_key:
+        logger.info("Waiting for default LLM API key...")
         await asyncio.sleep(2)
 
     log_dir = Path(config.log_dir)
@@ -193,9 +201,9 @@ async def run_context_logging_service(state) -> None:
                 env={
                     "POWERNAP_LOG_DIR": config.log_dir,
                     "POWERNAP_LABEL_MODEL": config.label_model,
+                    "POWERNAP_LABEL_API_KEY": config.label_model_api_key or config.default_llm_api_key,
                     "POWERNAP_FPS": str(config.fps),
                     "POWERNAP_BUFFER_SECONDS": str(config.buffer_seconds),
-                    "POWERNAP_CHUNK_SIZE": str(config.chunk_size),
                 },
                 exclude_from_serialization=["img"],
             ),
@@ -282,6 +290,7 @@ async def run_context_logging_service(state) -> None:
             cfg.connector.pause()
 
     logger.info("Context logging service started")
+    filter_api_key = config.filter_model_api_key or config.default_llm_api_key
     await asyncio.gather(*[
-        _run_connector(c, log_dir, seen_dir, config.label_model, state) for c in connector_configs
+        _run_connector(c, log_dir, seen_dir, config.filter_model, filter_api_key, state) for c in connector_configs
     ])
