@@ -277,6 +277,10 @@ function setupWsForwarding() {
   ws.on("status", (data) => {
     dashboardWindow?.webContents.send(IPC.STATUS_UPDATE, data);
   });
+
+  ws.on("connectors", (data) => {
+    dashboardWindow?.webContents.send(IPC.CONNECTOR_STATUS_UPDATE, data);
+  });
 }
 
 // ── IPC handlers ─────────────────────────────────────────────
