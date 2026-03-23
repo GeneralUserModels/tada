@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from server.state import ServerState
 from server.routes import connectors, control, settings, status, training
 from server.ws.handler import ws_endpoint
-from server.services.context_logging import _load_img
+from server.services.context_logging import _load_img, run_context_logging_service
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,6 @@ def _restore_step_from_checkpoint(state: ServerState) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize shared state on startup, clean up on shutdown."""
-    from server.services.context_logging import run_context_logging_service
 
     state = ServerState()
     state.config.load_persisted()
