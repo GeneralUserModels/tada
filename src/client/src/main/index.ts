@@ -165,9 +165,11 @@ function createDashboard() {
     },
   });
 
-  dashboardWindow.loadFile(
-    path.join(__dirname, "..", "renderer", "index.html")
-  );
+  if (isDev()) {
+    dashboardWindow.loadURL("http://localhost:5173/index.html");
+  } else {
+    dashboardWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  }
 
   dashboardWindow.on("close", (event) => {
     if (!isQuitting) {
@@ -207,9 +209,11 @@ function createOverlay() {
   overlayWindow.setIgnoreMouseEvents(true);
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-  overlayWindow.loadFile(
-    path.join(__dirname, "..", "renderer", "overlay.html")
-  );
+  if (isDev()) {
+    overlayWindow.loadURL("http://localhost:5173/overlay.html");
+  } else {
+    overlayWindow.loadFile(path.join(__dirname, "..", "renderer", "overlay.html"));
+  }
 
   overlayWindow.on("closed", () => {
     overlayWindow = null;

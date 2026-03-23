@@ -15,7 +15,7 @@ async def get_status(request: Request):
         "aggregation_queue_size": state.aggregation_queue.qsize(),
         "label_queue_size": state.label_queue.qsize(),
         "context_buffer_size": len(state.context_buffer),
-        "untrained_batches": state.untrained_batches,
+        "untrained_batches": state.label_queue.qsize(),
         "labels_processed": state.labels_processed,
         "step_count": state.step_count,
         "latest_scores": state.latest_scores,
