@@ -13,6 +13,8 @@ export function App() {
   };
 
   return (
+    <>
+    <div className="drag-topbar" />
     <div id="app">
       <Sidebar
         activeView={state.activeView}
@@ -36,5 +38,6 @@ export function App() {
         {state.activeView === "settings" && <SettingsView />}
       </main>
     </div>
+    </>
   );
 }

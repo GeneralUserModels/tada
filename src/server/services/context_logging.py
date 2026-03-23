@@ -25,8 +25,13 @@ Exclude: marketing emails, spam, noise, temp files, build artifacts, .DS_Store, 
 For each kept item, add a "summary" field with a one-line description of why it's relevant."""
 
 
+class _FilterItem(BaseModel):
+    summary: str
+    model_config = {"extra": "allow"}
+
+
 class _FilterResult(BaseModel):
-    items: list[dict]
+    items: list[_FilterItem]
 
 
 @dataclass
