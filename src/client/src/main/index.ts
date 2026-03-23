@@ -13,11 +13,13 @@ import { IPC } from "./ipc";
 import * as api from "./api";
 import * as ws from "./ws";
 import * as recorder from "./recorder";
-import { isDev, getDataDir, getPythonPath, getUvPath, getLogDir, getPythonSrcDir, getGwsPath, getOutlookTokenPath } from "./paths";
+import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogleTokenPath, getOutlookTokenPath } from "./paths";
 import * as bootstrap from "./bootstrap";
 import * as onboarding from "./onboarding";
 import { setupConnectorIpc } from "./connector-manager";
-import { initAutoUpdater, openReleasePage, checkForUpdates } from "./updater";
+import { initGoogleAuth } from "./google-auth";
+import { initOutlookAuth } from "./outlook-auth";
+import { initAutoUpdater, installNow, installOnNextLaunch, dismissUpdate, checkForUpdates } from "./updater";
 
 let serverProc: ChildProcess | null = null;
 
@@ -40,18 +42,17 @@ function startServer(port: number): void {
   const pythonPath = getPythonPath();
   const pythonSrcDir = getPythonSrcDir();
 
-  const gwsPath = getGwsPath();
-
+  const googleTokenPath = getGoogleTokenPath();
   const outlookTokenPath = getOutlookTokenPath();
 
   if (isDev()) {
     // Dev mode: use uv run from repo root
     const projectRoot = getDataDir();
     serverProc = spawn("uv", [
-      "run", "python", "-m", "powernap.server",
+      "run", "python", "-m", "server",
       "--port", String(port),
       "--log-dir", logDirPath,
-      "--gws-path", gwsPath,
+      "--google-token-path", googleTokenPath,
       "--outlook-token-path", outlookTokenPath,
       "--save-recordings",
       "--resume-from-checkpoint", "auto",
@@ -60,10 +61,10 @@ function startServer(port: number): void {
   } else {
     // Packaged mode: use venv python directly
     serverProc = spawn(pythonPath, [
-      "-m", "powernap.server",
+      "-m", "server",
       "--port", String(port),
       "--log-dir", logDirPath,
-      "--gws-path", gwsPath,
+      "--google-token-path", googleTokenPath,
       "--outlook-token-path", outlookTokenPath,
       "--save-recordings",
       "--resume-from-checkpoint", "auto",
@@ -124,6 +125,7 @@ let setupWindow: BrowserWindow | null = null;
 let dashboardWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
 let overlayVisible = false;
+let isQuitting = false;
 
 // ── Window creation ──────────────────────────────────────────
 
@@ -163,12 +165,17 @@ function createDashboard() {
     },
   });
 
-  dashboardWindow.loadFile(
-    path.join(__dirname, "..", "renderer", "index.html")
-  );
+  if (isDev()) {
+    dashboardWindow.loadURL("http://localhost:5173/index.html");
+  } else {
+    dashboardWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  }
 
-  dashboardWindow.on("closed", () => {
-    dashboardWindow = null;
+  dashboardWindow.on("close", (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      dashboardWindow?.hide();
+    }
   });
 }
 
@@ -202,9 +209,11 @@ function createOverlay() {
   overlayWindow.setIgnoreMouseEvents(true);
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-  overlayWindow.loadFile(
-    path.join(__dirname, "..", "renderer", "overlay.html")
-  );
+  if (isDev()) {
+    overlayWindow.loadURL("http://localhost:5173/overlay.html");
+  } else {
+    overlayWindow.loadFile(path.join(__dirname, "..", "renderer", "overlay.html"));
+  }
 
   overlayWindow.on("closed", () => {
     overlayWindow = null;
@@ -273,14 +282,6 @@ function setupWsForwarding() {
 // ── IPC handlers ─────────────────────────────────────────────
 
 function setupIpc() {
-  ipcMain.handle(IPC.CONTROL_RECORDING_START, async () => {
-    recorder.startRecording();
-    return api.startRecording();
-  });
-  ipcMain.handle(IPC.CONTROL_RECORDING_STOP, async () => {
-    recorder.stopRecording();
-    return api.stopRecording();
-  });
   ipcMain.handle(IPC.CONTROL_TRAINING_START, () => api.startTraining());
   ipcMain.handle(IPC.CONTROL_TRAINING_STOP, () => api.stopTraining());
   ipcMain.handle(IPC.CONTROL_INFERENCE_START, () => api.startInference());
@@ -299,7 +300,9 @@ function setupIpc() {
   });
 
   // Auto-update
-  ipcMain.handle(IPC.UPDATE_OPEN_RELEASE, (_e, url: string) => openReleasePage(url));
+  ipcMain.handle(IPC.UPDATE_INSTALL_NOW, () => installNow());
+  ipcMain.handle(IPC.UPDATE_INSTALL_ON_QUIT, () => installOnNextLaunch());
+  ipcMain.handle(IPC.UPDATE_DISMISS, () => dismissUpdate());
   ipcMain.handle(IPC.UPDATE_CHECK, () => checkForUpdates());
 }
 
@@ -357,7 +360,7 @@ function launchApp(port: number) {
     const config = onboarding.getConfig();
     if (config) {
       try {
-        const { user_name, user_email, connectors, ...serverConfig } = config as unknown as Record<string, unknown>;
+        const { user_name, user_email, connectors: _connectors, ...serverConfig } = config as unknown as Record<string, unknown>;
         await api.updateSettings(serverConfig);
       } catch (err) {
         console.error("[onboarding] failed to push config to server:", err);
@@ -376,6 +379,8 @@ app.whenReady().then(async () => {
   app.dock?.show();
   setupIpc();
   setupConnectorIpc();
+  initGoogleAuth();
+  initOutlookAuth();
 
   // In packaged mode, check if bootstrap is needed
   if (!isDev() && !bootstrap.isReady()) {
@@ -392,11 +397,23 @@ app.whenReady().then(async () => {
   launchApp(port);
 });
 
+app.on("before-quit", () => {
+  isQuitting = true;
+});
+
 app.on("window-all-closed", () => {
-  recorder.stopRecording();
-  ws.disconnect();
-  stopServer();
-  app.quit();
+  if (process.platform !== "darwin") {
+    recorder.stopRecording();
+    ws.disconnect();
+    stopServer();
+    app.quit();
+  }
+});
+
+app.on("activate", () => {
+  if (dashboardWindow) {
+    dashboardWindow.show();
+  }
 });
 
 app.on("will-quit", () => {

@@ -1,7 +1,7 @@
 /** Auto-updater — checks GitHub Releases for new versions. */
 
 import { autoUpdater } from "electron-updater";
-import { BrowserWindow, shell } from "electron";
+import { BrowserWindow } from "electron";
 import { IPC } from "./ipc";
 
 let mainWindow: BrowserWindow | null = null;
@@ -9,17 +9,12 @@ let mainWindow: BrowserWindow | null = null;
 export function initAutoUpdater(win: BrowserWindow): void {
   mainWindow = win;
 
-  autoUpdater.autoDownload = false;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on("update-available", (info) => {
-    console.log("[updater] update available:", info.version);
-    const releaseUrl =
-      `https://github.com/GeneralUserModels/powernap-release/releases/tag/v${info.version}`;
-    mainWindow?.webContents.send(IPC.UPDATE_AVAILABLE, {
-      version: info.version,
-      releaseNotes: info.releaseNotes,
-      releaseUrl,
-    });
+  autoUpdater.on("update-downloaded", (info) => {
+    console.log("[updater] update downloaded:", info.version);
+    mainWindow?.webContents.send(IPC.UPDATE_DOWNLOADED, { version: info.version });
   });
 
   autoUpdater.on("error", (err) => {
@@ -33,8 +28,16 @@ export function initAutoUpdater(win: BrowserWindow): void {
   setInterval(() => autoUpdater.checkForUpdates(), 30 * 60 * 1000);
 }
 
-export function openReleasePage(url: string): void {
-  shell.openExternal(url);
+export function installNow(): void {
+  autoUpdater.quitAndInstall(false, true);
+}
+
+export function installOnNextLaunch(): void {
+  autoUpdater.autoInstallOnAppQuit = true;
+}
+
+export function dismissUpdate(): void {
+  autoUpdater.autoInstallOnAppQuit = false;
 }
 
 export function checkForUpdates(): void {

@@ -4,10 +4,9 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { app, BrowserWindow, desktopCapturer, ipcMain, shell, systemPreferences } from "electron";
-import { getDataDir } from "./paths";
+import { getDataDir, isDev } from "./paths";
 import { IPC } from "./ipc";
-import { startGoogleLogin } from "./google-auth";
-import { connectGoogle } from "./gws-auth";
+import { startGoogleLogin, connectGoogle } from "./google-auth";
 import { connectOutlook } from "./outlook-auth";
 import { canReadNotifications } from "./notifications";
 import { upsertUser } from "./supabase";
@@ -63,6 +62,16 @@ function saveConfig(data: OnboardingConfig): void {
   fs.writeFileSync(getSentinelPath(), new Date().toISOString(), "utf-8");
 }
 
+/** Mark specific Google connectors as configured (called when user connects from dashboard). */
+export function markGoogleConfigured(calendar?: boolean, gmail?: boolean): void {
+  const config = getConfig();
+  if (!config) return;
+  if (!config.google_configured) config.google_configured = { calendar: false, gmail: false };
+  if (calendar !== undefined) config.google_configured.calendar = calendar;
+  if (gmail !== undefined) config.google_configured.gmail = gmail;
+  fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2), "utf-8");
+}
+
 function canWatchFilesystem(): boolean {
   const dirs = ["Desktop", "Documents", "Downloads"];
   return dirs.some(d => {
@@ -89,7 +98,11 @@ export function runOnboarding(): Promise<void> {
       },
     });
 
-    win.loadFile(path.join(__dirname, "..", "renderer", "onboarding.html"));
+    if (isDev()) {
+      win.loadURL("http://localhost:5173/onboarding.html");
+    } else {
+      win.loadFile(path.join(__dirname, "..", "renderer", "onboarding.html"));
+    }
 
     const handleCheckPermission = () => {
       return systemPreferences.getMediaAccessStatus("screen");
@@ -113,6 +126,12 @@ export function runOnboarding(): Promise<void> {
     const handleOpenSettings = () => {
       shell.openExternal(
         "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+      );
+    };
+
+    const handleOpenFdaSettings = () => {
+      shell.openExternal(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
       );
     };
 
@@ -161,6 +180,7 @@ export function runOnboarding(): Promise<void> {
       ipcMain.removeHandler(IPC.ONBOARDING_CONNECT_OUTLOOK);
       ipcMain.removeHandler(IPC.ONBOARDING_CHECK_NOTIFICATIONS);
       ipcMain.removeHandler(IPC.ONBOARDING_CHECK_FILESYSTEM);
+      ipcMain.removeHandler(IPC.ONBOARDING_OPEN_FDA_SETTINGS);
       ipcMain.removeHandler(IPC.ONBOARDING_SUBMIT);
     }
 
@@ -172,6 +192,7 @@ export function runOnboarding(): Promise<void> {
     ipcMain.handle(IPC.ONBOARDING_CONNECT_OUTLOOK, handleConnectOutlook);
     ipcMain.handle(IPC.ONBOARDING_CHECK_NOTIFICATIONS, handleCheckNotifications);
     ipcMain.handle(IPC.ONBOARDING_CHECK_FILESYSTEM, handleCheckFilesystem);
+    ipcMain.handle(IPC.ONBOARDING_OPEN_FDA_SETTINGS, handleOpenFdaSettings);
     ipcMain.handle(IPC.ONBOARDING_SUBMIT, handleSubmit);
 
     win.on("closed", () => {

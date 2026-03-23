@@ -205,7 +205,12 @@ function stopTokenRefreshTimer(): void {
   }
 }
 
-// Start refresh timer on module load if already connected
-if (isOutlookConnected()) {
+/** Call this after app.whenReady() to start the refresh timer and eagerly refresh if expired. */
+export function initOutlookAuth(): void {
+  if (!isOutlookConnected()) return;
+  const token = readToken();
+  if (token && token.expires_at - Date.now() < 5 * 60 * 1000) {
+    refreshToken().catch((err) => console.error("[outlook-auth] startup token refresh failed:", err));
+  }
   startTokenRefreshTimer();
 }

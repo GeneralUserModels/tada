@@ -52,6 +52,13 @@ export const updateSettings = (data: Record<string, unknown>) =>
 // ── Training ─────────────────────────────────────────────────
 export const getTrainingHistory = () => request("GET", "/api/training/history");
 
+// ── Connectors ───────────────────────────────────────────────
+export const getConnectors = () =>
+  request("GET", "/api/connectors") as Promise<Record<string, { enabled: boolean; error?: string | null }>>;
+
+export const updateConnector = (name: string, enabled: boolean) =>
+  request("PUT", `/api/connectors/${name}`, { enabled });
+
 // ── Recordings ───────────────────────────────────────────────
 export const postAggregation = (data: unknown) =>
   request("POST", "/api/recordings/aggregation", data);

@@ -12,7 +12,7 @@ from powernap.longnap.trainer_utils import (
     TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block,
     build_think_user_message, build_revise_user_message, build_actions_user_message,
 )
-from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams, mmr_select
+from retrievers import InMemoryBM25Temporal, jaccard_ngrams, mmr_select
 
 VERIFIER_PROMPT_PATH = Path(__file__).resolve().parents[1] / "longnap" / "verifiers" / "accuracy.txt"
 
@@ -152,7 +152,7 @@ class Predictor:
             "content": content,
         }]
 
-        ts = datetime.strptime(past[0]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
+        ts = past[0]["timestamp"]
 
         return self.predict(messages, ts, future_len=future_len, past_actions=past_actions_block,
                             sampling_client=sampling_client)

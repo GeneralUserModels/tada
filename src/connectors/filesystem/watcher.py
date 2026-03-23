@@ -1,6 +1,7 @@
 """Watch ~/Desktop, ~/Documents, ~/Downloads for filesystem changes using watchdog."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -9,6 +10,8 @@ import threading
 
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
+
+from connectors.base import Connector
 
 WATCH_DIRS = [
     os.path.expanduser("~/Desktop"),
@@ -64,6 +67,38 @@ class FilesystemWatcher:
             events = self._events.copy()
             self._events.clear()
         return events
+
+
+class FilesystemConnector(Connector):
+    """Wraps a FilesystemWatcher and exposes buffered events as a Connector."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._watcher: FilesystemWatcher | None = None
+        self._start_watcher()
+
+    def _start_watcher(self) -> None:
+        self._watcher = FilesystemWatcher()
+        self._watcher.start()
+
+    def fetch(self, since: float | None = None) -> list[dict]:
+        events = self._watcher.drain_events()
+        result = []
+        for e in events:
+            key = hashlib.md5(f"{e['path']}:{e['type']}:{e['timestamp']}".encode()).hexdigest()
+            result.append({**e, "id": key})
+        return result
+
+    def pause(self) -> None:
+        super().pause()
+        if self._watcher:
+            self._watcher.stop()
+            self._watcher = None
+
+    def resume(self) -> None:
+        super().resume()
+        if not self._watcher:
+            self._start_watcher()
 
 
 if __name__ == "__main__":

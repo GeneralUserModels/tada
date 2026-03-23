@@ -1,33 +1,52 @@
-"""Google Calendar connector — uses gws CLI to fetch upcoming events."""
+"""Google Calendar connector — fetches upcoming events via the Google Calendar REST API."""
 
-import json
-import subprocess
+import logging
 from datetime import datetime, timezone
 
+import requests
 
-def get_upcoming_events(gws_path: str, max_results: int = 20) -> list[dict]:
-    """Fetch upcoming calendar events via the gws CLI."""
-    now_iso = datetime.now(timezone.utc).isoformat()
-    params = json.dumps({
-        "calendarId": "primary",
-        "maxResults": max_results,
-        "timeMin": now_iso,
-    })
-    result = subprocess.run(
-        [gws_path, "calendar", "events", "list",
-         "--params", params, "--format", "json"],
-        capture_output=True, text=True, timeout=30,
-    )
-    data = json.loads(result.stdout)
-    events = data if isinstance(data, list) else data.get("items", data.get("events", []))
-    return [
-        {
-            "id": evt.get("id", ""),
-            "summary": evt.get("summary", ""),
-            "start": evt.get("start", ""),
-            "end": evt.get("end", ""),
-            "description": evt.get("description", ""),
-            "location": evt.get("location", ""),
+from connectors.base import TokenConnector
+
+logger = logging.getLogger(__name__)
+
+CALENDAR_BASE = "https://www.googleapis.com/calendar/v3"
+
+
+class GoogleCalendarConnector(TokenConnector):
+    def __init__(self, token_path: str, max_results: int = 20) -> None:
+        super().__init__(token_path)
+        self.max_results = max_results
+
+    def fetch(self, since: float | None = None) -> list[dict]:
+        """Fetch upcoming calendar events via the Google Calendar REST API."""
+        headers = {"Authorization": f"Bearer {self._access_token()}"}
+        params = {
+            "calendarId": "primary",
+            "maxResults": self.max_results,
+            "timeMin": datetime.now(timezone.utc).isoformat(),
+            "singleEvents": "true",
+            "orderBy": "startTime",
         }
-        for evt in events
-    ]
+        if since:
+            params["updatedMin"] = datetime.fromtimestamp(since, tz=timezone.utc).isoformat()
+        resp = requests.get(
+            f"{CALENDAR_BASE}/calendars/primary/events",
+            headers=headers,
+            params=params,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        events = resp.json().get("items", [])
+        logger.info("calendar: fetched %d events", len(events))
+
+        return [
+            {
+                "id": evt.get("id", ""),
+                "summary": evt.get("summary", ""),
+                "start": evt.get("start", ""),
+                "end": evt.get("end", ""),
+                "description": evt.get("description", ""),
+                "location": evt.get("location", ""),
+            }
+            for evt in events
+        ]

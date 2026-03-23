@@ -26,10 +26,11 @@ from tinker_cookbook.image_processing_utils import get_image_processor
 from tinker_cookbook.tokenizer_utils import get_tokenizer
 
 from powernap.longnap.env import LongNAPEnvGroupBuilder
-from powernap.longnap.retrievers import InMemoryBM25Temporal, jaccard_ngrams
+from retrievers import InMemoryBM25Temporal, jaccard_ngrams
 from powernap.longnap.scorer import create_reward_scorer
 from powernap.longnap.trainer_utils import (
-    TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block,
+    TASK_DESCRIPTION_WITH_IMAGES, TASK_DESCRIPTION_MIXED,
+    build_actions_block, build_context_block,
 )
 
 import wandb
@@ -39,68 +40,58 @@ logger = logging.getLogger(__name__)
 
 
 def make_sample(
-    buffer: List[Dict],
+    context_buffer: List[Dict],
     past_len: int,
     future_len: int,
     num_imgs_per_sample: int = 0,
 ) -> Dict[str, Any]:
     """
-    Create a sample from a buffer of labeled actions.
+    Create a training sample from the unified context buffer.
 
     Args:
-        buffer: List of labeled action dicts
-        past_len: Number of past actions to include
-        future_len: Number of future actions (ground truth)
-        num_imgs_per_sample: Number of images to include (from most recent actions)
+        context_buffer: All connector events, each with prediction_event flag.
+        past_len: Number of past screen (prediction) events to use as context boundary.
+        future_len: Number of future screen events to predict (ground truth).
+        num_imgs_per_sample: Number of images to include (from most recent screen events).
 
     Returns a dict with 'messages' for the renderer.
     """
     from PIL import ImageFile
     ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-    window = buffer[-(past_len + future_len):]
-    past = window[:past_len]
-    future = window[past_len:]
+    predict_events = [e for e in context_buffer if e.get("prediction_event")]
 
-    past_actions_block = build_actions_block(past)
+    future = predict_events[-future_len:]
+    past_predict = predict_events[-(past_len + future_len):-future_len]
+
+    # All context events up to (and including) the last past prediction event
+    boundary_ts = past_predict[-1]["timestamp"]
+    past_context = [e for e in context_buffer if e["timestamp"] <= boundary_ts]
+
+    context_block = build_context_block(past_context)
     future_actions = build_actions_block(future)
 
-    # Build content - optionally include images
     if num_imgs_per_sample > 0:
-        # Collect images from the most recent N actions
-        image_content = []
-        for i in range(past_len):
-            if i >= (past_len - num_imgs_per_sample):
-                img = past[i].get("img")
-                if img is not None:
-                    image_content.append({"type": "image", "image": img.convert("RGB")})
-
+        screen_past = [e for e in past_predict if e.get("img") is not None]
+        imgs = screen_past[-num_imgs_per_sample:]
+        image_content = [{"type": "image", "image": e["img"].convert("RGB")} for e in imgs]
         if image_content:
             content = image_content + [
-                {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + past_actions_block}
+                {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + context_block}
             ]
         else:
-            # No images loaded successfully, fall back to text-only
-            content = TASK_DESCRIPTION + "\n\n" + past_actions_block
+            content = TASK_DESCRIPTION_MIXED + "\n\n" + context_block
     else:
-        content = TASK_DESCRIPTION + "\n\n" + past_actions_block
-
-    messages = [{
-        "role": "user",
-        "content": content,
-    }]
-
-    start_ts = datetime.strptime(past[0]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
-    end_ts = datetime.strptime(future[-1]["start_time"], "%Y-%m-%d_%H-%M-%S-%f").timestamp()
+        content = TASK_DESCRIPTION_MIXED + "\n\n" + context_block
 
     return {
-        "messages": messages,
+        "messages": [{"role": "user", "content": content}],
         "solution": future_actions,
-        "ts": start_ts,
-        "end_ts": end_ts,
+        "ts": past_predict[0]["timestamp"],
+        "end_ts": future[-1]["timestamp"],
         "future_len": future_len,
         "past_len": past_len,
-        "past_actions": past_actions_block,
+        "past_actions": context_block,
     }
 
 class OnlineEnvTrainer:

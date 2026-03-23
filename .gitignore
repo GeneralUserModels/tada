@@ -17,12 +17,8 @@ data/
 powernap-config.json
 .onboarding-complete
 
-# Auth secrets
-src/client/src/main/auth-config.ts
-
 # Electron / DMG build
-src/client/dist/
-src/client/release/
+release/
 src/client/node_modules/
 .DS_Store
 grpo_trainer.py

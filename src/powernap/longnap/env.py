@@ -20,7 +20,7 @@ from tinker_cookbook.rl.types import (
     Trajectory,
 )
 
-from .retrievers import InMemoryBM25Temporal, mmr_select
+from retrievers import InMemoryBM25Temporal, mmr_select
 from .trainer_utils import (
     build_think_user_message,
     build_revise_user_message,

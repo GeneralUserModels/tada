@@ -4,8 +4,6 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("powernap", {
   // Control
-  startRecording: () => ipcRenderer.invoke("control:recording:start"),
-  stopRecording: () => ipcRenderer.invoke("control:recording:stop"),
   startTraining: () => ipcRenderer.invoke("control:training:start"),
   stopTraining: () => ipcRenderer.invoke("control:training:stop"),
   startInference: () => ipcRenderer.invoke("control:inference:start"),
@@ -65,6 +63,7 @@ contextBridge.exposeInMainWorld("powernap", {
   connectOutlook: () => ipcRenderer.invoke("onboarding:connect-outlook"),
   checkNotifications: () => ipcRenderer.invoke("onboarding:check-notifications"),
   checkFilesystem: () => ipcRenderer.invoke("onboarding:check-filesystem"),
+  openNotifSettings: () => ipcRenderer.invoke("onboarding:open-fda-settings"),
 
   // Dashboard connectors
   getConnectorStatus: () => ipcRenderer.invoke("connector:status"),
@@ -74,13 +73,19 @@ contextBridge.exposeInMainWorld("powernap", {
   connectorDisconnectOutlook: () => ipcRenderer.invoke("connector:disconnect-outlook"),
   updateConnector: (name: string, enabled: boolean) =>
     ipcRenderer.invoke("connector:update", name, enabled),
+  openFdaSettings: (name?: string) => ipcRenderer.invoke("connector:open-fda-settings", name),
+  getConnectorPermissionInfo: (name: string) => ipcRenderer.invoke("connector:get-permission-info", name),
+  checkConnectorPermission: (name: string) => ipcRenderer.invoke("connector:check-permission", name),
+  requestConnectorPermission: (name: string) => ipcRenderer.invoke("connector:request-permission", name),
 
   // Auto-update
-  onUpdateAvailable: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("update:available", (_e, data) => cb(data)),
+  onUpdateDownloaded: (cb: (data: unknown) => void) =>
+    ipcRenderer.on("update:downloaded", (_e, data) => cb(data)),
   onUpdateError: (cb: (msg: string) => void) =>
     ipcRenderer.on("update:error", (_e, msg) => cb(msg)),
-  openReleasePage: (url: string) => ipcRenderer.invoke("update:open-release", url),
+  installNow: () => ipcRenderer.invoke("update:install-now"),
+  installOnNextLaunch: () => ipcRenderer.invoke("update:install-on-quit"),
+  dismissUpdate: () => ipcRenderer.invoke("update:dismiss"),
   checkForUpdates: () => ipcRenderer.invoke("update:check"),
 
   // Bootstrap
