@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AdvancedLLMSection } from "../shared/AdvancedLLMSection";
+import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 
 // ── Permission modal ──────────────────────────────────────────
 
@@ -133,7 +134,8 @@ export function Onboarding() {
   const [connectingOutlook, setConnectingOutlook] = useState(false);
 
   // Model + API key state
-  const [model, setModel] = useState("gemini/gemini-3-flash-preview");
+  const [model, setModel] = useState("anthropic/claude-haiku-4-5-20251001");
+  const [tinkerModel, setTinkerModel] = useState("Qwen/Qwen3-VL-30B-A3B-Instruct");
   const [geminiKey, setGeminiKey] = useState("");
   const [tinkerKey, setTinkerKey] = useState("");
   const [wandbKey, setWandbKey] = useState("");
@@ -216,7 +218,8 @@ export function Onboarding() {
       if (v.trim()) advanced[k] = v.trim();
     }
     window.powernap.submitOnboarding({
-      reward_llm: model.trim() || "gemini/gemini-3-flash-preview",
+      reward_llm: model || "anthropic/claude-haiku-4-5-20251001",
+      model: tinkerModel || undefined,
       default_llm_api_key: geminiKey.trim(),
       ...advanced,
       tinker_api_key: tinkerKey.trim() || undefined,
@@ -238,6 +241,8 @@ export function Onboarding() {
   };
 
   return (
+    <>
+    <div className="drag-topbar" />
     <div className="wrapper">
       {permModal && (
         <PermModal
@@ -323,7 +328,10 @@ export function Onboarding() {
           </div>
           <div className="btn-row">
             <button className="btn btn-ghost" onClick={() => setStep(0)}>Back</button>
-            <button className="btn btn-primary" disabled={!googleUser} onClick={() => setStep(2)}>Continue</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {!googleUser && <button className="btn btn-ghost" onClick={() => setStep(2)}>Skip</button>}
+              <button className="btn btn-primary" disabled={!googleUser} onClick={() => setStep(2)}>Continue</button>
+            </div>
           </div>
         </div>
       )}
@@ -462,7 +470,12 @@ export function Onboarding() {
               <div className="model-row-fields">
                 <div className="field">
                   <span>Model</span>
-                  <input type="text" placeholder="gemini/gemini-3-flash-preview" value={model} onChange={(e) => setModel(e.target.value)}/>
+                  <ModelDropdown
+                    value={model}
+                    onChange={setModel}
+                    options={LLM_MODELS}
+                    placeholder="Select a model"
+                  />
                 </div>
                 <div className="field">
                   <span>API Key</span>
@@ -475,15 +488,25 @@ export function Onboarding() {
               <span className="model-row-label">Tinker <span className="optional-tag">optional</span></span>
               <div className="model-row-fields">
                 <div className="field">
+                  <span>Model</span>
+                  <ModelDropdown value={tinkerModel} onChange={setTinkerModel} options={TINKER_MODELS} placeholder="Select a model" />
+                </div>
+                <div className="field">
                   <span>API Key</span>
                   <input type="password" placeholder="tml-..." value={tinkerKey}
                     onChange={(e) => { setTinkerKey(e.target.value); validateTinker(e.target.value); }}/>
                   {tinkerError && <span className="field-hint" style={{ color: "var(--danger)" }}>{tinkerError}</span>}
                 </div>
+              </div>
+            </div>
+            <div className="model-row">
+              <span className="model-row-label">W&amp;B <span className="optional-tag">optional</span></span>
+              <div className="model-row-fields">
                 <div className="field">
-                  <span>W&amp;B API Key</span>
+                  <span>API Key</span>
                   <input type="password" placeholder="wandb-..." value={wandbKey} onChange={(e) => setWandbKey(e.target.value)}/>
                 </div>
+                <div className="field"></div>
               </div>
             </div>
           </div>
@@ -494,5 +517,6 @@ export function Onboarding() {
         </div>
       )}
     </div>
+    </>
   );
 }
