@@ -4,7 +4,7 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
-  root: "src/client/src/renderer",
+  root: "src/client/renderer",
   base: "./",
   server: {
     port: 5173,
@@ -15,10 +15,10 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        index:      path.resolve(__dirname, "src/client/src/renderer/index.html"),
-        overlay:    path.resolve(__dirname, "src/client/src/renderer/overlay.html"),
-        onboarding: path.resolve(__dirname, "src/client/src/renderer/onboarding.html"),
-        setup:      path.resolve(__dirname, "src/client/src/renderer/setup.html"),
+        index:      path.resolve(__dirname, "src/client/renderer/index.html"),
+        overlay:    path.resolve(__dirname, "src/client/renderer/overlay.html"),
+        onboarding: path.resolve(__dirname, "src/client/renderer/onboarding.html"),
+        setup:      path.resolve(__dirname, "src/client/renderer/setup.html"),
       },
     },
   },
