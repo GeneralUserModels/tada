@@ -10,7 +10,7 @@ export function isDev(): boolean {
 
 export function getDataDir(): string {
   return isDev()
-    ? path.resolve(__dirname, "..", "..", "..", "..")
+    ? path.resolve(__dirname, "..", "..")
     : app.getPath("userData");
 }
 
@@ -27,11 +27,7 @@ export function getUvPath(): string {
 }
 
 export function getLogDir(): string {
-  return path.join(getDataDir(), "logs-app");
-}
-
-export function getGwsPath(): string {
-  return path.join(getDataDir(), "gws");
+  return path.join(getDataDir(), "logs");
 }
 
 export function getPythonSrcDir(): string {
@@ -42,4 +38,8 @@ export function getPythonSrcDir(): string {
 
 export function getOutlookTokenPath(): string {
   return path.join(os.homedir(), ".config", "powernap", "outlook-token.json");
+}
+
+export function getGoogleTokenPath(): string {
+  return path.join(os.homedir(), ".config", "powernap", "google-token.json");
 }

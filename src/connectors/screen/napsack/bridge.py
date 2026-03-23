@@ -5,14 +5,36 @@ The Electron client spawns this as a child process, reads stdout line-by-line,
 and POSTs each aggregation to POST /api/recordings/aggregation.
 """
 
-from dotenv import load_dotenv
-load_dotenv()
+import json
+import os
+from pathlib import Path
+
+
+def _load_config_env() -> None:
+    """Load API keys from powernap-config.json (cwd = project root in dev)."""
+    config_path = Path.cwd() / "powernap-config.json"
+    if not config_path.exists():
+        return
+    try:
+        data = json.loads(config_path.read_text())
+    except Exception:
+        return
+    mapping = {
+        "gemini_api_key": "GEMINI_API_KEY",
+        "tinker_api_key": "TINKER_API_KEY",
+        "wandb_api_key": "WANDB_API_KEY",
+        "hf_token": "HF_TOKEN",
+    }
+    for key, env_var in mapping.items():
+        if data.get(key) and not os.environ.get(env_var):
+            os.environ[env_var] = data[key]
+
+
+_load_config_env()
 
 import argparse
 import base64
 import io
-import json
-import os
 import signal
 import sys
 

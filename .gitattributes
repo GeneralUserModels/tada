@@ -1,0 +1,7 @@
+# Lock files
+package-lock.json linguist-generated=true
+uv.lock linguist-generated=true
+
+# Vendored / generated
+node_modules/ linguist-vendored=true
+dist/ linguist-generated=true

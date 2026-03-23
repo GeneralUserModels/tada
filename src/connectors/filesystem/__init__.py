@@ -1,3 +1,3 @@
-from .watcher import FilesystemWatcher
+from .watcher import FilesystemConnector, FilesystemWatcher
 
-__all__ = ["FilesystemWatcher"]
+__all__ = ["FilesystemConnector", "FilesystemWatcher"]

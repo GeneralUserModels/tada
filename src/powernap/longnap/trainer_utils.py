@@ -5,6 +5,7 @@ These functions return message dicts that can be appended to a conversation
 and rendered by Qwen3VLRenderer.
 """
 
+from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 
@@ -19,6 +20,12 @@ TASK_DESCRIPTION_WITH_IMAGES = (
     "Look at the images of their device to help you predict the user's next action."
 )
 
+TASK_DESCRIPTION_MIXED = (
+    "You will analyze user behavior and predict what the user will do next. "
+    "Below is a chronological log of what the user has been doing, including "
+    "screen activity and other context (emails, notifications, calendar events, files)."
+)
+
 THINK_INSTRUCTION = (
     "Task: Predict the user's likely next steps.\n\n"
     "Look at the images and past actions. Think about what the user is likely to do next.\n\n"
@@ -30,6 +37,19 @@ REVISE_INSTRUCTION = (
     "Consider how this context changes (or confirms) the likely next steps.\n\n"
     "Output ONLY a <revise>...</revise> block with your final, revised rationale."
 )
+
+
+def build_context_block(events: List[Dict[str, Any]]) -> str:
+    """Format a unified context buffer into a timestamped block.
+
+    Each event must have: timestamp (float), text (str), source (str).
+    Output format per line: [HH:MM] [source] text
+    """
+    sorted_events = sorted(events, key=lambda e: e["timestamp"])
+    return "\n".join(
+        f"[{datetime.fromtimestamp(e['timestamp']).strftime('%H:%M')}] [{e['source']}] {e['text']}"
+        for e in sorted_events
+    )
 
 
 def fmt_action(text: str) -> str:
