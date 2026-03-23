@@ -106,6 +106,7 @@ class OnlineEnvTrainer:
         self,
         model_name: str = "Qwen/Qwen3-VL-30B-A3B-Instruct",
         reward_llm: str = "gemini/gemini-3-flash-preview",
+        reward_llm_api_key: str = "",
         num_generations: int = 8,
         learning_rate: float = 1e-5,
         max_tokens: int = 512,
@@ -149,9 +150,9 @@ class OnlineEnvTrainer:
 
         # Determine effective run_name: restore from checkpoint or create new with unique suffix
         _ckpt_entry_early = self._get_checkpoint_entry(self._resolved_checkpoint) if self._resolved_checkpoint else None
-        if _ckpt_entry_early and "run_name" in _ckpt_entry_early:
+        if _ckpt_entry_early:
             self.run_name = _ckpt_entry_early["run_name"]
-            self._resume_wandb_id = _ckpt_entry_early.get("wandb_run_id")
+            self._resume_wandb_id = _ckpt_entry_early["wandb_run_id"]
             logger.info(f"Restored run_name from checkpoint: {self.run_name}")
         else:
             uid = uuid.uuid4().hex[:8]
@@ -179,6 +180,7 @@ class OnlineEnvTrainer:
         self.num_imgs_per_sample = num_imgs_per_sample
         self._last_checkpoint_path: Optional[str] = None
         self._last_retriever_checkpoint_path: Optional[str] = None
+        self._last_trained_end_ts: float = 0.0
 
         # Get tokenizer and renderer
         self.tokenizer = get_tokenizer(model_name)
@@ -220,7 +222,7 @@ class OnlineEnvTrainer:
                 return {"reward": 0.0, "accuracy": 0.0, "formatting": 0.0, "penalty": 0.0}
             self.reward_scorer = _dummy_scorer
         else:
-            self.reward_scorer = create_reward_scorer(reward_llm=reward_llm)
+            self.reward_scorer = create_reward_scorer(reward_llm=reward_llm, api_key=reward_llm_api_key)
 
         # Retrieval parameters
         self.retrieval_top_k = retrieval_top_k
@@ -269,46 +271,26 @@ class OnlineEnvTrainer:
         if not ckpt_file.exists():
             logger.warning(f"No checkpoints.jsonl found in {log_dir}")
             return None
-        last = None
-        for line in ckpt_file.read_text().strip().splitlines():
-            entry = json.loads(line)
-            if "state_path" in entry:
-                last = entry
-        if last:
-            logger.info(f"Auto-resolved checkpoint: {last['state_path']}")
-            return last["state_path"]
-        logger.warning("No valid checkpoints found in checkpoints.jsonl")
-        return None
+        lines = ckpt_file.read_text().splitlines()
+        last = json.loads(lines[-1])
+        logger.info(f"Auto-resolved checkpoint: {last['state_path']}")
+        return last["state_path"]
 
     def _get_checkpoint_entry(self, state_path):
         """Look up the full checkpoint entry for a given state_path from checkpoints.jsonl."""
         ckpt_file = Path(self.log_dir) / "checkpoints.jsonl"
-        if not ckpt_file.exists():
-            return None
-        for line in ckpt_file.read_text().strip().splitlines():
-            entry = json.loads(line)
-            if entry.get("state_path") == state_path:
-                return entry
-        return None
+        entries = [json.loads(l) for l in ckpt_file.read_text().splitlines()]
+        return next(e for e in entries if e["state_path"] == state_path)
 
     def _restore_checkpoint_metadata(self, checkpoint_path):
-        """Restore metadata from checkpoint (step counter, retriever) without loading model state.
-
-        Used when training client was already initialized from state via create_training_client_from_state.
-        """
+        """Restore metadata from checkpoint (step counter, retriever) without loading model state."""
         logger.info(f"Restoring checkpoint metadata from {checkpoint_path}...")
-
-        # Restore step counter and checkpoint paths from the checkpoint entry
         entry = self._get_checkpoint_entry(checkpoint_path)
-        if entry:
-            self._step = entry.get("step", 0)
-            self._last_checkpoint_path = checkpoint_path
-            retriever_path = entry.get("retriever_path")
-            self.retriever.load_checkpoint(retriever_path)
-            self._last_retriever_checkpoint_path = retriever_path
-            logger.info(f"Resumed from step {self._step}")
-        else:
-            logger.warning(f"No checkpoint entry found for {checkpoint_path}, starting from step 0")
+        self._step = entry["step"]
+        self._last_checkpoint_path = checkpoint_path
+        self._last_retriever_checkpoint_path = entry["retriever_path"]
+        self.retriever.load_checkpoint(entry["retriever_path"])
+        logger.info(f"Resumed from step {self._step}")
 
         logger.info(f"Successfully restored checkpoint metadata from {checkpoint_path}")
 
@@ -367,6 +349,7 @@ class OnlineEnvTrainer:
             "retriever_path": str(retriever_path),
             "run_name": self.run_name,
             "wandb_run_id": wandb_run_id,
+            "end_ts": self._last_trained_end_ts,
         }
         with open(ckpt_file, "a") as f:
             f.write(json.dumps(entry) + "\n")
@@ -571,7 +554,7 @@ class OnlineEnvTrainer:
         _builders = builders or [None] * len(trajectory_groups)
         for traj_group, sample, builder in zip(trajectory_groups, samples, _builders):
             # Get prompt from sample
-            prompt = sample.get("past_actions", "")
+            prompt = sample["past_actions"]
             
             # Get per-env score components and retrieved texts from builder
             score_components_list = getattr(builder, '_score_components', None) if builder else None
@@ -606,7 +589,7 @@ class OnlineEnvTrainer:
                 table_data["retrieved"].append(retrieved)
                 table_data["revise"].append(revise_text)
                 table_data["actions"].append(actions_text)
-                table_data["ground_truth"].append(sample.get("solution", ""))
+                table_data["ground_truth"].append(sample["solution"])
                 table_data["reward"].append(reward)
                 table_data["accuracy"].append(sc["accuracy"])
                 table_data["formatting"].append(sc["formatting"])
@@ -738,6 +721,10 @@ class OnlineEnvTrainer:
             f"time={metrics['train/step_time']:.2f}s"
         )
         print(f"[train] step {self._step} completed in {metrics['train/step_time']:.2f}s")
+
+        # Track the latest end_ts consumed by training
+        if samples:
+            self._last_trained_end_ts = max(s["end_ts"] for s in samples)
 
         # Checkpoint
         if self.checkpoint_every_n_steps > 0 and (self._step + 1) % self.checkpoint_every_n_steps == 0:

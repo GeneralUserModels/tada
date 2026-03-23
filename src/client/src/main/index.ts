@@ -299,6 +299,7 @@ function setupIpc() {
   ipcMain.handle(IPC.GET_SETTINGS, () => api.getSettings());
   ipcMain.handle(IPC.UPDATE_SETTINGS, (_e, data) => api.updateSettings(data));
   ipcMain.handle(IPC.GET_TRAINING_HISTORY, () => api.getTrainingHistory());
+  ipcMain.handle(IPC.GET_LABEL_HISTORY, () => api.getLabelHistory());
 
   // Overlay resize
   ipcMain.on("overlay:resize", (_e, height: number) => {
@@ -361,9 +362,20 @@ function launchApp(port: number) {
 
   startServer(port);
 
+  // Re-send SERVER_READY whenever the WS (re)connects (covers sleep/wake).
+  ws.onConnected(() => {
+    dashboardWindow?.webContents.send(IPC.SERVER_READY);
+  });
+
+  // Re-send SERVER_READY on renderer reload if already connected (covers HMR).
+  dashboardWindow?.webContents.on("did-finish-load", () => {
+    if (ws.isConnected()) {
+      dashboardWindow?.webContents.send(IPC.SERVER_READY);
+    }
+  });
+
   waitForServer(`http://127.0.0.1:${port}/api/status`).then(async () => {
     ws.connect();
-    dashboardWindow?.webContents.send(IPC.SERVER_READY);
   });
 
   globalShortcut.register("Control+H", toggleOverlay);

@@ -21,7 +21,7 @@ def _load_config_env() -> None:
     except Exception:
         return
     mapping = {
-        "gemini_api_key": "GEMINI_API_KEY",
+        "default_llm_api_key": "GEMINI_API_KEY",
         "tinker_api_key": "TINKER_API_KEY",
         "wandb_api_key": "WANDB_API_KEY",
         "hf_token": "HF_TOKEN",

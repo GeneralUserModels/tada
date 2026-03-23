@@ -24,7 +24,7 @@ export interface ConnectorState {
 
 interface OnboardingConfig {
   reward_llm: string;
-  gemini_api_key: string;
+  default_llm_api_key: string;
   tinker_api_key?: string;
   wandb_api_key?: string;
   user_name?: string;

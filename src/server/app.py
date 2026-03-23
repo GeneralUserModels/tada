@@ -12,9 +12,54 @@ from fastapi.middleware.cors import CORSMiddleware
 from server.state import ServerState
 from server.routes import connectors, control, settings, status, training
 from server.ws.handler import ws_endpoint
+from server.services.context_logging import _load_img
 
 logger = logging.getLogger(__name__)
 
+def _get_last_trained_end_ts(log_dir: Path) -> float:
+    """Return the end_ts of the last checkpoint entry."""
+    ckpt_file = log_dir / "checkpoints.jsonl"
+    if not ckpt_file.exists():
+        return 0.0
+    lines = [l for l in ckpt_file.read_text().strip().splitlines() if l.strip()]
+    if not lines:
+        return 0.0
+    return json.loads(lines[-1])["end_ts"]
+
+
+def _restore_context_from_disk(state: ServerState) -> None:
+    """Seed context_buffer and labels_processed from persisted JSONL files.
+
+    Only loads entries newer than the last checkpoint's end_ts so training
+    doesn't repeat samples the model has already seen.
+    """
+    log_dir = Path(state.config.log_dir)
+    cutoff_ts = _get_last_trained_end_ts(log_dir)
+
+    all_entries = []
+    for jsonl_path in log_dir.glob("*/filtered.jsonl"):
+        for line in jsonl_path.read_text().splitlines():
+            entry = json.loads(line)
+            all_entries.append(entry)
+
+    all_entries.sort(key=lambda e: e["timestamp"])
+
+    entries = []
+    for entry in all_entries:
+        ts = entry["timestamp"]
+        img = _load_img(entry["source"]["screenshot_path"]) if (entry["prediction_event"] and ts > cutoff_ts) else None
+        entries.append({
+            "timestamp": ts,
+            "text": entry["text"],
+            "source": entry["source_name"],
+            "prediction_event": entry["prediction_event"],
+            "img": img,
+        })
+
+    training_entries = [e for e in entries if e["timestamp"] > cutoff_ts][-2000:]
+    state.context_buffer = training_entries
+    state.labels_processed = sum(1 for e in entries if e["prediction_event"])
+    logger.info(f"Restored {len(training_entries)} training entries (cutoff={cutoff_ts:.0f}), {state.labels_processed} total labels")
 
 def _restore_step_from_checkpoint(state: ServerState) -> None:
     """Seed state.step_count from the checkpoint entry in checkpoints.jsonl."""
@@ -26,27 +71,15 @@ def _restore_step_from_checkpoint(state: ServerState) -> None:
         logger.warning(f"No checkpoints.jsonl found in {log_dir}")
         return
 
-    # Resolve "auto" → last checkpoint's state_path
-    resolved = checkpoint_path
-    if checkpoint_path == "auto":
-        last = None
-        for line in ckpt_file.read_text().strip().splitlines():
-            entry = json.loads(line)
-            if "state_path" in entry:
-                last = entry
-        if not last:
-            logger.warning("No valid checkpoints found in checkpoints.jsonl")
-            return
-        resolved = last["state_path"]
-        logger.info(f"Auto-resolved checkpoint: {resolved}")
+    lines = ckpt_file.read_text().splitlines()
+    entries = [json.loads(l) for l in lines]
 
-    # Look up the entry for the resolved path to get the step count
-    for line in ckpt_file.read_text().strip().splitlines():
-        entry = json.loads(line)
-        if entry.get("state_path") == resolved:
-            state.step_count = entry.get("step", 0)
-            logger.info(f"Restored step count {state.step_count} from checkpoint")
-            return
+    # Resolve "auto" → last checkpoint's state_path
+    resolved = entries[-1]["state_path"] if checkpoint_path == "auto" else checkpoint_path
+
+    entry = next(e for e in entries if e["state_path"] == resolved)
+    state.step_count = entry["step"]
+    logger.info(f"Restored step count {state.step_count} from checkpoint")
 
     logger.warning(f"No checkpoint entry found for {resolved}")
 
@@ -58,6 +91,7 @@ async def lifespan(app: FastAPI):
 
     state = ServerState()
     state.config.load_persisted()
+    _restore_context_from_disk(state)
     if state.config.resume_from_checkpoint:
         _restore_step_from_checkpoint(state)
 
