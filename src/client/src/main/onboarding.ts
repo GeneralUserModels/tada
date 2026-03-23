@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { app, BrowserWindow, desktopCapturer, ipcMain, shell, systemPreferences } from "electron";
-import { getDataDir } from "./paths";
+import { getDataDir, isDev } from "./paths";
 import { IPC } from "./ipc";
 import { startGoogleLogin, connectGoogle } from "./google-auth";
 import { connectOutlook } from "./outlook-auth";
@@ -98,7 +98,11 @@ export function runOnboarding(): Promise<void> {
       },
     });
 
-    win.loadFile(path.join(__dirname, "..", "renderer", "onboarding.html"));
+    if (isDev()) {
+      win.loadURL("http://localhost:5173/onboarding.html");
+    } else {
+      win.loadFile(path.join(__dirname, "..", "renderer", "onboarding.html"));
+    }
 
     const handleCheckPermission = () => {
       return systemPreferences.getMediaAccessStatus("screen");

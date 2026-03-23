@@ -132,7 +132,8 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, la
                 if cfg.prediction_event:
                     from server.ws.handler import broadcast
                     await state.label_queue.put(entry)
-                    await broadcast(state, "label", {"text": item.get("summary", "")[:200]})
+                    state.labels_processed += 1
+                    await broadcast(state, "label", {"text": item.get("summary", "")[:200], "count": state.labels_processed})
         for item in items:
             seen.add(item["id"])
         _trim_seen(seen)

@@ -1,11 +1,13 @@
 /** Global type for the powernap context bridge exposed by preload.ts */
 
+declare global {
+
 interface StatusData {
   training_active: boolean;
   labels_processed: number;
   untrained_batches: number;
   step_count: number;
-  inference_buffer_size: number;
+  context_buffer_size: number;
 }
 
 interface PredictionData {
@@ -126,10 +128,10 @@ interface PowerNapAPI {
   submitOnboarding: (data: Record<string, unknown>) => void;
 }
 
-declare global {
   interface Window {
     powernap: PowerNapAPI;
   }
-}
+
+} // end declare global
 
 export {};

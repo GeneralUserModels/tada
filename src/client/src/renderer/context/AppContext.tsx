@@ -97,7 +97,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         labels: action.status.labels_processed ?? 0,
         queue: action.status.untrained_batches ?? 0,
         step: action.status.step_count ?? 0,
-        buffer: action.status.inference_buffer_size ?? 0,
+        buffer: action.status.context_buffer_size ?? 0,
       };
 
     case "STATUS_UPDATE":
@@ -106,7 +106,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         trainingActive: action.data.training_active ?? state.trainingActive,
         labels: action.data.labels_processed ?? state.labels,
         queue: action.data.untrained_batches ?? state.queue,
-        buffer: action.data.inference_buffer_size ?? state.buffer,
+        buffer: action.data.context_buffer_size ?? state.buffer,
       };
 
     case "SET_TRAINING_ACTIVE":
