@@ -67,8 +67,6 @@ class ServerConfig(BaseModel):
 
     # Labeler
     label_model: str = "gemini/gemini-3-flash-preview"
-    chunk_size: int = 60
-    chunk_fps: int = 1
     chunk_workers: int = 4
 
     # Trainer
