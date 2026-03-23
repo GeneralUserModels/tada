@@ -48,6 +48,7 @@ type AppAction =
   | { type: "TRAINING_STEP"; data: TrainingStepData }
   | { type: "LABEL"; data: LabelData }
   | { type: "SEED_HISTORY"; history: TrainingStepData[] }
+  | { type: "SEED_LABEL_HISTORY"; history: { text: string; timestamp: number }[] }
   | { type: "LOAD_SETTINGS"; settings: Record<string, unknown> }
   | { type: "UPDATE_DOWNLOADED"; version: string }
   | { type: "UPDATE_DISMISSED" }
@@ -165,6 +166,15 @@ function reducer(state: AppState, action: AppAction): AppState {
         historyItems: addHistoryItem(state.historyItems, "label", action.data.text ?? "", ""),
       };
 
+    case "SEED_LABEL_HISTORY": {
+      let items = state.historyItems;
+      for (const entry of action.history) {
+        items = addHistoryItem(items, "label", entry.text, "");
+      }
+      // addHistoryItem prepends; reverse the seeded items so oldest appears last
+      return { ...state, historyItems: items };
+    }
+
     case "SEED_HISTORY": {
       const pts = action.history.map((h) => ({
         step: h.step ?? 0,
@@ -232,6 +242,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             dispatch({ type: "SEED_HISTORY", history });
           }
         } catch { /* metrics may not exist yet */ }
+
+        try {
+          const labelHistory = await window.powernap.getLabelHistory();
+          if (Array.isArray(labelHistory) && labelHistory.length > 0) {
+            dispatch({ type: "SEED_LABEL_HISTORY", history: labelHistory });
+          }
+        } catch { /* label history may not exist yet */ }
 
         try {
           const settings = await window.powernap.getSettings();

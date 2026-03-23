@@ -30,7 +30,7 @@ async def update_connector(name: str, update: ConnectorUpdate, request: Request)
         if name in state.config.disabled_connectors:
             state.config.disabled_connectors.remove(name)
     else:
-        connector.pause()
+        await connector.stop()
         if name not in state.config.disabled_connectors:
             state.config.disabled_connectors.append(name)
     state.config.save()

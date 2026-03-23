@@ -45,6 +45,11 @@ class MCPConnector:
         if error is not None:
             self.error = error
 
+    async def stop(self, error: str | None = None) -> None:
+        """Pause and disconnect the underlying subprocess immediately."""
+        self.pause(error=error)
+        await self._disconnect()
+
     def resume(self) -> None:
         self._paused = False
         self.error = None

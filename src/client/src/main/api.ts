@@ -51,6 +51,7 @@ export const updateSettings = (data: Record<string, unknown>) =>
 
 // ── Training ─────────────────────────────────────────────────
 export const getTrainingHistory = () => request("GET", "/api/training/history");
+export const getLabelHistory = () => request("GET", "/api/label-history");
 
 // ── Connectors ───────────────────────────────────────────────
 export const getConnectors = () =>

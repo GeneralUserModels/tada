@@ -1,8 +1,9 @@
-"""Video-based labeler using pack's Gemini client and video utilities."""
+"""Image-based labeler using napsack's Gemini client."""
 
 import asyncio
 import contextlib
 import json
+import os
 import sys
 import tempfile
 import logging
@@ -16,21 +17,13 @@ from typing import List, Optional
 from PIL import Image
 
 # Import from pack
-from napsack.label.video import create_video
 from napsack.label.clients.litellm import LiteLLMClient
-from napsack.label.clients.client import CAPTION_SCHEMA
+from napsack.label.clients.client import IMAGE_CAPTION_SCHEMA
 from napsack.label.models import Aggregation as LabelAggregation
 from napsack.record.sanitize import sanitize_records
 
 logger = logging.getLogger(__name__)
 
-
-def _parse_mmss(time_str: str) -> int:
-    """Parse MM:SS format to seconds."""
-    parts = time_str.split(":")
-    if len(parts) != 2:
-        raise ValueError(f"Invalid time format: {time_str}, expected MM:SS")
-    return int(parts[0]) * 60 + int(parts[1])
 
 
 def _get_pil_image(processed_agg) -> Optional[Image.Image]:
@@ -65,38 +58,27 @@ def _to_label_agg(agg_dict: dict) -> LabelAggregation:
 
 
 class Labeler:
-    """Video-based labeler using pack's Gemini client and video utilities.
-    
-    Accumulates screenshots into video chunks and labels them via Gemini Files API
-    for higher-quality temporal labels.
-    
-    Only saves screenshots for labels that make it into labels.jsonl (after Gemini
-    filtering), not at the aggregation level.
-    """
+    """Image-based labeler: sends individual frames to Gemini for captioning."""
 
     def __init__(
         self,
-        chunk_size: int = 60,
-        fps: int = 1,
         max_workers: int = 4,
         log_dir: Optional[str] = None,
         save_screenshots: bool = True,
         model: Optional[str] = None,
+        api_key: Optional[str] = None,
     ):
         """
         Args:
-            chunk_size: Number of screenshots per video chunk (API param).
-            fps: Video encoding framerate (1 = one frame per second).
             max_workers: Number of parallel chunk processors.
             log_dir: Directory to save labels.jsonl and screenshots.
             save_screenshots: If True, save screenshots for labeled samples.
             model: Gemini model name for labeling (default: gemini-2.5-flash).
         """
-        self.chunk_size = chunk_size
-        self.fps = fps
         self.max_workers = max_workers
+        resolved_api_key = api_key or os.environ.get("POWERNAP_LABEL_API_KEY") or None
         with contextlib.redirect_stdout(sys.stderr):
-            self.client = LiteLLMClient(model_name=model or "gemini/gemini-3-flash-preview")
+            self.client = LiteLLMClient(model_name=model or "gemini/gemini-3-flash-preview", api_key=resolved_api_key)
         self.prompt = self._load_prompt()
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.save_screenshots = save_screenshots
@@ -153,36 +135,26 @@ class Labeler:
             # 2. Sanitize: redistribute events to correct time windows
             sanitized_dicts = sanitize_records(agg_dicts, verbose=False)
             
-            # 3. Build prompt with sanitized event logs
+            # 3. Build per-frame event logs
             prompt_lines = []
             for idx, agg_dict in enumerate(sanitized_dicts):
-                time_str = f"{idx // 60:02}:{idx % 60:02}"
                 label_agg = _to_label_agg(agg_dict)
-                prompt_lines.append(label_agg.to_prompt(time_str))
-            
-            full_prompt = self.prompt.replace("{{LOGS}}", "".join(prompt_lines))
-            
-            # 3. Create video
-            video_path = tmpdir_path / "chunk.mp4"
-            create_video(
-                image_paths=image_paths,
-                output_path=video_path,
-                fps=self.fps,
-                pad_to=None,
-                annotate=False,
-                aggregations=None,
-                session_dir=None,
-            )
-            
-            # 4. Upload to Gemini
+                prompt_lines.append(label_agg.to_prompt(f"Frame {idx + 1}"))
+
+            base_prompt = self.prompt.replace("{{LOGS}}", "")
+
+            # 4. Upload images directly (no video encoding)
             with contextlib.redirect_stdout(sys.stderr):
-                file_desc = self.client.upload_file(str(video_path))
+                file_desc = self.client.upload_images(
+                    [str(p) for p in image_paths],
+                    per_frame_text=prompt_lines,
+                )
 
             # 5. Generate captions (infinite retry on failure)
             while True:
                 try:
                     with contextlib.redirect_stdout(sys.stderr):
-                        captions = self.client.generate(full_prompt, file_desc, schema=CAPTION_SCHEMA)
+                        captions = self.client.generate(base_prompt, file_desc, schema=IMAGE_CAPTION_SCHEMA)
                     break
                 except Exception as e:
                     logger.warning(f"Gemini generate failed: {e}. Retrying in 120s...")
@@ -212,8 +184,8 @@ class Labeler:
         assigned = set()
         
         for caption in captions:
-            start_idx = _parse_mmss(caption.get("start", "00:00")) * self.fps
-            end_idx = _parse_mmss(caption.get("end", caption.get("start", "00:00"))) * self.fps
+            start_idx = caption.get("start", 1) - 1
+            end_idx = caption.get("end", caption.get("start", 1)) - 1
             
             # Clamp to valid range
             start_idx = max(0, min(start_idx, len(aggregations) - 1))

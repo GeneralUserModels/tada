@@ -321,7 +321,7 @@ class InMemoryBM25Temporal(BaseRetriever):
             self.docs.append(doc)
 
         self.N = len(self.docs)
-        self.total_len = checkpoint_data.get("total_len", sum(d["len"] for d in self.docs))
+        self.total_len = checkpoint_data["total_len"]
 
         for doc_id in range(self.N):
             self._index_new_doc(doc_id)

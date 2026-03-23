@@ -33,7 +33,6 @@ async def lifespan(server: FastMCP) -> AsyncIterator[None]:  # type: ignore[type
     )
     _recorder.start()
     _labeler = Labeler(
-        chunk_size=int(os.environ.get("POWERNAP_CHUNK_SIZE", "60")),
         log_dir=f"{log_dir}/screen",
         model=os.environ["POWERNAP_LABEL_MODEL"],
     )
