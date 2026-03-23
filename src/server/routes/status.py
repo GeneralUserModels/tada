@@ -1,5 +1,8 @@
 """GET /api/status — full server status."""
 
+import json
+from pathlib import Path
+
 from fastapi import APIRouter, Request
 
 router = APIRouter(prefix="/api", tags=["status"])
@@ -21,3 +24,18 @@ async def get_status(request: Request):
         "latest_scores": state.latest_scores,
         "ws_connections": len(state.ws_connections),
     }
+
+
+@router.get("/label-history")
+async def get_label_history(request: Request, limit: int = 50):
+    """Return recent label entries from persisted JSONL files for UI seeding."""
+    state = request.app.state.server
+    log_dir = Path(state.config.log_dir)
+    entries = []
+    for jsonl_path in log_dir.glob("*/filtered.jsonl"):
+        for line in jsonl_path.read_text().splitlines():
+            entry = json.loads(line)
+            text = entry["text"] if entry["prediction_event"] else f"[{entry['source_name']}] {entry['text']}"
+            entries.append({"text": text, "timestamp": entry["timestamp"]})
+    entries.sort(key=lambda e: e["timestamp"])
+    return entries[-limit:]

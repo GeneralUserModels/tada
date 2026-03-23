@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AdvancedLLMSection } from "../shared/AdvancedLLMSection";
 
 // ── Permission modal ──────────────────────────────────────────
 
@@ -52,7 +53,7 @@ function PermModal({
       display: "flex", position: "fixed", inset: 0,
       background: "rgba(44,58,40,0.35)", backdropFilter: "blur(6px)",
       WebkitBackdropFilter: "blur(6px)", zIndex: 2000,
-      alignItems: "center", justifyContent: "center", WebkitAppRegion: "no-drag" as never,
+      alignItems: "center", justifyContent: "center", WebkitAppRegion: "no-drag",
     }}>
       <div style={{
         background: "#F4F2EE", borderRadius: 16, padding: "28px 28px 22px",
@@ -137,6 +138,7 @@ export function Onboarding() {
   const [tinkerKey, setTinkerKey] = useState("");
   const [wandbKey, setWandbKey] = useState("");
   const [tinkerError, setTinkerError] = useState("");
+  const [advancedValues, setAdvancedValues] = useState<Record<string, string>>({});
 
   // Check screen permission when entering step 2
   useEffect(() => {
@@ -209,9 +211,14 @@ export function Onboarding() {
   };
 
   const handleSubmit = () => {
+    const advanced: Record<string, string> = {};
+    for (const [k, v] of Object.entries(advancedValues)) {
+      if (v.trim()) advanced[k] = v.trim();
+    }
     window.powernap.submitOnboarding({
       reward_llm: model.trim() || "gemini/gemini-3-flash-preview",
-      gemini_api_key: geminiKey.trim(),
+      default_llm_api_key: geminiKey.trim(),
+      ...advanced,
       tinker_api_key: tinkerKey.trim() || undefined,
       wandb_api_key: wandbKey.trim() || undefined,
       user_name: googleUser?.name,
@@ -240,7 +247,7 @@ export function Onboarding() {
         />
       )}
 
-      <StepIndicator current={step} total={5} />
+      <StepIndicator current={step} total={4} />
 
       {/* Page 0: Welcome */}
       {step === 0 && (
@@ -441,55 +448,48 @@ export function Onboarding() {
         </div>
       )}
 
-      {/* Page 3: Model */}
+      {/* Page 3: Models & Keys */}
       {step === 3 && (
-        <div className="page active">
-          <div className="page-icon">
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M8 2v4l3 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M2.5 8.5A5.5 5.5 0 1013.5 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-          </div>
-          <div className="page-title">Model</div>
-          <p className="page-desc">Choose which model PowerNap uses for predictions. Uses LiteLLM format so you can use any supported provider.</p>
-          <div className="glass-card">
-            <div className="field">
-              <span className="field-label">LiteLLM Model ID</span>
-              <input type="text" placeholder="gemini/gemini-3-flash-preview" value={model} onChange={(e) => setModel(e.target.value)}/>
-              <span className="field-hint">e.g. gemini/gemini-3-flash-preview, openai/gpt-4o, anthropic/claude-sonnet-4-20250514</span>
-            </div>
-          </div>
-          <div className="btn-row">
-            <button className="btn btn-ghost" onClick={() => setStep(2)}>Back</button>
-            <button className="btn btn-primary" disabled={!model.trim()} onClick={() => setStep(4)}>Continue</button>
-          </div>
-        </div>
-      )}
-
-      {/* Page 4: API Keys */}
-      {step === 4 && (
         <div className="page active">
           <div className="page-icon">
             <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M4 12V7M8 12V4M12 12V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </div>
-          <div className="page-title">API Keys</div>
-          <p className="page-desc">Enter the API keys for your chosen model provider and any optional integrations.</p>
+          <div className="page-title">Models & Keys</div>
+          <p className="page-desc">Configure your LLM provider. Uses LiteLLM format — any supported provider works.</p>
           <div className="glass-card">
-            <div className="field">
-              <span className="field-label">Model Provider API Key</span>
-              <input type="password" placeholder="Enter your API key" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)}/>
+            <div className="model-row">
+              <span className="model-row-label">LLM <span className="required-tag">Required</span></span>
+              <div className="model-row-fields">
+                <div className="field">
+                  <span>Model</span>
+                  <input type="text" placeholder="gemini/gemini-3-flash-preview" value={model} onChange={(e) => setModel(e.target.value)}/>
+                </div>
+                <div className="field">
+                  <span>API Key</span>
+                  <input type="password" placeholder="AIza..." value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)}/>
+                </div>
+              </div>
             </div>
-            <div className="field">
-              <span className="field-label">Tinker API Key <span className="optional-tag">optional</span></span>
-              <input type="password" placeholder="Enter your Tinker API key" value={tinkerKey}
-                onChange={(e) => { setTinkerKey(e.target.value); validateTinker(e.target.value); }}/>
-              {tinkerError && <span className="field-hint" style={{ color: "var(--danger)" }}>{tinkerError}</span>}
-            </div>
-            <div className="field">
-              <span className="field-label">W&amp;B API Key <span className="optional-tag">optional</span></span>
-              <input type="password" placeholder="Enter your W&B API key" value={wandbKey} onChange={(e) => setWandbKey(e.target.value)}/>
+            <AdvancedLLMSection values={advancedValues} setValues={setAdvancedValues} />
+            <div className="model-row">
+              <span className="model-row-label">Tinker <span className="optional-tag">optional</span></span>
+              <div className="model-row-fields">
+                <div className="field">
+                  <span>API Key</span>
+                  <input type="password" placeholder="tml-..." value={tinkerKey}
+                    onChange={(e) => { setTinkerKey(e.target.value); validateTinker(e.target.value); }}/>
+                  {tinkerError && <span className="field-hint" style={{ color: "var(--danger)" }}>{tinkerError}</span>}
+                </div>
+                <div className="field">
+                  <span>W&amp;B API Key</span>
+                  <input type="password" placeholder="wandb-..." value={wandbKey} onChange={(e) => setWandbKey(e.target.value)}/>
+                </div>
+              </div>
             </div>
           </div>
           <div className="btn-row">
-            <button className="btn btn-ghost" onClick={() => setStep(3)}>Back</button>
-            <button className="btn btn-primary" disabled={!geminiKey.trim() || !!tinkerError} onClick={handleSubmit}>Finish Setup</button>
+            <button className="btn btn-ghost" onClick={() => setStep(2)}>Back</button>
+            <button className="btn btn-primary" disabled={!model.trim() || !geminiKey.trim() || !!tinkerError} onClick={handleSubmit}>Finish Setup</button>
           </div>
         </div>
       )}

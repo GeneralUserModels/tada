@@ -74,6 +74,7 @@ interface PowerNapAPI {
   getSettings: () => Promise<Record<string, unknown>>;
   updateSettings: (data: Record<string, unknown>) => Promise<unknown>;
   getTrainingHistory: () => Promise<TrainingStepData[]>;
+  getLabelHistory: () => Promise<{ text: string; timestamp: number }[]>;
 
   // Dashboard event listeners
   onServerReady: (cb: () => void) => void;
@@ -101,6 +102,7 @@ interface PowerNapAPI {
   updateConnector: (name: string, enabled: boolean) => Promise<unknown>;
   openFdaSettings: (name?: string) => Promise<unknown>;
   getConnectorPermissionInfo: (name: string) => Promise<ConnectorPermissionInfo | null>;
+  checkConnectorPermission: (name: string) => Promise<boolean>;
   onConnectorUpdate: (cb: (data: { name: string; error: string | null; enabled: boolean }) => void) => void;
   requestConnectorPermission: (name: string) => Promise<boolean>;
 
@@ -133,5 +135,11 @@ interface PowerNapAPI {
   }
 
 } // end declare global
+
+declare module "react" {
+  interface CSSProperties {
+    WebkitAppRegion?: "drag" | "no-drag";
+  }
+}
 
 export {};

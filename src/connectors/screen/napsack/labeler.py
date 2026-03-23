@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import json
+import os
 import sys
 import tempfile
 import logging
@@ -65,6 +66,7 @@ class Labeler:
         log_dir: Optional[str] = None,
         save_screenshots: bool = True,
         model: Optional[str] = None,
+        api_key: Optional[str] = None,
     ):
         """
         Args:
@@ -74,8 +76,9 @@ class Labeler:
             model: Gemini model name for labeling (default: gemini-2.5-flash).
         """
         self.max_workers = max_workers
+        resolved_api_key = api_key or os.environ.get("POWERNAP_LABEL_API_KEY") or None
         with contextlib.redirect_stdout(sys.stderr):
-            self.client = LiteLLMClient(model_name=model or "gemini/gemini-3-flash-preview")
+            self.client = LiteLLMClient(model_name=model or "gemini/gemini-3-flash-preview", api_key=resolved_api_key)
         self.prompt = self._load_prompt()
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.save_screenshots = save_screenshots

@@ -12,8 +12,11 @@ CONFIG_PATH = Path(os.environ.get("POWERNAP_CONFIG_PATH", _default_config_path))
 # Fields that are user-settable via the API and persisted to disk.
 # CLI-arg fields (log_dir, token paths, etc.) are excluded — they always win.
 _PERSISTED_FIELDS = {
-    "gemini_api_key", "tinker_api_key", "hf_token", "wandb_api_key",
-    "model", "reward_llm", "label_model", "fps", "num_generations",
+    "default_llm_api_key", "tinker_api_key", "hf_token", "wandb_api_key",
+    "model", "reward_llm", "reward_llm_api_key",
+    "label_model", "label_model_api_key",
+    "filter_model", "filter_model_api_key",
+    "fps", "num_generations",
     "learning_rate", "batch_size", "past_len", "future_len", "loss_mode",
     "disabled_connectors", "mcp_connectors",
 }
@@ -55,7 +58,7 @@ class MCPConnectorDef(BaseModel):
 
 class ServerConfig(BaseModel):
     # API keys (populated via settings endpoint or env)
-    gemini_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
+    default_llm_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
     tinker_api_key: str = Field(default_factory=lambda: os.getenv("TINKER_API_KEY", ""))
     hf_token: str = Field(default_factory=lambda: os.getenv("HF_TOKEN", ""))
     wandb_api_key: str = Field(default_factory=lambda: os.getenv("WANDB_API_KEY", ""))
@@ -67,11 +70,15 @@ class ServerConfig(BaseModel):
 
     # Labeler
     label_model: str = "gemini/gemini-3-flash-preview"
+    label_model_api_key: str = ""
+    filter_model: str = "gemini/gemini-3-flash-preview"
+    filter_model_api_key: str = ""
     chunk_workers: int = 4
 
     # Trainer
     model: str = Field(default_factory=lambda: os.getenv("POWERNAP_MODEL", "Qwen/Qwen3-VL-30B-A3B-Instruct"))
     reward_llm: str = "gemini/gemini-3-flash-preview"
+    reward_llm_api_key: str = ""
     num_generations: int = 4
     learning_rate: float = 5e-5
     max_completion_length: int = 512
@@ -131,13 +138,13 @@ class ServerConfig(BaseModel):
                 else:
                     setattr(self, field, data[field])
         _key_env_map = {
-            "gemini_api_key": "GEMINI_API_KEY",
+            "default_llm_api_key": "GEMINI_API_KEY",
             "tinker_api_key": "TINKER_API_KEY",
             "wandb_api_key": "WANDB_API_KEY",
             "hf_token": "HF_TOKEN",
         }
         for field, env_var in _key_env_map.items():
-            val = getattr(self, field, "")
+            val = getattr(self, field)
             if val and not os.environ.get(env_var):
                 os.environ[env_var] = val
 

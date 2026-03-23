@@ -89,10 +89,10 @@ class LongNAPEnv(Env):
         # Extract data from input
         self.base_messages = input_data["messages"]
         self.ground_truth = input_data["solution"]
-        self.ts = int(input_data.get("ts", 0))
-        self.end_ts = int(input_data.get("end_ts", self.ts))
-        self.future_len = input_data.get("future_len", 3)
-        self.past_actions = input_data.get("past_actions", "")
+        self.ts = int(input_data["ts"])
+        self.end_ts = int(input_data["end_ts"])
+        self.future_len = input_data["future_len"]
+        self.past_actions = input_data["past_actions"]
         
         # State tracking
         self.phase = self.PHASE_THINK

@@ -81,9 +81,9 @@ async def handle_prediction_request(state: Any):
     # Broadcast prediction
     await broadcast(state, "prediction", {
         "actions": result["actions"],
-        "think": result.get("think", ""),
-        "revise": result.get("revise", ""),
-        "timestamp": result.get("timestamp", ""),
+        "think": result["think"],
+        "revise": result["revise"],
+        "timestamp": result["timestamp"],
     })
 
     # Schedule background eval scoring
@@ -122,24 +122,15 @@ async def _score_prediction(state: Any, result: dict, cutoff_ts: float, future_l
         reward = await loop.run_in_executor(
             _executor,
             lambda: predictor.score_prediction(
-                result["actions"], ground_truth, config.reward_llm
+                result["actions"], ground_truth, config.reward_llm,
+                api_key=config.reward_llm_api_key or config.default_llm_api_key,
             ),
         )
     except Exception as e:
         logger.warning(f"Score prediction failed: {e}")
         return
 
-    score_data = {
-        "reward": reward,
-        "accuracy": 0.0,
-        "formatting": 0.0,
-        "penalty": 0.0,
-    }
-
-    # If reward is a dict (from RewardScorer), extract components
-    if isinstance(reward, dict):
-        score_data = reward
-
+    score_data = {"reward": reward, "accuracy": 0.0, "formatting": 0.0, "penalty": 0.0}
     state.latest_scores = score_data
 
     await broadcast(state, "score", score_data)

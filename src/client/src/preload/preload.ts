@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("powernap", {
   updateSettings: (data: Record<string, unknown>) =>
     ipcRenderer.invoke("update:settings", data),
   getTrainingHistory: () => ipcRenderer.invoke("get:training:history"),
+  getLabelHistory: () => ipcRenderer.invoke("get:label:history"),
 
   // Event listeners (main -> renderer)
   onServerReady: (cb: () => void) =>

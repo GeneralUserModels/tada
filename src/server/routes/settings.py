@@ -9,13 +9,17 @@ router = APIRouter(prefix="/api", tags=["settings"])
 
 
 class SettingsUpdate(BaseModel):
-    gemini_api_key: str | None = None
+    default_llm_api_key: str | None = None
     tinker_api_key: str | None = None
     hf_token: str | None = None
     wandb_api_key: str | None = None
     model: str | None = None
     reward_llm: str | None = None
+    reward_llm_api_key: str | None = None
     label_model: str | None = None
+    label_model_api_key: str | None = None
+    filter_model: str | None = None
+    filter_model_api_key: str | None = None
     fps: int | None = None
     num_generations: int | None = None
     learning_rate: float | None = None
@@ -30,13 +34,17 @@ async def get_settings(request: Request):
     state = request.app.state.server
     cfg = state.config
     return {
-        "gemini_api_key": cfg.gemini_api_key,
+        "default_llm_api_key": cfg.default_llm_api_key,
         "tinker_api_key": cfg.tinker_api_key,
         "hf_token": cfg.hf_token,
         "wandb_api_key": cfg.wandb_api_key,
         "model": cfg.model,
         "reward_llm": cfg.reward_llm,
+        "reward_llm_api_key": cfg.reward_llm_api_key,
         "label_model": cfg.label_model,
+        "label_model_api_key": cfg.label_model_api_key,
+        "filter_model": cfg.filter_model,
+        "filter_model_api_key": cfg.filter_model_api_key,
         "fps": cfg.fps,
         "num_generations": cfg.num_generations,
         "learning_rate": cfg.learning_rate,
@@ -59,7 +67,7 @@ async def update_settings(update: SettingsUpdate, request: Request):
 
         # Also set environment variables for API keys
         env_map = {
-            "gemini_api_key": "GEMINI_API_KEY",
+            "default_llm_api_key": "GEMINI_API_KEY",
             "tinker_api_key": "TINKER_API_KEY",
             "hf_token": "HF_TOKEN",
             "wandb_api_key": "WANDB_API_KEY",
