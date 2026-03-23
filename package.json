@@ -53,7 +53,7 @@
         "dmg",
         "zip"
       ],
-      "identity": null,
+      "afterSign": "scripts/notarize.cjs",
       "extendInfo": {
         "NSScreenCaptureUsageDescription": "PowerNap needs screen recording to observe your workflow.",
         "NSAccessibilityUsageDescription": "PowerNap needs accessibility access to track input events."
