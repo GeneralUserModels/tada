@@ -11,8 +11,9 @@ from pathlib import Path
 
 
 def _load_config_env() -> None:
-    """Load API keys from powernap-config.json (cwd = project root in dev)."""
-    config_path = Path.cwd() / "powernap-config.json"
+    """Load API keys from powernap-config.json."""
+    env_path = os.environ.get("POWERNAP_CONFIG_PATH")
+    config_path = Path(env_path) if env_path else Path.cwd() / "powernap-config.json"
     if not config_path.exists():
         return
     try:

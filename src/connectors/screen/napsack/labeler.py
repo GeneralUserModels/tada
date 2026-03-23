@@ -7,7 +7,6 @@ import sys
 import tempfile
 import logging
 import time
-import litellm
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from importlib.resources import files
@@ -189,18 +188,7 @@ class Labeler:
                     logger.warning(f"Gemini generate failed: {e}. Retrying in 120s...")
                     time.sleep(120)
 
-            # 6. Delete file from Gemini (cleanup quota)
-            try:
-                with contextlib.redirect_stdout(sys.stderr):
-                    litellm.delete_file(
-                        file_id=file_desc.id,
-                        custom_llm_provider="gemini",
-                        api_key=self.client.api_key,
-                    )
-            except Exception as e:
-                logger.warning(f"Failed to delete Gemini file: {e}")
-            
-            # 7. Match captions to aggregations (with sanitized events)
+            # 6. Match captions to aggregations (with sanitized events)
             return self._match_captions_to_aggs(captions, valid_aggs, sanitized_dicts)
 
     async def alabel_chunk(self, aggregations: List) -> List[dict]:

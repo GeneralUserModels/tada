@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from contextlib import AsyncExitStack
 
 from mcp.client.session import ClientSession
@@ -25,7 +26,11 @@ class MCPConnector:
     ) -> None:
         self._paused = False
         self.error: str | None = None
-        self._server_params = StdioServerParameters(command=command, args=args, env=env)
+        # Merge full parent env with any connector-specific overrides.
+        # MCP's stdio_client only inherits a minimal set (HOME, PATH, etc.) by default,
+        # so without this, API keys and other env vars set in the server process are lost.
+        merged_env = {**os.environ, **(env or {})}
+        self._server_params = StdioServerParameters(command=command, args=args, env=merged_env)
         self._tool_name = tool_name
         self._exclude: set[str] = set(exclude_from_serialization or [])
         self._session: ClientSession | None = None

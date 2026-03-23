@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from litellm import completion as litellm_completion
+from PIL import Image
 from pydantic import BaseModel
 
 from connectors.mcp import MCPConnector
@@ -87,6 +88,15 @@ def _filter_with_llm(items: list[dict], source: str, model: str, batch_size: int
     return results
 
 
+def _load_img(screenshot_path: str | None) -> "Image.Image | None":
+    if not screenshot_path:
+        return None
+    try:
+        return Image.open(screenshot_path)
+    except Exception:
+        return None
+
+
 async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, label_model: str, state=None) -> None:
     """Poll a single connector forever: fetch → filter? → write JSONL → update seen."""
     seen_path = seen_dir / f"{cfg.name}.json"
@@ -118,7 +128,7 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, la
                     "text": item.get("summary", ""),
                     "source": cfg.name,
                     "prediction_event": cfg.prediction_event,
-                    "img": item.get("img") if cfg.prediction_event else None,
+                    "img": _load_img(item.get("screenshot_path")) if cfg.prediction_event else None,
                 }
                 state.context_buffer.append(entry)
                 if cfg.prediction_event:
