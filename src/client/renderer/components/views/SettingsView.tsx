@@ -5,6 +5,7 @@ import { TrainingTile, InferenceTile } from "../dashboard/PipelineTile";
 import { PredictionCard } from "../dashboard/PredictionCard";
 import { RewardsChart } from "../dashboard/RewardsChart";
 import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
+import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 
 const MODEL_ROWS: { label: string; modelKey: string; modelPlaceholder: string; apiKeyKey: string; apiKeyPlaceholder: string; required?: boolean }[] = [
   { label: "LLM",    modelKey: "reward_llm",  modelPlaceholder: "gemini/gemini-3-flash-preview",   apiKeyKey: "default_llm_api_key",  apiKeyPlaceholder: "AIza...", required: true },
@@ -86,22 +87,17 @@ export function SettingsView() {
           <h2>Configuration</h2>
         </div>
 
-        {/* Models section */}
-        <div className="settings-group" style={{ marginBottom: "20px" }}>
-          <h3>Models</h3>
-
-          {/* Tinker row */}
-          {/* Shared LLM row */}
+        <div className="settings-group">
           <div className="model-row">
-            <span className="model-row-label">LLM <span className="required-tag">Required</span> <span style={{ fontWeight: 400, opacity: 0.6, textTransform: "none", fontSize: "10px" }}>(Reward · Labeling · Filter)</span></span>
+            <span className="model-row-label">LLM <span className="required-tag">Required</span></span>
             <div className="model-row-fields">
               <label className="field">
                 <span>Model</span>
-                <input
-                  type="text"
-                  placeholder="gemini/gemini-3-flash-preview"
+                <ModelDropdown
                   value={values["reward_llm"] ?? ""}
-                  onChange={(e) => handleLLMModelChange(e.target.value)}
+                  onChange={handleLLMModelChange}
+                  options={LLM_MODELS}
+                  placeholder="Select a model"
                 />
               </label>
               <label className="field">
@@ -119,43 +115,39 @@ export function SettingsView() {
           <AdvancedLLMSection values={values} setValues={setValues} />
 
           <div className="model-row">
-            <span className="model-row-label">Tinker</span>
+            <span className="model-row-label">Tinker <span className="optional-tag">optional</span></span>
             <div className="model-row-fields">
               <label className="field">
                 <span>Model</span>
-                <input
-                  type="text"
-                  placeholder="Qwen/Qwen3-VL-30B-A3B-Instruct"
+                <ModelDropdown
                   value={values["model"] ?? ""}
-                  onChange={(e) => setValues(v => ({ ...v, model: e.target.value }))}
+                  onChange={(val) => setValues(v => ({ ...v, model: val }))}
+                  options={TINKER_MODELS}
+                  placeholder="Select a model"
                 />
               </label>
               <label className="field">
                 <span>API Key</span>
                 <input
                   type="text"
-                  placeholder="tk-..."
+                  placeholder="tml-..."
                   value={values["tinker_api_key"] ?? ""}
                   onChange={(e) => setValues(v => ({ ...v, tinker_api_key: e.target.value }))}
                 />
               </label>
             </div>
           </div>
-        </div>
 
-        {/* Other section */}
-        <div className="settings-group">
-          <h3>Other</h3>
           <div className="model-row">
-            <span className="model-row-label">Auth</span>
+            <span className="model-row-label">W&amp;B <span className="optional-tag">optional</span></span>
             <div className="model-row-fields">
               <label className="field">
-                <span>HuggingFace Token</span>
-                <input type="text" id="set-hf-token" placeholder="hf_..." value={values["hf_token"] ?? ""} onChange={(e) => setValues(v => ({ ...v, hf_token: e.target.value }))} />
+                <span>API Key</span>
+                <input type="text" placeholder="wandb-..." value={values["wandb_api_key"] ?? ""} onChange={(e) => setValues(v => ({ ...v, wandb_api_key: e.target.value }))} />
               </label>
               <label className="field">
-                <span>Weights &amp; Biases</span>
-                <input type="text" id="set-wandb-key" placeholder="wandb-..." value={values["wandb_api_key"] ?? ""} onChange={(e) => setValues(v => ({ ...v, wandb_api_key: e.target.value }))} />
+                <span>HuggingFace Token</span>
+                <input type="text" placeholder="hf_..." value={values["hf_token"] ?? ""} onChange={(e) => setValues(v => ({ ...v, hf_token: e.target.value }))} />
               </label>
             </div>
           </div>

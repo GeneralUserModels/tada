@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ModelDropdown, LLM_MODELS } from "./ModelDropdown";
 
 export const ADVANCED_ROWS: { label: string; modelKey: string; apiKeyKey: string }[] = [
   { label: "Reward LM",   modelKey: "reward_llm",   apiKeyKey: "reward_llm_api_key" },
@@ -39,11 +40,11 @@ export function AdvancedLLMSection({ values, setValues }: Props) {
               <div className="model-row-fields">
                 <label className="field">
                   <span>Model</span>
-                  <input
-                    type="text"
-                    placeholder="Leave blank to use shared model"
+                  <ModelDropdown
                     value={values[row.modelKey] ?? ""}
-                    onChange={(e) => setValues(v => ({ ...v, [row.modelKey]: e.target.value }))}
+                    onChange={(val) => setValues(v => ({ ...v, [row.modelKey]: val }))}
+                    options={LLM_MODELS}
+                    placeholder="Use shared model"
                   />
                 </label>
                 <label className="field">
