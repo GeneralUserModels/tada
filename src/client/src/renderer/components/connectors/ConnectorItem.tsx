@@ -52,14 +52,12 @@ interface Props {
   onConnectOutlook: () => Promise<void>;
   onFix: (name: string) => void;
   onRetry: (name: string) => Promise<void>;
-  onCheckPermission: (name: string) => Promise<boolean>;
-  onOpenPermModal: (name: string) => void;
 }
 
 export function ConnectorItem({
   name, info, calendarOn, gmailOn, toggling,
   onToggle, onConnectGoogle, onConnectOutlook,
-  onFix, onRetry, onCheckPermission, onOpenPermModal,
+  onFix, onRetry,
 }: Props) {
   const meta = CONNECTOR_META[name];
   if (!meta) return null;
@@ -128,15 +126,7 @@ export function ConnectorItem({
           checked={info.enabled}
           style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
           onChange={async (e) => {
-            const checked = e.target.checked;
-            if (checked) {
-              const granted = await onCheckPermission(name);
-              if (!granted) {
-                onOpenPermModal(name);
-                return;
-              }
-            }
-            await onToggle(name, checked);
+            await onToggle(name, e.target.checked);
           }}
         />
         <span style={{ position: "absolute", inset: 0, background: bg, borderRadius: 20, transition: "background 0.2s" }}></span>

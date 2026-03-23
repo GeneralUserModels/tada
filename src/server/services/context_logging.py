@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,14 +10,7 @@ from pathlib import Path
 from litellm import completion as litellm_completion
 from pydantic import BaseModel
 
-from connectors.base import Connector
-from connectors.calendar import GoogleCalendarConnector
-from connectors.filesystem import FilesystemConnector
-from connectors.gmail import GmailConnector
-from connectors.notifications import NotificationsConnector
-from connectors.outlook_calendar import OutlookCalendarConnector
-from connectors.outlook_email import OutlookEmailConnector
-from connectors.screen import ScreenConnector
+from connectors.mcp import MCPConnector
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +33,7 @@ class ConnectorConfig:
     name: str
     interval: int        # poll interval in seconds
     log_subdir: str      # subdirectory under log_dir
-    connector: Connector
+    connector: MCPConnector
     filter: bool = True           # run LLM filter?
     prediction_event: bool = False  # events from this connector are prediction targets
 
@@ -85,7 +77,7 @@ def _filter_with_llm(items: list[dict], source: str, model: str, batch_size: int
     for i in range(0, len(items), batch_size):
         batch = items[i:i + batch_size]
         response = litellm_completion(
-            model=f"gemini/{model}",
+            model=model,
             messages=[{"role": "user", "content": FILTER_PROMPT.format(
                 source=source, items_json=json.dumps(batch)
             )}],
@@ -107,7 +99,7 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, la
             return
         since = _load_last_fetched(last_fetched_path)
         logger.info(f"Polling {cfg.name} (since={since})...")
-        all_items = await asyncio.to_thread(cfg.connector.fetch, since)
+        all_items = await cfg.connector.fetch(since)
         items = [i for i in all_items if i.get("id") and i["id"] not in seen]
         _save_last_fetched(last_fetched_path, time.time())
         if not items:
@@ -143,20 +135,27 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, la
     while True:
         try:
             await poll()
-        except FileNotFoundError:
-            logger.warning(f"{cfg.name}: token file missing, pausing connector")
-            cfg.connector.pause()
-        except sqlite3.OperationalError as e:
-            logger.warning(f"{cfg.name}: DB permission error, pausing connector: {e}")
-            cfg.connector.pause(error=f"Permission denied — grant Full Disk Access in System Settings → Privacy & Security")
-        except Exception as e:
-            # Auto-pause on auth errors (401) so we stop spamming retries
-            msg = str(e)
-            if "401" in msg or "Unauthorized" in msg:
-                logger.warning(f"{cfg.name}: auth error, pausing connector until re-authenticated")
-                cfg.connector.pause()
+        except RuntimeError as e:
+            # MCP tool returned isError=True — extract and display the error
+            raw = str(e).removeprefix("MCP tool error: ")
+            # Strip "Error executing tool X: " wrapper added by FastMCP
+            if raw.startswith("Error executing tool "):
+                _, _, raw = raw.partition(": ")
+            if "unable to open database file" in raw:
+                user_msg = "Permission denied — grant Full Disk Access in System Settings → Privacy & Security"
+            elif "No such file or directory" in raw or "FileNotFoundError" in raw:
+                user_msg = "Not signed in — connect your account in Settings"
+            elif "401" in raw or "Unauthorized" in raw:
+                user_msg = "Authentication expired — reconnect your account"
             else:
-                logger.exception(f"{cfg.name} poll failed")
+                user_msg = raw
+            logger.warning(f"{cfg.name}: pausing — {user_msg}")
+            cfg.connector.pause(error=user_msg)
+            if state is not None:
+                from server.ws.handler import broadcast
+                await broadcast(state, "connectors", {"name": cfg.name, "error": user_msg, "enabled": False})
+        except Exception as e:
+            logger.exception(f"{cfg.name} poll failed")
         await asyncio.sleep(cfg.interval)
 
 
@@ -175,43 +174,94 @@ async def run_context_logging_service(state) -> None:
     connector_configs = [
         ConnectorConfig(
             name="screen", interval=60, log_subdir="screen",
-            connector=ScreenConnector(
-                log_dir=config.log_dir,
-                model=config.label_model,
-                fps=config.fps,
-                buffer_seconds=config.buffer_seconds,
-                chunk_size=config.chunk_size,
-            ),
             filter=False,           # Gemini already provides captions
             prediction_event=True,  # screen actions are what the model predicts
+            connector=MCPConnector(
+                command="python",
+                args=["-m", "connectors.screen.server"],
+                tool_name="fetch_screen",
+                env={
+                    "POWERNAP_LOG_DIR": config.log_dir,
+                    "POWERNAP_LABEL_MODEL": config.label_model,
+                    "POWERNAP_FPS": str(config.fps),
+                    "POWERNAP_BUFFER_SECONDS": str(config.buffer_seconds),
+                    "POWERNAP_CHUNK_SIZE": str(config.chunk_size),
+                },
+                exclude_from_serialization=["img"],
+            ),
         ),
         ConnectorConfig(
             name="gmail", interval=300, log_subdir="email",
-            connector=GmailConnector(config.google_token_path),
+            connector=MCPConnector(
+                command="python",
+                args=["-m", "connectors.gmail.server"],
+                tool_name="fetch_emails",
+                env={"GOOGLE_TOKEN_PATH": config.google_token_path},
+            ),
         ),
         ConnectorConfig(
             name="notifications", interval=120, log_subdir="notifications",
-            connector=NotificationsConnector(),
+            connector=MCPConnector(
+                command="python",
+                args=["-m", "connectors.notifications.server"],
+                tool_name="fetch_notifications",
+            ),
         ),
         ConnectorConfig(
             name="filesystem", interval=120, log_subdir="filesys",
-            connector=FilesystemConnector(),
+            connector=MCPConnector(
+                command="python",
+                args=["-m", "connectors.filesystem.server"],
+                tool_name="fetch_changes",
+            ),
         ),
         ConnectorConfig(
             name="calendar", interval=900, log_subdir="calendar",
-            connector=GoogleCalendarConnector(config.google_token_path),
             filter=False,
+            connector=MCPConnector(
+                command="python",
+                args=["-m", "connectors.calendar.server"],
+                tool_name="fetch_events",
+                env={"GOOGLE_TOKEN_PATH": config.google_token_path},
+            ),
         ),
         ConnectorConfig(
             name="outlook_email", interval=300, log_subdir="outlook_email",
-            connector=OutlookEmailConnector(config.outlook_token_path),
+            connector=MCPConnector(
+                command="python",
+                args=["-m", "connectors.outlook_email.server"],
+                tool_name="fetch_emails",
+                env={"OUTLOOK_TOKEN_PATH": config.outlook_token_path},
+            ),
         ),
         ConnectorConfig(
             name="outlook_calendar", interval=900, log_subdir="outlook_calendar",
-            connector=OutlookCalendarConnector(config.outlook_token_path),
             filter=False,
+            connector=MCPConnector(
+                command="python",
+                args=["-m", "connectors.outlook_calendar.server"],
+                tool_name="fetch_events",
+                env={"OUTLOOK_TOKEN_PATH": config.outlook_token_path},
+            ),
         ),
     ]
+
+    # Append user-defined community / custom MCP connectors from config
+    for mcp_def in config.mcp_connectors:
+        connector_configs.append(ConnectorConfig(
+            name=mcp_def.name,
+            interval=mcp_def.interval,
+            log_subdir=mcp_def.log_subdir or mcp_def.name,
+            filter=mcp_def.filter,
+            prediction_event=mcp_def.prediction_event,
+            connector=MCPConnector(
+                command=mcp_def.command,
+                args=mcp_def.args,
+                tool_name=mcp_def.tool,
+                env=mcp_def.env,
+                exclude_from_serialization=mcp_def.exclude_from_serialization,
+            ),
+        ))
 
     # Expose connectors on state so routes can pause/resume them
     state.connectors = {c.name: c.connector for c in connector_configs}

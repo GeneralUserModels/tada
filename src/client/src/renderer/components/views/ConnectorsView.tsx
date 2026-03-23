@@ -42,10 +42,6 @@ export function ConnectorsView() {
     setConnectingName(null);
   };
 
-  const handleCheckPermission = async (name: string) => {
-    return window.powernap.checkConnectorPermission(name);
-  };
-
   const handleOpenPermModal = (name: string) => {
     dispatch({ type: "OPEN_PERM_MODAL", connectorName: name });
   };
@@ -79,8 +75,6 @@ export function ConnectorsView() {
                   onConnectOutlook={handleConnectOutlook}
                   onFix={handleOpenPermModal}
                   onRetry={retry}
-                  onCheckPermission={handleCheckPermission}
-                  onOpenPermModal={handleOpenPermModal}
                 />
               ))}
           </div>

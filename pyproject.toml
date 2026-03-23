@@ -29,6 +29,7 @@ dependencies = [
     "trl",
     "uvicorn[standard]",
     "wandb",
+    "mcp>=1.0.0",
     "watchdog",
     "websockets",
 ]
@@ -45,3 +46,4 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+namespaces = true
