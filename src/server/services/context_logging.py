@@ -131,11 +131,13 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, la
                     "img": _load_img(item.get("screenshot_path")) if cfg.prediction_event else None,
                 }
                 state.context_buffer.append(entry)
+                from server.ws.handler import broadcast
                 if cfg.prediction_event:
-                    from server.ws.handler import broadcast
                     await state.label_queue.put(entry)
                     state.labels_processed += 1
                     await broadcast(state, "label", {"text": item.get("summary", "")[:200], "count": state.labels_processed})
+                else:
+                    await broadcast(state, "label", {"text": f"[{cfg.name}] {item.get('summary', '')}"[:200]})
         for item in items:
             seen.add(item["id"])
         _trim_seen(seen)
@@ -195,7 +197,6 @@ async def run_context_logging_service(state) -> None:
                     "POWERNAP_LABEL_MODEL": config.label_model,
                     "POWERNAP_FPS": str(config.fps),
                     "POWERNAP_BUFFER_SECONDS": str(config.buffer_seconds),
-                    "POWERNAP_CHUNK_SIZE": str(config.chunk_size),
                 },
                 exclude_from_serialization=["img"],
             ),
