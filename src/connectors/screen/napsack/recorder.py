@@ -1,3 +1,5 @@
+import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 from datetime import datetime
 from queue import Queue, Empty
@@ -53,7 +55,8 @@ class OnlineRecorder(ScreenRecorder):
             disable = DEFAULT_DISABLE
         kwargs["disable"] = disable
         
-        super().__init__(*args, **kwargs)
+        with redirect_stdout(sys.stderr):
+            super().__init__(*args, **kwargs)
         self.aggregation_queue = Queue(maxsize=queue_maxsize)
 
         # always redirect session_dir into powernap/logs (or custom log_dir)
@@ -69,23 +72,28 @@ class OnlineRecorder(ScreenRecorder):
         self.aggregation_worker.aggregations_file = self.session_dir / "raw_aggregations.jsonl"
         self.input_event_queue.session_dir = self.session_dir
 
+    def start(self):
+        with redirect_stdout(sys.stderr):
+            super().start()
+
     def _on_aggregation_request(self, request):
         if not request:
             return
 
         processed = self.aggregation_worker.process_aggregation(request)
 
-        if self.processed_aggregations == 0:
-            print("-------------------------------------------------------------------")
-            print(">>>>                    Aggregation Summary                    <<<<")
-            print(f">>>> Session Directory: {str(self.session_dir.name):37s} <<<<")
-            print("-------------------------------------------------------------------")
-            print("Screenshot | # Events |     Timestamp     | Capture Reason ")
-            print("-------------------------------------------------------------------")
+        with redirect_stdout(sys.stderr):
+            if self.processed_aggregations == 0:
+                print("-------------------------------------------------------------------")
+                print(">>>>                    Aggregation Summary                    <<<<")
+                print(f">>>> Session Directory: {str(self.session_dir.name):37s} <<<<")
+                print("-------------------------------------------------------------------")
+                print("Screenshot | # Events |     Timestamp     | Capture Reason ")
+                print("-------------------------------------------------------------------")
 
-        screenshot_status = "Y" if processed.screenshot else "N"
-        print(f"     {screenshot_status}     | {str(len(processed.events)):8s} |"
-              f"{str(processed.request.timestamp):<18} | {processed.request.reason}")
+            screenshot_status = "Y" if processed.screenshot else "N"
+            print(f"     {screenshot_status}     | {str(len(processed.events)):8s} |"
+                  f"{str(processed.request.timestamp):<18} | {processed.request.reason}")
 
         self.aggregation_queue.put(processed)
         self.processed_aggregations += 1
