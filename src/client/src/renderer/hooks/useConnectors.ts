@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 export function useConnectors() {
   const [connectors, setConnectors] = useState<Record<string, ConnectorInfo>>({});
@@ -15,6 +15,15 @@ export function useConnectors() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    window.powernap.onConnectorUpdate((data) => {
+      setConnectors(prev => ({
+        ...prev,
+        [data.name]: { ...prev[data.name], error: data.error, enabled: data.enabled },
+      }));
+    });
   }, []);
 
   const toggle = async (name: string, enabled: boolean) => {

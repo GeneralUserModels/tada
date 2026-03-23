@@ -1,10 +1,13 @@
 """Video-based labeler using pack's Gemini client and video utilities."""
 
 import asyncio
+import contextlib
 import json
+import sys
 import tempfile
 import logging
 import time
+import litellm
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from importlib.resources import files
@@ -15,7 +18,7 @@ from PIL import Image
 
 # Import from pack
 from napsack.label.video import create_video
-from napsack.label.clients.gemini import GeminiClient
+from napsack.label.clients.litellm import LiteLLMClient
 from napsack.label.clients.client import CAPTION_SCHEMA
 from napsack.label.models import Aggregation as LabelAggregation
 from napsack.record.sanitize import sanitize_records
@@ -93,7 +96,8 @@ class Labeler:
         self.chunk_size = chunk_size
         self.fps = fps
         self.max_workers = max_workers
-        self.client = GeminiClient(model_name=model) if model else GeminiClient()
+        with contextlib.redirect_stdout(sys.stderr):
+            self.client = LiteLLMClient(model_name=model or "gemini/gemini-3-flash-preview")
         self.prompt = self._load_prompt()
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.save_screenshots = save_screenshots
@@ -172,13 +176,14 @@ class Labeler:
             )
             
             # 4. Upload to Gemini
-            file_desc = self.client.upload_file(str(video_path))
-            
+            with contextlib.redirect_stdout(sys.stderr):
+                file_desc = self.client.upload_file(str(video_path))
+
             # 5. Generate captions (infinite retry on failure)
             while True:
                 try:
-                    response = self.client.generate(full_prompt, file_desc, schema=CAPTION_SCHEMA)
-                    captions = response.json if not callable(response.json) else response.json()
+                    with contextlib.redirect_stdout(sys.stderr):
+                        captions = self.client.generate(full_prompt, file_desc, schema=CAPTION_SCHEMA)
                     break
                 except Exception as e:
                     logger.warning(f"Gemini generate failed: {e}. Retrying in 120s...")
@@ -186,7 +191,12 @@ class Labeler:
 
             # 6. Delete file from Gemini (cleanup quota)
             try:
-                self.client.client.files.delete(name=file_desc.name)
+                with contextlib.redirect_stdout(sys.stderr):
+                    litellm.delete_file(
+                        file_id=file_desc.id,
+                        custom_llm_provider="gemini",
+                        api_key=self.client.api_key,
+                    )
             except Exception as e:
                 logger.warning(f"Failed to delete Gemini file: {e}")
             

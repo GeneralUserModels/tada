@@ -5,7 +5,7 @@ import { IPC } from "./ipc";
 import { getConfig, markGoogleConfigured } from "./onboarding";
 import { isGoogleConnected, connectGoogle, disconnectGoogle } from "./google-auth";
 import { isOutlookConnected, connectOutlook, disconnectOutlook } from "./outlook-auth";
-import { connectorPermissions, canUseConnector } from "./connector-permissions";
+import { connectorPermissions } from "./connector-permissions";
 import * as api from "./api";
 
 export function setupConnectorIpc(): void {
@@ -26,24 +26,14 @@ export function setupConnectorIpc(): void {
     const enabled = (name: string) => serverStates[name]?.enabled ?? true;
     const error = (name: string) => serverStates[name]?.error ?? null;
 
-    // For connectors with permission descriptors, synthesize a client-side error
-    // if the permission isn't granted — catches the case before the backend has
-    // had a chance to poll and report the error itself.
-    const permError = (name: string, backendError: string | null) => {
-      if (backendError) return backendError;
-      const desc = connectorPermissions[name];
-      if (desc && !desc.check()) return desc.body; // use descriptor body as error hint
-      return null;
-    };
-
     return {
-      screen:           { enabled: enabled("screen"),           available: canUseConnector("screen"),  configured: true,  error: permError("screen",        error("screen")) },
-      calendar:         { enabled: enabled("calendar"),         available: googleConnected,            configured: config?.google_configured?.calendar ?? false, error: error("calendar") },
-      gmail:            { enabled: enabled("gmail"),            available: googleConnected,            configured: config?.google_configured?.gmail ?? false,    error: error("gmail") },
-      outlook_calendar: { enabled: enabled("outlook_calendar"), available: outlookConnected,           configured: (config as any)?.outlook_configured?.calendar ?? false, error: error("outlook_calendar") },
-      outlook_email:    { enabled: enabled("outlook_email"),    available: outlookConnected,           configured: (config as any)?.outlook_configured?.email ?? false,    error: error("outlook_email") },
-      notifications:    { enabled: enabled("notifications"),    available: canUseConnector("notifications"), configured: true, error: permError("notifications", error("notifications")) },
-      filesystem:       { enabled: enabled("filesystem"),       available: true,                       configured: true,  error: error("filesystem") },
+      screen:           { enabled: enabled("screen"),           available: true,             configured: true,  error: error("screen") },
+      calendar:         { enabled: enabled("calendar"),         available: googleConnected,  configured: config?.google_configured?.calendar ?? false, error: error("calendar") },
+      gmail:            { enabled: enabled("gmail"),            available: googleConnected,  configured: config?.google_configured?.gmail ?? false,    error: error("gmail") },
+      outlook_calendar: { enabled: enabled("outlook_calendar"), available: outlookConnected, configured: (config as any)?.outlook_configured?.calendar ?? false, error: error("outlook_calendar") },
+      outlook_email:    { enabled: enabled("outlook_email"),    available: outlookConnected, configured: (config as any)?.outlook_configured?.email ?? false,    error: error("outlook_email") },
+      notifications:    { enabled: enabled("notifications"),    available: true,             configured: true,  error: error("notifications") },
+      filesystem:       { enabled: enabled("filesystem"),       available: true,             configured: true,  error: error("filesystem") },
     };
   });
 
@@ -106,10 +96,6 @@ export function setupConnectorIpc(): void {
       fixUrl: desc.fixUrl,
       hasRequest: !!desc.request,
     };
-  });
-
-  ipcMain.handle(IPC.CONNECTOR_CHECK_PERMISSION, (_e, name: string) => {
-    return connectorPermissions[name]?.check() ?? true;
   });
 
   ipcMain.handle(IPC.CONNECTOR_REQUEST_PERMISSION, async (_e, name: string) => {
