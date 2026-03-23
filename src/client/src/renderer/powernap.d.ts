@@ -101,7 +101,7 @@ interface PowerNapAPI {
   updateConnector: (name: string, enabled: boolean) => Promise<unknown>;
   openFdaSettings: (name?: string) => Promise<unknown>;
   getConnectorPermissionInfo: (name: string) => Promise<ConnectorPermissionInfo | null>;
-  checkConnectorPermission: (name: string) => Promise<boolean>;
+  onConnectorUpdate: (cb: (data: { name: string; error: string | null; enabled: boolean }) => void) => void;
   requestConnectorPermission: (name: string) => Promise<boolean>;
 
   // Auto-update

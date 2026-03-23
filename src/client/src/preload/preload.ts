@@ -74,8 +74,9 @@ contextBridge.exposeInMainWorld("powernap", {
   updateConnector: (name: string, enabled: boolean) =>
     ipcRenderer.invoke("connector:update", name, enabled),
   openFdaSettings: (name?: string) => ipcRenderer.invoke("connector:open-fda-settings", name),
+  onConnectorUpdate: (cb: (data: unknown) => void) =>
+    ipcRenderer.on("connector:status-update", (_e, data) => cb(data)),
   getConnectorPermissionInfo: (name: string) => ipcRenderer.invoke("connector:get-permission-info", name),
-  checkConnectorPermission: (name: string) => ipcRenderer.invoke("connector:check-permission", name),
   requestConnectorPermission: (name: string) => ipcRenderer.invoke("connector:request-permission", name),
 
   // Auto-update

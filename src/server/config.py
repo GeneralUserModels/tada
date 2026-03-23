@@ -14,8 +14,42 @@ _PERSISTED_FIELDS = {
     "gemini_api_key", "tinker_api_key", "hf_token", "wandb_api_key",
     "model", "reward_llm", "label_model", "fps", "num_generations",
     "learning_rate", "batch_size", "past_len", "future_len", "loss_mode",
-    "disabled_connectors",
+    "disabled_connectors", "mcp_connectors",
 }
+
+
+class MCPConnectorDef(BaseModel):
+    """Definition of a community or custom MCP server to use as a powernap connector."""
+
+    name: str
+    """Unique connector name (shown in /api/connectors)."""
+
+    command: str
+    """Executable to spawn, e.g. 'python', 'npx', 'uvx'."""
+
+    args: list[str] = []
+    """Arguments passed to the command, e.g. ['-m', 'connectors.gmail.server']."""
+
+    tool: str
+    """Name of the MCP tool to call on each poll, e.g. 'fetch_emails'."""
+
+    interval: int = 300
+    """Poll interval in seconds."""
+
+    env: dict[str, str] | None = None
+    """Extra environment variables merged into the server process environment."""
+
+    filter: bool = True
+    """Whether to run the LLM relevance filter on fetched items."""
+
+    prediction_event: bool = False
+    """Whether items from this connector are prediction targets (like screen)."""
+
+    log_subdir: str = ""
+    """Log subdirectory name; defaults to the connector name if empty."""
+
+    exclude_from_serialization: list[str] = []
+    """Item fields to strip when writing to JSONL (e.g. ['img'] for binary data)."""
 
 
 class ServerConfig(BaseModel):
@@ -31,7 +65,7 @@ class ServerConfig(BaseModel):
     precision: str = "accurate"
 
     # Labeler
-    label_model: str = "gemini-3-flash-preview"
+    label_model: str = "gemini/gemini-3-flash-preview"
     chunk_size: int = 60
     chunk_fps: int = 1
     chunk_workers: int = 4
@@ -76,6 +110,9 @@ class ServerConfig(BaseModel):
     # Connectors: names of connectors that are disabled (paused)
     disabled_connectors: list[str] = Field(default_factory=list)
 
+    # Community / custom MCP connectors added by the user
+    mcp_connectors: list[MCPConnectorDef] = Field(default_factory=list)
+
     def load_persisted(self) -> None:
         """Load user-settable fields from the config file, if it exists.
 
@@ -89,7 +126,10 @@ class ServerConfig(BaseModel):
             return
         for field in _PERSISTED_FIELDS:
             if field in data:
-                setattr(self, field, data[field])
+                if field == "mcp_connectors":
+                    setattr(self, field, [MCPConnectorDef.model_validate(item) for item in data[field]])
+                else:
+                    setattr(self, field, data[field])
 
     def save(self) -> None:
         """Persist user-settable fields to the config file."""

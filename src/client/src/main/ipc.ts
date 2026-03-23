@@ -53,9 +53,9 @@ export const IPC = {
 
   // Connectors (dashboard)
   CONNECTOR_STATUS: "connector:status",
+  CONNECTOR_STATUS_UPDATE: "connector:status-update",
   CONNECTOR_OPEN_FDA_SETTINGS: "connector:open-fda-settings",
   CONNECTOR_GET_PERMISSION_INFO: "connector:get-permission-info",
-  CONNECTOR_CHECK_PERMISSION: "connector:check-permission",
   CONNECTOR_REQUEST_PERMISSION: "connector:request-permission",
   CONNECTOR_CONNECT_GOOGLE: "connector:connect-google",
   CONNECTOR_DISCONNECT_GOOGLE: "connector:disconnect-google",
