@@ -41,6 +41,7 @@ function startServer(port: number): void {
   const logDirPath = getLogDir();
   const pythonPath = getPythonPath();
   const pythonSrcDir = getPythonSrcDir();
+  const configPath = path.join(getDataDir(), "powernap-config.json");
 
   const googleTokenPath = getGoogleTokenPath();
   const outlookTokenPath = getOutlookTokenPath();
@@ -57,7 +58,7 @@ function startServer(port: number): void {
       "--save-recordings",
       "--resume-from-checkpoint", "auto",
       "--log-to-wandb",
-    ], { cwd: projectRoot });
+    ], { cwd: projectRoot, env: { ...process.env, POWERNAP_CONFIG_PATH: configPath } });
   } else {
     // Packaged mode: use venv python directly
     serverProc = spawn(pythonPath, [
@@ -73,6 +74,7 @@ function startServer(port: number): void {
       env: {
         ...process.env,
         PYTHONPATH: pythonSrcDir,
+        POWERNAP_CONFIG_PATH: configPath,
       },
     });
   }
@@ -360,16 +362,6 @@ function launchApp(port: number) {
   startServer(port);
 
   waitForServer(`http://127.0.0.1:${port}/api/status`).then(async () => {
-    // Push saved onboarding config to the server
-    const config = onboarding.getConfig();
-    if (config) {
-      try {
-        const { user_name, user_email, connectors: _connectors, ...serverConfig } = config as unknown as Record<string, unknown>;
-        await api.updateSettings(serverConfig);
-      } catch (err) {
-        console.error("[onboarding] failed to push config to server:", err);
-      }
-    }
     ws.connect();
     dashboardWindow?.webContents.send(IPC.SERVER_READY);
   });
