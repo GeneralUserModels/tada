@@ -37,6 +37,7 @@ class ServerState:
 
     # Connector instances (populated by context_logging service)
     connectors: dict = field(default_factory=dict)
+    connector_auth: dict = field(default_factory=dict)  # name → requires_auth value
 
     # Metrics
     step_count: int = 0
