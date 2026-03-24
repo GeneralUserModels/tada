@@ -23,6 +23,9 @@ def main():
     parser.add_argument("--loss-mode", type=str, default="llm_judge",
                         choices=["llm_judge", "logprob_elbo"],
                         help="Training loss mode (default: llm_judge)")
+    parser.add_argument("--model-type", type=str, default="prompted",
+                        choices=["powernap", "prompted"],
+                        help="Predictor type: 'powernap' (finetuned, requires Tinker) or 'prompted' (LiteLLM baseline)")
     parser.add_argument("--google-token-path", type=str, default=None,
                         help="Path to Google OAuth token JSON file")
     parser.add_argument("--outlook-token-path", type=str, default=None,
@@ -45,6 +48,7 @@ def main():
         os.environ["POWERNAP_OUTLOOK_TOKEN_PATH"] = args.outlook_token_path
     os.environ["POWERNAP_LOG_DIR"] = args.log_dir
     os.environ["POWERNAP_LOSS_MODE"] = args.loss_mode
+    os.environ["POWERNAP_MODEL_TYPE"] = args.model_type
     if (args.log_to_wandb or os.environ.get("WANDB_API_KEY")) and os.environ.get("WANDB_API_KEY"):
         os.environ["POWERNAP_LOG_TO_WANDB"] = "1"
     os.environ["POWERNAP_WANDB_PROJECT"] = args.wandb_project

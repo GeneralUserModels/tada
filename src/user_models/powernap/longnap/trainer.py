@@ -25,10 +25,10 @@ from tinker_cookbook.supervised.common import datum_from_model_input_weights
 from tinker_cookbook.image_processing_utils import get_image_processor
 from tinker_cookbook.tokenizer_utils import get_tokenizer
 
-from powernap.longnap.env import LongNAPEnvGroupBuilder
+from user_models.powernap.longnap.env import LongNAPEnvGroupBuilder
 from retrievers import InMemoryBM25Temporal, jaccard_ngrams
-from powernap.longnap.scorer import create_reward_scorer
-from powernap.longnap.trainer_utils import (
+from user_models.powernap.longnap.scorer import create_reward_scorer
+from user_models.powernap.longnap.trainer_utils import (
     TASK_DESCRIPTION_WITH_IMAGES, TASK_DESCRIPTION_MIXED,
     build_actions_block, build_context_block,
 )

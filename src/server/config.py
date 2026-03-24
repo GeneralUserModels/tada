@@ -18,6 +18,7 @@ _PERSISTED_FIELDS = {
     "filter_model", "filter_model_api_key",
     "fps", "num_generations",
     "learning_rate", "batch_size", "past_len", "future_len", "loss_mode",
+    "model_type", "prompted_model",
     "disabled_connectors", "mcp_connectors",
 }
 
@@ -77,6 +78,10 @@ class ServerConfig(BaseModel):
     filter_model: str = "gemini/gemini-3-flash-preview"
     filter_model_api_key: str = ""
     chunk_workers: int = 4
+
+    # Model selection
+    model_type: str = Field(default_factory=lambda: os.getenv("POWERNAP_MODEL_TYPE", "prompted"))
+    prompted_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_PROMPTED_MODEL", "gemini/gemini-3-flash-preview"))
 
     # Trainer
     model: str = Field(default_factory=lambda: os.getenv("POWERNAP_MODEL", "Qwen/Qwen3-VL-30B-A3B-Instruct"))
