@@ -12,7 +12,7 @@ dependencies = [
     "accelerate",
     "datasets",
     "fastapi",
-    "litellm",
+    "litellm==1.81.3",
     "numpy",
     "napsack",
     "pandas",
