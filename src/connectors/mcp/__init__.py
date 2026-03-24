@@ -103,8 +103,11 @@ class MCPConnector:
     ) -> None:
         """Handle incoming server messages; set the notification event on resource updates."""
         await anyio.lowlevel.checkpoint()
-        if self._notification_event is not None and isinstance(message, ResourceUpdatedNotification):
-            self._notification_event.set()
+        if self._notification_event is not None:
+            # ServerNotification is a RootModel — the actual notification is at .root
+            root = getattr(message, "root", message)
+            if isinstance(root, ResourceUpdatedNotification):
+                self._notification_event.set()
 
     async def connect(self) -> None:
         """Eagerly establish the MCP session (and subscription) if not already connected."""

@@ -94,7 +94,7 @@ async def _on_subscribe(_uri: AnyUrl) -> None:
 
 
 @mcp.tool()
-async def fetch_screen() -> str:
+async def fetch_screen(since: float | None = None) -> str:  # noqa: ARG001 — queue-based, since is unused
     """Drain all available labeled screen activity chunks from the buffer."""
     if _labeled_queue is None:
         return json.dumps([])
