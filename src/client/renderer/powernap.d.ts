@@ -49,6 +49,7 @@ interface ConnectorInfo {
   available: boolean;
   configured: boolean;
   error?: string | null;
+  requires_auth?: "google" | "outlook" | null;
 }
 
 interface ConnectorPermissionInfo {

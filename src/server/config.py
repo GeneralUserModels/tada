@@ -55,6 +55,9 @@ class MCPConnectorDef(BaseModel):
     exclude_from_serialization: list[str] = []
     """Item fields to strip when writing to JSONL (e.g. ['img'] for binary data)."""
 
+    requires_auth: str | None = None
+    """Auth group for this connector: 'google', 'outlook', or None."""
+
 
 class ServerConfig(BaseModel):
     # API keys (populated via settings endpoint or env)

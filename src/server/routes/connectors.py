@@ -14,7 +14,11 @@ class ConnectorUpdate(BaseModel):
 async def get_connectors(request: Request):
     state = request.app.state.server
     return {
-        name: {"enabled": not conn.paused, "error": conn.error}
+        name: {
+            "enabled": not conn.paused,
+            "error": conn.error,
+            "requires_auth": state.connector_auth.get(name),
+        }
         for name, conn in state.connectors.items()
     }
 
