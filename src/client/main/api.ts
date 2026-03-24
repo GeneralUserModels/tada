@@ -55,7 +55,7 @@ export const getLabelHistory = () => request("GET", "/api/label-history");
 
 // ── Connectors ───────────────────────────────────────────────
 export const getConnectors = () =>
-  request("GET", "/api/connectors") as Promise<Record<string, { enabled: boolean; error?: string | null }>>;
+  request("GET", "/api/connectors") as Promise<Record<string, { enabled: boolean; error?: string | null; requires_auth?: string | null }>>;
 
 export const updateConnector = (name: string, enabled: boolean) =>
   request("PUT", `/api/connectors/${name}`, { enabled });

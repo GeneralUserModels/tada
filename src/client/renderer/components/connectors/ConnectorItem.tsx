@@ -29,6 +29,13 @@ const CONNECTOR_ICONS: Record<string, JSX.Element> = {
       <path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
     </svg>
   ),
+  plug: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M8 10v3M6 13h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <rect x="4" y="6" width="8" height="4" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M6 6V3M10 6V3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  ),
 };
 
 export const CONNECTOR_META: Record<string, { label: string; desc: string; icon: string }> = {
@@ -59,8 +66,7 @@ export function ConnectorItem({
   onToggle, onConnectGoogle, onConnectOutlook,
   onFix, onRetry,
 }: Props) {
-  const meta = CONNECTOR_META[name];
-  if (!meta) return null;
+  const meta = CONNECTOR_META[name] ?? { label: name, desc: "", icon: "plug" };
 
   const icon = CONNECTOR_ICONS[meta.icon];
 

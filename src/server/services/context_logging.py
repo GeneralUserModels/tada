@@ -42,6 +42,7 @@ class ConnectorConfig:
     connector: MCPConnector
     filter: bool = True           # run LLM filter?
     prediction_event: bool = False  # events from this connector are prediction targets
+    requires_auth: str | None = None  # "google", "outlook", or None
 
 
 def _append_jsonl(path: Path, entry: dict) -> None:
@@ -199,6 +200,7 @@ async def run_context_logging_service(state) -> None:
             name="screen", interval=60, log_subdir="screen",
             filter=False,           # Gemini already provides captions
             prediction_event=True,  # screen actions are what the model predicts
+            requires_auth=None,
             connector=MCPConnector(
                 command="python",
                 args=["-m", "connectors.screen.server"],
@@ -215,6 +217,7 @@ async def run_context_logging_service(state) -> None:
         ),
         ConnectorConfig(
             name="gmail", interval=300, log_subdir="email",
+            requires_auth="google",
             connector=MCPConnector(
                 command="python",
                 args=["-m", "connectors.gmail.server"],
@@ -241,6 +244,7 @@ async def run_context_logging_service(state) -> None:
         ConnectorConfig(
             name="calendar", interval=900, log_subdir="calendar",
             filter=False,
+            requires_auth="google",
             connector=MCPConnector(
                 command="python",
                 args=["-m", "connectors.calendar.server"],
@@ -250,6 +254,7 @@ async def run_context_logging_service(state) -> None:
         ),
         ConnectorConfig(
             name="outlook_email", interval=300, log_subdir="outlook_email",
+            requires_auth="outlook",
             connector=MCPConnector(
                 command="python",
                 args=["-m", "connectors.outlook_email.server"],
@@ -260,6 +265,7 @@ async def run_context_logging_service(state) -> None:
         ConnectorConfig(
             name="outlook_calendar", interval=900, log_subdir="outlook_calendar",
             filter=False,
+            requires_auth="outlook",
             connector=MCPConnector(
                 command="python",
                 args=["-m", "connectors.outlook_calendar.server"],
@@ -277,6 +283,7 @@ async def run_context_logging_service(state) -> None:
             log_subdir=mcp_def.log_subdir or mcp_def.name,
             filter=mcp_def.filter,
             prediction_event=mcp_def.prediction_event,
+            requires_auth=mcp_def.requires_auth,
             connector=MCPConnector(
                 command=mcp_def.command,
                 args=mcp_def.args,
@@ -288,6 +295,7 @@ async def run_context_logging_service(state) -> None:
 
     # Expose connectors on state so routes can pause/resume them
     state.connectors = {c.name: c.connector for c in connector_configs}
+    state.connector_auth = {c.name: c.requires_auth for c in connector_configs}
 
     # Apply persisted enabled/disabled state from server config
     for cfg in connector_configs:
