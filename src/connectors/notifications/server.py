@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 import plistlib
 import sqlite3
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.session import ServerSession
+from pydantic import AnyUrl
+from watchdog.events import FileSystemEvent, FileSystemEventHandler
+from watchdog.observers import Observer
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +25,56 @@ DB_PATH = os.path.expanduser(
 LIMIT = 50
 _MACOS_EPOCH_OFFSET = 978307200  # seconds between 2001-01-01 and Unix epoch
 
-mcp = FastMCP("powernap-notifications")
+_observer: Observer | None = None
+_active_session: ServerSession | None = None
+_notify_event: asyncio.Event | None = None
+_loop: asyncio.AbstractEventLoop | None = None
+
+
+class _DBHandler(FileSystemEventHandler):
+    def on_any_event(self, event: FileSystemEvent) -> None:
+        if event.is_directory:
+            return
+        if _loop is not None and _notify_event is not None:
+            _loop.call_soon_threadsafe(_notify_event.set)
+
+
+async def _notify_loop() -> None:
+    """Bridge task: wake on DB changes, push MCP notification to subscribed client."""
+    while True:
+        await _notify_event.wait()  # type: ignore[union-attr]
+        _notify_event.clear()  # type: ignore[union-attr]
+        if _active_session is not None:
+            try:
+                await _active_session.send_resource_updated("notifications://activity")
+            except Exception:
+                logger.exception("notifications: failed to send resource updated notification")
+
+
+@asynccontextmanager
+async def lifespan(_server: FastMCP) -> AsyncIterator[None]:  # type: ignore[type-arg]
+    global _observer, _loop, _notify_event
+    _loop = asyncio.get_running_loop()
+    _notify_event = asyncio.Event()
+    asyncio.create_task(_notify_loop(), name="notifications-notifier")
+    db_dir = os.path.dirname(DB_PATH)
+    if os.path.isdir(db_dir):
+        _observer = Observer()
+        _observer.schedule(_DBHandler(), db_dir, recursive=False)
+        _observer.start()
+    yield
+    if _observer is not None:
+        _observer.stop()
+        _observer.join()
+
+
+mcp = FastMCP("powernap-notifications", lifespan=lifespan)
+
+
+@mcp._mcp_server.subscribe_resource()
+async def _on_subscribe(_uri: AnyUrl) -> None:
+    global _active_session
+    _active_session = mcp._mcp_server.request_context.session
 
 
 @mcp.tool()
