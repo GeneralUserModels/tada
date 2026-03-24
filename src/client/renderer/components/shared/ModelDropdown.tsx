@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export interface ModelOption {
   value: string;
@@ -27,7 +27,6 @@ export function ModelDropdown({ value, onChange, options, placeholder = "Select 
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const ref = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -36,32 +35,24 @@ export function ModelDropdown({ value, onChange, options, placeholder = "Select 
     o.value.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Reset highlight when filtered list changes
-  useEffect(() => {
-    setHighlightedIndex(-1);
-  }, [search]);
+  useEffect(() => { setHighlightedIndex(-1); }, [search]);
 
-  // Scroll highlighted item into view
   useEffect(() => {
     if (highlightedIndex >= 0) {
       itemRefs.current[highlightedIndex]?.scrollIntoView({ block: "nearest" });
     }
   }, [highlightedIndex]);
 
-  // Close on click outside
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        setSearch("");
-        setHighlightedIndex(-1);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  function close() {
+    setOpen(false);
+    setSearch("");
+    setHighlightedIndex(-1);
+  }
 
+  function select(val: string) {
+    onChange(val);
+    close();
+  }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (!open) {
@@ -81,25 +72,29 @@ export function ModelDropdown({ value, onChange, options, placeholder = "Select 
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (highlightedIndex >= 0 && filtered[highlightedIndex]) {
-        onChange(filtered[highlightedIndex].value);
-        setOpen(false);
-        setSearch("");
-        setHighlightedIndex(-1);
+        select(filtered[highlightedIndex].value);
       }
     } else if (e.key === "Escape") {
-      setOpen(false);
-      setSearch("");
-      setHighlightedIndex(-1);
+      close();
     }
   }
 
   const selected = options.find(o => o.value === value);
 
   return (
-    <div ref={ref} style={{ position: "relative" }} onKeyDown={handleKeyDown}>
+    <div style={{ position: "relative" }} onKeyDown={handleKeyDown}>
+      {/* Backdrop — captures clicks outside the list, sits behind the list */}
+      {open && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 199 }}
+          onMouseDown={(e) => { e.preventDefault(); close(); }}
+        />
+      )}
+
       <button
         type="button"
-        onClick={() => {
+        onMouseDown={(e) => {
+          e.preventDefault(); // keep focus, prevent label forwarding
           setOpen(o => !o);
           setSearch("");
           setHighlightedIndex(-1);
@@ -134,7 +129,6 @@ export function ModelDropdown({ value, onChange, options, placeholder = "Select 
       </button>
 
       {open && (
-        <>
         <div style={{
           position: "absolute",
           top: "calc(100% + 4px)",
@@ -154,6 +148,7 @@ export function ModelDropdown({ value, onChange, options, placeholder = "Select 
                 placeholder="Search..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
+                onMouseDown={e => e.stopPropagation()} // don't let search input close via backdrop
                 style={{
                   width: "100%",
                   padding: "5px 8px",
@@ -179,7 +174,10 @@ export function ModelDropdown({ value, onChange, options, placeholder = "Select 
                   key={opt.value}
                   ref={el => { itemRefs.current[i] = el; }}
                   type="button"
-                  onClick={() => { onChange(opt.value); setOpen(false); setSearch(""); setHighlightedIndex(-1); }}
+                  onMouseDown={(e) => {
+                    e.preventDefault(); // prevent label forwarding + focus shift
+                    select(opt.value);
+                  }}
                   onMouseEnter={() => setHighlightedIndex(i)}
                   onMouseLeave={() => setHighlightedIndex(-1)}
                   style={{
@@ -209,7 +207,6 @@ export function ModelDropdown({ value, onChange, options, placeholder = "Select 
             })}
           </div>
         </div>
-        </>
       )}
     </div>
   );

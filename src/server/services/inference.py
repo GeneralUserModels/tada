@@ -25,7 +25,7 @@ async def handle_prediction_request(state: Any):
         await broadcast(state, "prediction", {"error": "inference not active"})
         return
 
-    if state.predictor is None or state.trainer is None:
+    if state.predictor is None:
         await broadcast(state, "prediction", {"error": "predictor not initialized (start training first)"})
         return
 
@@ -43,12 +43,12 @@ async def handle_prediction_request(state: Any):
         })
         return
 
-    # Update predictor model path
-    path = getattr(trainer, "latest_sampler_path", None)
-    if path:
-        predictor.model_path = path
-
-    sampling_client = trainer.sampling_client
+    # Keep finetuned predictor in sync with latest sampler weights
+    if trainer is not None:
+        path = getattr(trainer, "latest_sampler_path", None)
+        if path:
+            predictor.model_path = path
+        predictor.sampling_client = trainer.sampling_client
 
     # Capture cutoff timestamp (exclude events after request)
     cutoff_ts = time.time()
@@ -65,11 +65,12 @@ async def handle_prediction_request(state: Any):
     # Run prediction in thread pool
     loop = asyncio.get_running_loop()
     try:
+        context = list(state.context_buffer)  # snapshot of full context for retrieval
         result = await loop.run_in_executor(
             _executor,
             lambda: predictor.predict_from_snapshot(
                 snapshot, future_len,
-                sampling_client=sampling_client,
+                context=context,
                 num_imgs_per_sample=config.num_imgs_per_sample,
             ),
         )
@@ -97,7 +98,7 @@ async def handle_prediction_request(state: Any):
 async def _score_prediction(state: Any, result: dict, cutoff_ts: float, future_len: int):
     """Background task: wait for enough ground truth, then score the prediction."""
     from server.ws.handler import broadcast
-    from powernap.longnap.trainer_utils import build_actions_block
+    from user_models.powernap.longnap.trainer_utils import build_actions_block
 
     # Wait for future_len prediction events after cutoff_ts to accumulate
     for _ in range(120):  # 2 minute timeout

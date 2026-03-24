@@ -15,71 +15,98 @@ async def run_training_service(state: Any):
 
     Reads from state.label_queue (populated by the labeling service), constructs
     samples, runs rollouts + forward_backward + optim_step, and broadcasts metrics.
+
+    In prompted mode (config.model_type == "prompted"), initializes the predictor
+    and returns immediately — context logging and labeling still run in their own
+    service, so data is collected for a potential future switch to powernap mode.
     """
     from server.ws.handler import broadcast
 
     config = state.config
 
-    # Lazy-init trainer (run in thread pool — tinker client init is sync-only)
+    # ── Trainer init (powernap mode only) ─────────────────────────────────────
     loop = asyncio.get_running_loop()
-    if state.trainer is None:
-        logger.info("Initializing trainer (first start)...")
-        from powernap.longnap.trainer import OnlineEnvTrainer
+    if config.model_type == "powernap":
+        if state.trainer is None:
+            logger.info("Initializing trainer (first start)...")
+            from user_models.powernap.longnap.trainer import OnlineEnvTrainer
 
-        def _init_trainer():
-            return OnlineEnvTrainer(
-                model_name=config.model,
-                reward_llm=config.reward_llm,
-                reward_llm_api_key=config.reward_llm_api_key or config.default_llm_api_key,
-                num_generations=config.num_generations,
-                learning_rate=config.learning_rate,
-                max_tokens=config.max_completion_length,
-                num_imgs_per_sample=config.num_imgs_per_sample,
-                log_dir=config.log_dir,
-                log_to_wandb=config.log_to_wandb,
-                wandb_project=config.wandb_project,
-                wandb_run_name=config.wandb_run_name,
-                checkpoint_every_n_steps=config.checkpoint_every_n_steps,
-                resume_from_checkpoint=config.resume_from_checkpoint,
-                retriever_checkpoint=config.retriever_checkpoint,
-                sampler_ttl_seconds=config.sampler_ttl_seconds or None,
-                loss_mode=config.loss_mode,
-                eval_with_llm_judge=config.eval_with_llm_judge,
-            )
+            def _init_trainer():
+                return OnlineEnvTrainer(
+                    model_name=config.model,
+                    reward_llm=config.reward_llm,
+                    reward_llm_api_key=config.reward_llm_api_key or config.default_llm_api_key,
+                    num_generations=config.num_generations,
+                    learning_rate=config.learning_rate,
+                    max_tokens=config.max_completion_length,
+                    num_imgs_per_sample=config.num_imgs_per_sample,
+                    log_dir=config.log_dir,
+                    log_to_wandb=config.log_to_wandb,
+                    wandb_project=config.wandb_project,
+                    wandb_run_name=config.wandb_run_name,
+                    checkpoint_every_n_steps=config.checkpoint_every_n_steps,
+                    resume_from_checkpoint=config.resume_from_checkpoint,
+                    retriever_checkpoint=config.retriever_checkpoint,
+                    sampler_ttl_seconds=config.sampler_ttl_seconds or None,
+                    loss_mode=config.loss_mode,
+                    eval_with_llm_judge=config.eval_with_llm_judge,
+                )
 
-        state.trainer = await loop.run_in_executor(None, _init_trainer)
-        logger.info("Trainer initialized")
+            state.trainer = await loop.run_in_executor(None, _init_trainer)
+            logger.info("Trainer initialized")
 
-        # Broadcast wandb URL if logging is enabled
-        try:
-            import wandb
-            if wandb.run is not None:
-                wandb_url = wandb.run.get_url()
-                logger.info(f"WandB run: {wandb_url}")
-                await broadcast(state, "wandb_url", {"url": wandb_url})
-        except Exception:
-            pass
+            # Broadcast wandb URL if logging is enabled
+            try:
+                import wandb
+                if wandb.run is not None:
+                    wandb_url = wandb.run.get_url()
+                    logger.info(f"WandB run: {wandb_url}")
+                    await broadcast(state, "wandb_url", {"url": wandb_url})
+            except Exception:
+                pass
 
-    else:
-        # Trainer already exists — refresh sampler (TTL may have expired while stopped)
-        logger.info("Refreshing sampler for existing trainer...")
-        await loop.run_in_executor(None, state.trainer.refresh_sampler)
+        else:
+            # Trainer already exists — refresh sampler (TTL may have expired while stopped)
+            logger.info("Refreshing sampler for existing trainer...")
+            await loop.run_in_executor(None, state.trainer.refresh_sampler)
 
-    # Lazy-init predictor (shares components with trainer)
+    # ── Predictor init ────────────────────────────────────────────────────────
     if state.predictor is None:
-        from powernap.inference import Predictor
+        if config.model_type == "powernap":
+            from user_models.powernap.inference import FinetunedPredictor
 
-        def _init_predictor():
-            return Predictor(
-                renderer=state.trainer.renderer,
-                tokenizer=state.trainer.tokenizer,
-                max_tokens=config.max_completion_length,
-                retriever=state.trainer.retriever,
-                log_dir=config.log_dir,
-            )
+            def _init_predictor():
+                return FinetunedPredictor(
+                    renderer=state.trainer.renderer,
+                    tokenizer=state.trainer.tokenizer,
+                    max_tokens=config.max_completion_length,
+                    retriever=state.trainer.retriever,
+                    log_dir=config.log_dir,
+                    sampling_client=state.trainer.sampling_client,
+                )
 
-        state.predictor = await loop.run_in_executor(None, _init_predictor)
+            state.predictor = await loop.run_in_executor(None, _init_predictor)
 
+        elif config.model_type == "prompted":
+            from user_models.prompted import PromptedPredictor
+
+            def _init_prompted():
+                return PromptedPredictor(
+                    model=config.prompted_model,
+                    api_key=config.default_llm_api_key,
+                    max_tokens=config.max_completion_length,
+                    log_dir=config.log_dir,
+                )
+
+            state.predictor = await loop.run_in_executor(None, _init_prompted)
+            logger.info(f"Prompted predictor initialized (model={config.prompted_model})")
+
+    # ── Prompted mode: no training loop ───────────────────────────────────────
+    if config.model_type != "powernap":
+        logger.info("Prompted mode: skipping training loop (context logging still active)")
+        return
+
+    # ── Powernap training loop ─────────────────────────────────────────────────
     trainer = state.trainer
     label_queue = state.label_queue
     past_len = config.past_len
@@ -87,7 +114,7 @@ async def run_training_service(state: Any):
     batch_size = config.batch_size
     num_imgs_per_sample = config.num_imgs_per_sample
 
-    from powernap.longnap.trainer import make_sample
+    from user_models.powernap.longnap.trainer import make_sample
 
     min_required = past_len + future_len
 
@@ -167,6 +194,10 @@ async def run_training_service(state: Any):
                 )
 
                 state.step_count = trainer._step
+
+                # Keep predictor's sampling_client in sync with latest weights
+                if state.predictor is not None:
+                    state.predictor.sampling_client = trainer.sampling_client
 
                 # Broadcast training step
                 step_payload = {
