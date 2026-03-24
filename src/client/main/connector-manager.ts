@@ -16,25 +16,42 @@ export function setupConnectorIpc(): void {
 
     // Fetch enabled states from the server (authoritative source).
     // Fall back to all-enabled if the server isn't up yet.
-    let serverStates: Record<string, { enabled: boolean; error?: string | null }> = {};
+    let serverStates: Record<string, { enabled: boolean; error?: string | null; requires_auth?: string | null }> = {};
     try {
       serverStates = await api.getConnectors();
     } catch {
       // Server not ready yet — enabled state will be correct once it is
     }
 
-    const enabled = (name: string) => serverStates[name]?.enabled ?? true;
-    const error = (name: string) => serverStates[name]?.error ?? null;
-
-    return {
-      screen:           { enabled: enabled("screen"),           available: true,             configured: true,  error: error("screen") },
-      calendar:         { enabled: enabled("calendar"),         available: googleConnected,  configured: config?.google_configured?.calendar ?? false, error: error("calendar") },
-      gmail:            { enabled: enabled("gmail"),            available: googleConnected,  configured: config?.google_configured?.gmail ?? false,    error: error("gmail") },
-      outlook_calendar: { enabled: enabled("outlook_calendar"), available: outlookConnected, configured: (config as any)?.outlook_configured?.calendar ?? false, error: error("outlook_calendar") },
-      outlook_email:    { enabled: enabled("outlook_email"),    available: outlookConnected, configured: (config as any)?.outlook_configured?.email ?? false,    error: error("outlook_email") },
-      notifications:    { enabled: enabled("notifications"),    available: true,             configured: true,  error: error("notifications") },
-      filesystem:       { enabled: enabled("filesystem"),       available: true,             configured: true,  error: error("filesystem") },
+    const authAvailable = (ra: string | null | undefined) => {
+      if (ra === "google") return googleConnected;
+      if (ra === "outlook") return outlookConnected;
+      return true;
     };
+    const authConfigured = (name: string, ra: string | null | undefined) => {
+      if (ra === "google") {
+        const gc = config?.google_configured as Record<string, boolean> | undefined;
+        return gc?.[name] ?? false;
+      }
+      if (ra === "outlook") {
+        const key = name.replace("outlook_", "") as "calendar" | "email";
+        return config?.outlook_configured?.[key] ?? false;
+      }
+      return true;
+    };
+
+    return Object.fromEntries(
+      Object.entries(serverStates).map(([name, s]) => [
+        name,
+        {
+          enabled: s.enabled,
+          available: authAvailable(s.requires_auth),
+          configured: authConfigured(name, s.requires_auth),
+          error: s.error ?? null,
+          requires_auth: s.requires_auth ?? null,
+        },
+      ])
+    );
   });
 
   ipcMain.handle(IPC.CONNECTOR_CONNECT_GOOGLE, async (_e, scope?: string) => {
@@ -54,10 +71,11 @@ export function setupConnectorIpc(): void {
     const ok = await disconnectGoogle();
     if (ok) {
       try {
-        await Promise.all([
-          api.updateConnector("calendar", false),
-          api.updateConnector("email", false),
-        ]);
+        const connectors = await api.getConnectors();
+        const googleConnectors = Object.entries(connectors)
+          .filter(([, v]) => v.requires_auth === "google")
+          .map(([name]) => name);
+        await Promise.all(googleConnectors.map(name => api.updateConnector(name, false)));
       } catch { /* server may not be ready */ }
     }
     return ok;
@@ -71,10 +89,11 @@ export function setupConnectorIpc(): void {
     const ok = await disconnectOutlook();
     if (ok) {
       try {
-        await Promise.all([
-          api.updateConnector("outlook_calendar", false),
-          api.updateConnector("outlook_email", false),
-        ]);
+        const connectors = await api.getConnectors();
+        const outlookConnectors = Object.entries(connectors)
+          .filter(([, v]) => v.requires_auth === "outlook")
+          .map(([name]) => name);
+        await Promise.all(outlookConnectors.map(name => api.updateConnector(name, false)));
       } catch { /* server may not be ready */ }
     }
     return ok;

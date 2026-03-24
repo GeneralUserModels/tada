@@ -37,11 +37,13 @@ class _FilterResult(BaseModel):
 @dataclass
 class ConnectorConfig:
     name: str
-    interval: int        # poll interval in seconds
+    interval: int        # poll interval in seconds (0 = re-poll immediately after fetch returns)
     log_subdir: str      # subdirectory under log_dir
     connector: MCPConnector
     filter: bool = True           # run LLM filter?
     prediction_event: bool = False  # events from this connector are prediction targets
+    requires_auth: str | None = None  # "google", "outlook", or None
+    uses_notifications: bool = False  # if True, await server push notification before fetching
 
 
 def _append_jsonl(path: Path, entry: dict) -> None:
@@ -90,7 +92,7 @@ def _filter_with_llm(items: list[dict], source: str, model: str, api_key: str = 
             response_format=_FilterResult,
             api_key=api_key or None,
         )
-        results.extend(_FilterResult.model_validate_json(response.choices[0].message.content).items)
+        results.extend(item.model_dump() for item in _FilterResult.model_validate_json(response.choices[0].message.content).items)
     return results
 
 
@@ -113,6 +115,10 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
     async def poll():
         if cfg.connector.paused:
             return
+        if cfg.uses_notifications:
+            notified = await cfg.connector.wait_for_notification(timeout=10.0)
+            if not notified:
+                return  # timeout with no new data
         since = _load_last_fetched(last_fetched_path)
         logger.info(f"Polling {cfg.name} (since={since})...")
         all_items = await cfg.connector.fetch(since)
@@ -156,6 +162,7 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
         logger.info(f"{cfg.name}: fetched {len(items)}, kept {len(to_write)}")
 
     while True:
+        error_occurred = False
         try:
             await poll()
         except RuntimeError as e:
@@ -177,9 +184,16 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
             if state is not None:
                 from server.ws.handler import broadcast
                 await broadcast(state, "connectors", {"name": cfg.name, "error": user_msg, "enabled": False})
+            error_occurred = True
         except Exception as e:
             logger.exception(f"{cfg.name} poll failed")
-        await asyncio.sleep(cfg.interval)
+            error_occurred = True
+        # For long-poll connectors (interval=0), ensure a minimum backoff on error or when paused
+        # to avoid tight-looping. Normal case: re-poll immediately (the tool handled the wait).
+        if error_occurred or cfg.connector.paused:
+            await asyncio.sleep(max(cfg.interval, 5))
+        else:
+            await asyncio.sleep(cfg.interval)
 
 
 async def run_context_logging_service(state) -> None:
@@ -196,13 +210,16 @@ async def run_context_logging_service(state) -> None:
 
     connector_configs = [
         ConnectorConfig(
-            name="screen", interval=60, log_subdir="screen",
+            name="screen", interval=0, log_subdir="screen",
             filter=False,           # Gemini already provides captions
             prediction_event=True,  # screen actions are what the model predicts
+            requires_auth=None,
+            uses_notifications=True,  # server pushes when labeling is done; no polling
             connector=MCPConnector(
                 command="python",
                 args=["-m", "connectors.screen.server"],
                 tool_name="fetch_screen",
+                subscribe_uri="screen://activity",
                 env={
                     "POWERNAP_LOG_DIR": config.log_dir,
                     "POWERNAP_LABEL_MODEL": config.label_model,
@@ -215,6 +232,7 @@ async def run_context_logging_service(state) -> None:
         ),
         ConnectorConfig(
             name="gmail", interval=300, log_subdir="email",
+            requires_auth="google",
             connector=MCPConnector(
                 command="python",
                 args=["-m", "connectors.gmail.server"],
@@ -223,24 +241,29 @@ async def run_context_logging_service(state) -> None:
             ),
         ),
         ConnectorConfig(
-            name="notifications", interval=120, log_subdir="notifications",
+            name="notifications", interval=0, log_subdir="notifications",
+            uses_notifications=True,
             connector=MCPConnector(
                 command="python",
                 args=["-m", "connectors.notifications.server"],
                 tool_name="fetch_notifications",
+                subscribe_uri="notifications://activity",
             ),
         ),
         ConnectorConfig(
-            name="filesystem", interval=120, log_subdir="filesys",
+            name="filesystem", interval=0, log_subdir="filesys",
+            uses_notifications=True,
             connector=MCPConnector(
                 command="python",
                 args=["-m", "connectors.filesystem.server"],
                 tool_name="fetch_changes",
+                subscribe_uri="filesystem://changes",
             ),
         ),
         ConnectorConfig(
             name="calendar", interval=900, log_subdir="calendar",
             filter=False,
+            requires_auth="google",
             connector=MCPConnector(
                 command="python",
                 args=["-m", "connectors.calendar.server"],
@@ -250,6 +273,7 @@ async def run_context_logging_service(state) -> None:
         ),
         ConnectorConfig(
             name="outlook_email", interval=300, log_subdir="outlook_email",
+            requires_auth="outlook",
             connector=MCPConnector(
                 command="python",
                 args=["-m", "connectors.outlook_email.server"],
@@ -260,6 +284,7 @@ async def run_context_logging_service(state) -> None:
         ConnectorConfig(
             name="outlook_calendar", interval=900, log_subdir="outlook_calendar",
             filter=False,
+            requires_auth="outlook",
             connector=MCPConnector(
                 command="python",
                 args=["-m", "connectors.outlook_calendar.server"],
@@ -277,6 +302,7 @@ async def run_context_logging_service(state) -> None:
             log_subdir=mcp_def.log_subdir or mcp_def.name,
             filter=mcp_def.filter,
             prediction_event=mcp_def.prediction_event,
+            requires_auth=mcp_def.requires_auth,
             connector=MCPConnector(
                 command=mcp_def.command,
                 args=mcp_def.args,
@@ -288,6 +314,7 @@ async def run_context_logging_service(state) -> None:
 
     # Expose connectors on state so routes can pause/resume them
     state.connectors = {c.name: c.connector for c in connector_configs}
+    state.connector_auth = {c.name: c.requires_auth for c in connector_configs}
 
     # Apply persisted enabled/disabled state from server config
     for cfg in connector_configs:
@@ -296,6 +323,17 @@ async def run_context_logging_service(state) -> None:
 
     logger.info("Context logging service started")
     filter_api_key = config.filter_model_api_key or config.default_llm_api_key
+
+    # Eagerly connect notification-based connectors so they can receive push events.
+    # Without this, fetch() (which triggers _connect) is never called because the
+    # poll loop waits for a notification that can only arrive after subscribing.
+    for cfg in connector_configs:
+        if cfg.uses_notifications and not cfg.connector.paused:
+            try:
+                await cfg.connector.connect()
+            except Exception:
+                logger.exception("%s: failed to connect on startup", cfg.name)
+
     await asyncio.gather(*[
         _run_connector(c, log_dir, seen_dir, config.filter_model, filter_api_key, state) for c in connector_configs
     ])

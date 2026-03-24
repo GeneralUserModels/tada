@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 
 export function useConnectors() {
   const [connectors, setConnectors] = useState<Record<string, ConnectorInfo>>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
@@ -18,13 +18,10 @@ export function useConnectors() {
   }, []);
 
   useEffect(() => {
-    window.powernap.onConnectorUpdate((data) => {
-      setConnectors(prev => ({
-        ...prev,
-        [data.name]: { ...prev[data.name], error: data.error, enabled: data.enabled },
-      }));
+    window.powernap.onConnectorUpdate(() => {
+      load();
     });
-  }, []);
+  }, [load]);
 
   const toggle = async (name: string, enabled: boolean) => {
     setToggling(prev => new Set(prev).add(name));

@@ -15,9 +15,12 @@ export function ConnectorsView() {
   const [connectingName, setConnectingName] = useState<string | null>(null);
   const prevPermModal = useRef(state.permModal);
 
+  // Load connectors when server becomes ready
   useEffect(() => {
-    load();
-  }, [load]);
+    if (state.connected) {
+      load();
+    }
+  }, [state.connected, load]);
 
   // Reload connectors when permission modal closes (permission may have been granted)
   useEffect(() => {
