@@ -21,8 +21,22 @@ class TerminalTool(BaseTool):
             }
         )
 
+    def _wrap_sandbox(self, command: str):
+        try:
+            return asyncio.run(SandboxManager.wrap_with_sandbox(command))
+        except RuntimeError:
+            # Event loop already running (e.g., Playwright active)
+            import threading
+            result = [None]
+            def _run():
+                result[0] = asyncio.run(SandboxManager.wrap_with_sandbox(command))
+            t = threading.Thread(target=_run)
+            t.start()
+            t.join()
+            return result[0]
+
     def run(self, command: str):
-        wrapped = asyncio.run(SandboxManager.wrap_with_sandbox(command))
+        wrapped = self._wrap_sandbox(command)
         result = subprocess.run(
             wrapped, shell=True, capture_output=True, text=True, timeout=120
         )

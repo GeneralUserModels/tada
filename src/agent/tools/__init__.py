@@ -12,6 +12,10 @@ from .compact import CompactTool
 from .background import BackgroundManager, BackgroundRunTool, CheckBackgroundTool
 from .task_manager import TaskManager, TaskCreateTool, TaskGetTool, TaskUpdateTool, TaskListTool
 from .skill import SkillLoader, SkillTool
+from .browser import (
+    BrowserManager, BrowserNavigateTool, BrowserReadTextTool,
+    BrowserClickTool, BrowserTypeTool, BrowserScreenshotTool,
+)
 
 SKILLS_DIR = Path(__file__).parent.parent / "skills"
 TASKS_DIR = Path("/tmp/powernap_tasks")
@@ -19,6 +23,7 @@ TASKS_DIR = Path("/tmp/powernap_tasks")
 _bg_manager = BackgroundManager()
 _task_manager = TaskManager(TASKS_DIR)
 _skill_loader = SkillLoader(SKILLS_DIR)
+_browser_manager = BrowserManager()
 
 ALL_TOOLS = [
     ReadTool(), WriteTool(), EditTool(), TerminalTool(),
@@ -26,6 +31,9 @@ ALL_TOOLS = [
     BackgroundRunTool(_bg_manager), CheckBackgroundTool(_bg_manager),
     TaskCreateTool(_task_manager), TaskGetTool(_task_manager),
     TaskUpdateTool(_task_manager), TaskListTool(_task_manager),
+    BrowserNavigateTool(_browser_manager), BrowserReadTextTool(_browser_manager),
+    BrowserClickTool(_browser_manager), BrowserTypeTool(_browser_manager),
+    BrowserScreenshotTool(_browser_manager),
 ]
 TOOL_MAP = {t.name: t for t in ALL_TOOLS}
 
