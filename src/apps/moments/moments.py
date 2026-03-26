@@ -75,9 +75,10 @@ Use your tools aggressively:
 
 ### Workflow
 
-1. **Plan**: Use TodoWrite to outline your steps. List all session directories and log files you need to read.
-2. **Read & analyze**: Read ALL log files. Use subagents to parallelize reading across session directories. Run bash commands with Python snippets to compute statistics. Reflect on what you find as you go.
-3. **Write tasks**: Only AFTER completing steps 1-2, write the task files one at a time using write_file. Update your todos as you complete each file.
+1. **Check existing tasks**: First, check if {logs_dir}/tasks/ already has task files. If so, read them all to understand what's already been proposed. You must not duplicate existing tasks — only add new, different ones.
+2. **Plan**: Use TodoWrite to outline your steps. List all session directories and log files you need to read.
+3. **Read & analyze**: Read ALL log files. Use subagents to parallelize reading across session directories. Run bash commands with Python snippets to compute statistics. Reflect on what you find as you go.
+4. **Write tasks**: Only AFTER completing steps 1-3, write the task files one at a time using write_file. Update your todos as you complete each file.
 
 ## Output
 IMPORTANT: All output files MUST be written to {logs_dir}/tasks/. Create this directory first with bash, then use write_file to write each task file there. Write at least 20 markdown files (ideally more), one per discovered task.
