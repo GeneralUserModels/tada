@@ -1,0 +1,44 @@
+(version 1)
+
+(deny default)
+(debug deny)
+
+;; ============================================================
+;; READS: most of the filesystem
+;; ============================================================
+(allow file-read*)
+
+(deny file-read* (home-subpath "/.ssh"))
+(deny file-read* (home-subpath "/.gnupg"))
+(deny file-read* (home-subpath "/.aws/credentials"))
+
+;; ============================================================
+;; WRITES: tmp + app logs directory
+;; ============================================================
+(allow file-write*
+    (subpath "/tmp")
+    (subpath "/private/tmp")
+    (subpath "/private/var/folders")
+    (home-subpath "/Library/Application Support/PowerNap/logs-app"))
+
+;; ============================================================
+;; PROCESS
+;; ============================================================
+(allow process-exec*)
+(allow process-fork)
+(allow signal (target self))
+
+;; ============================================================
+;; SYSTEM
+;; ============================================================
+(allow sysctl-read)
+(allow mach-lookup)
+(allow mach-register)
+(allow ipc-posix-shm-read-data)
+(allow ipc-posix-shm-write-data)
+(allow ipc-posix-shm-write-create)
+
+;; ============================================================
+;; NETWORK
+;; ============================================================
+(allow network*)
