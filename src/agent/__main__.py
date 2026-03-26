@@ -29,7 +29,9 @@ DEFAULT_MODEL = "anthropic/claude-sonnet-4-20250514"
 TRANSCRIPT_DIR = Path("/tmp/powernap_transcripts")
 
 SYSTEM_PROMPT = """\
-You are an agent with tools to read, write, edit files and run shell commands.
+You are an agent with tools to read, write, edit files, run shell commands, search the web, and browse websites.
+
+You can browse the web using the browser_navigate, browser_read_text, browser_click, browser_type, and browser_screenshot tools. These use the user's Chrome cookies, so you can access authenticated pages (Twitter, Gmail, etc.). Use browser_read_text with a CSS selector to narrow down content on large pages.
 
 Before doing any work, always plan first:
 1. Read relevant files to understand the current state
@@ -76,6 +78,7 @@ def _build_agent(model: str):
         tools=all_tools,
         compact_tool=compact_tool,
         bg_manager=_bg_manager,
+        web_search=True,
     )
     return agent, compact_tool
 

@@ -22,12 +22,19 @@ class Agent:
         compact_tool: CompactTool | None = None,
         bg_manager: BackgroundManager | None = None,
         max_rounds: int = 30,
+        web_search: bool | dict = False,
     ):
         self.model = model
         self.system_prompt = system_prompt
         self.max_rounds = max_rounds
         self._compact = compact_tool
         self._bg = bg_manager
+        if web_search is True:
+            self._web_search_options = {"search_context_size": "medium"}
+        elif isinstance(web_search, dict):
+            self._web_search_options = web_search
+        else:
+            self._web_search_options = None
         self._tool_map = {t.name: t for t in tools}
         self._tool_schemas = [
             {"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.input_schema}}
@@ -58,17 +65,35 @@ class Agent:
 
             # LLM call
             response = self._call_llm(messages)
-            assistant_msg = response.choices[0].message
+            choice = response.choices[0]
+            assistant_msg = choice.message
             messages.append(assistant_msg.model_dump())
 
-            if assistant_msg.tool_calls is None:
+            # pause_turn: search still running server-side, loop back
+            if choice.finish_reason == "pause_turn":
+                print("  > web_search: (searching...)")
+                continue
+
+            # partition tool calls into server-side (web_search) and local
+            all_calls = assistant_msg.tool_calls or []
+            server_calls = [c for c in all_calls if c.id.startswith("srvtoolu_")]
+            local_calls = [c for c in all_calls if not c.id.startswith("srvtoolu_")]
+
+            for call in server_calls:
+                try:
+                    args = json.loads(call.function.arguments)
+                    print(f"  > {call.function.name} (server): {args.get('query', '')[:200]}")
+                except (json.JSONDecodeError, AttributeError):
+                    print(f"  > {call.function.name} (server)")
+
+            if not local_calls:
                 return assistant_msg.content or ""
 
             # tool dispatch
             used_todo = False
             manual_compress = False
 
-            for call in assistant_msg.tool_calls:
+            for call in local_calls:
                 name = call.function.name
                 args = json.loads(call.function.arguments)
 
@@ -106,9 +131,14 @@ class Agent:
         retry=retry_if_exception_type((litellm.RateLimitError, litellm.APIConnectionError)),
     )
     def _call_llm(self, messages: list):
-        return litellm.completion(
+        kwargs = dict(
             model=self.model,
             messages=[{"role": "system", "content": self.system_prompt}] + messages,
             tools=self._tool_schemas if self._tool_schemas else None,
             max_tokens=8000,
+            web_search_options=self._web_search_options,
         )
+        # Gemini requires this when combining web search with function calling
+        if self._web_search_options and self.model.startswith("gemini/"):
+            kwargs["include_server_side_tool_invocations"] = True
+        return litellm.completion(**kwargs)
