@@ -5,12 +5,13 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from "path";
 import * as https from "https";
-import { getDataDir, getUvPath, getPythonPath, getPythonSrcDir } from "./paths";
+import { getDataDir, getUvPath, getRgPath, getPythonPath, getPythonSrcDir } from "./paths";
 
 type ProgressCallback = (msg: string, pct: number) => void;
 type LogCallback = (line: string) => void;
 
 const UV_VERSION = "0.6.6";
+const RG_VERSION = "14.1.1";
 
 function getRequirementsPath(): string {
   return path.join(getPythonSrcDir(), "requirements.txt");
@@ -133,6 +134,23 @@ export async function run(onProgress: ProgressCallback, onLog?: LogCallback): Pr
 
     // Ensure uv is executable
     fs.chmodSync(uvPath, 0o755);
+  }
+
+  // Step 1b: Download ripgrep
+  const rgPath = getRgPath();
+  if (!fs.existsSync(rgPath)) {
+    onProgress("Downloading ripgrep...", 12);
+    const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
+    const rgUrl = `https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/ripgrep-${RG_VERSION}-${arch}-apple-darwin.tar.gz`;
+    const rgTarPath = path.join(dataDir, "rg.tar.gz");
+
+    await downloadFile(rgUrl, rgTarPath);
+    onProgress("Extracting ripgrep...", 13);
+    await runCommand("tar", ["xzf", rgTarPath, "-C", dataDir, "--strip-components=1"], onLog);
+    fs.unlinkSync(rgTarPath);
+
+    // The tarball extracts a "rg" binary
+    fs.chmodSync(rgPath, 0o755);
   }
 
   // Step 2: Install Python 3.12

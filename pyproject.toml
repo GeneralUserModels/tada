@@ -32,6 +32,8 @@ dependencies = [
     "mcp>=1.0.0",
     "watchdog",
     "websockets",
+    "tenacity",
+    "sandbox-runtime",
 ]
 
 [tool.uv.sources]
