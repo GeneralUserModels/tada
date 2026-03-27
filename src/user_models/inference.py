@@ -14,96 +14,85 @@ _executor = ThreadPoolExecutor(max_workers=4)
 
 
 async def handle_prediction_request(state: Any):
-    """Handle an on-demand prediction request from the client.
+    """Handle an on-demand prediction request from the client."""
+    
 
-    Triggered by a WebSocket 'request_prediction' event. Runs the prediction
-    in a thread pool, then broadcasts the result + schedules background eval.
-    """
-    from server.ws.handler import broadcast
+    model = state.model
 
-    if not state.inference_active:
-        await broadcast(state, "prediction", {"error": "inference not active"})
+    if not model.inference_active:
+        await state.broadcast("prediction", {"error": "inference not active"})
         return
 
-    if state.predictor is None:
-        await broadcast(state, "prediction", {"error": "predictor not initialized (start training first)"})
+    if model.predictor is None:
+        await state.broadcast("prediction", {"error": "predictor not initialized (start training first)"})
         return
 
     config = state.config
-    predictor = state.predictor
-    trainer = state.trainer
+    predictor = model.predictor
+    trainer = model.trainer
+    data_manager = model.data_manager
     past_len = config.past_len
     future_len = config.future_len
 
-    prediction_events = [e for e in state.context_buffer if e.get("prediction_event")]
+    prediction_events = [e for e in data_manager.buffer if e.get("prediction_event")]
 
     if len(prediction_events) < past_len:
-        await broadcast(state, "prediction", {
+        await state.broadcast("prediction", {
             "error": f"not enough data ({len(prediction_events)}/{past_len})"
         })
         return
 
-    # Keep finetuned predictor in sync with latest sampler weights
     if trainer is not None:
         path = getattr(trainer, "latest_sampler_path", None)
         if path:
             predictor.model_path = path
         predictor.sampling_client = trainer.sampling_client
 
-    # Capture cutoff timestamp (exclude events after request)
     cutoff_ts = time.time()
-
-    # Filter to prediction events before cutoff and take last past_len
     snapshot = [e for e in prediction_events if e["timestamp"] < cutoff_ts][-past_len:]
 
     if len(snapshot) < past_len:
-        await broadcast(state, "prediction", {
+        await state.broadcast("prediction", {
             "error": f"not enough pre-cutoff items ({len(snapshot)}/{past_len})"
         })
         return
 
-    # Run prediction in thread pool
     loop = asyncio.get_running_loop()
     try:
-        context = list(state.context_buffer)  # snapshot of full context for retrieval
         result = await loop.run_in_executor(
             _executor,
             lambda: predictor.predict_from_snapshot(
                 snapshot, future_len,
-                context=context,
                 num_imgs_per_sample=config.num_imgs_per_sample,
             ),
         )
     except Exception as e:
         logger.error(f"Prediction failed: {e}", exc_info=True)
-        await broadcast(state, "prediction", {"error": str(e)})
+        await state.broadcast("prediction", {"error": str(e)})
         return
 
-    # Broadcast prediction
-    await broadcast(state, "prediction", {
+    await state.broadcast("prediction", {
         "actions": result["actions"],
         "think": result["think"],
         "revise": result["revise"],
         "timestamp": result["timestamp"],
     })
 
-    # Schedule background eval scoring
     actions_parsed = bool(re.search(r"<action>", result["actions"]))
     if actions_parsed:
-        asyncio.create_task(_score_prediction(
-            state, result, cutoff_ts, future_len
-        ))
+        asyncio.create_task(_score_prediction(state, result, cutoff_ts, future_len))
 
 
 async def _score_prediction(state: Any, result: dict, cutoff_ts: float, future_len: int):
     """Background task: wait for enough ground truth, then score the prediction."""
-    from server.ws.handler import broadcast
+    
     from user_models.powernap.longnap.trainer_utils import build_actions_block
 
-    # Wait for future_len prediction events after cutoff_ts to accumulate
-    for _ in range(120):  # 2 minute timeout
+    data_manager = state.model.data_manager
+
+    for _ in range(120):
         future = [
-            e for e in state.context_buffer
+            e for e in data_manager.buffer
             if e.get("prediction_event") and e["timestamp"] > cutoff_ts
         ]
         if len(future) >= future_len:
@@ -116,7 +105,7 @@ async def _score_prediction(state: Any, result: dict, cutoff_ts: float, future_l
     ground_truth = build_actions_block(future[:future_len])
 
     config = state.config
-    predictor = state.predictor
+    predictor = state.model.predictor
 
     loop = asyncio.get_running_loop()
     try:
@@ -132,7 +121,7 @@ async def _score_prediction(state: Any, result: dict, cutoff_ts: float, future_l
         return
 
     score_data = {"reward": reward, "accuracy": 0.0, "formatting": 0.0, "penalty": 0.0}
-    state.latest_scores = score_data
+    state.model.latest_scores = score_data
 
-    await broadcast(state, "score", score_data)
+    await state.broadcast("score", score_data)
     logger.info(f"Prediction scored: {score_data}")

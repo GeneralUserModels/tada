@@ -13,26 +13,30 @@ logger = logging.getLogger(__name__)
 async def run_training_service(state: Any):
     """Main training coroutine — lazy-initializes the trainer and runs the streaming loop.
 
-    Reads from state.label_queue (populated by the labeling service), constructs
-    samples, runs rollouts + forward_backward + optim_step, and broadcasts metrics.
-
-    In prompted mode (config.model_type == "prompted"), initializes the predictor
-    and returns immediately — context logging and labeling still run in their own
-    service, so data is collected for a potential future switch to powernap mode.
+    In prompted mode, initializes the predictor and returns immediately.
     """
-    from server.ws.handler import broadcast
+    
 
     config = state.config
+    loop = asyncio.get_running_loop()
+
+    # ── DataManager init (shared by all model types) ───────────────────────────
+    if state.model.data_manager is None:
+        from user_models.data_manager import DataManager
+        dm = DataManager(log_dir=config.log_dir)
+        await dm.start()
+        state.model.data_manager = dm
+        logger.info("DataManager started")
 
     # ── Trainer init (powernap mode only) ─────────────────────────────────────
-    loop = asyncio.get_running_loop()
     if config.model_type == "powernap":
-        if state.trainer is None:
+        if state.model.trainer is None:
             logger.info("Initializing trainer (first start)...")
             from user_models.powernap.longnap.trainer import OnlineEnvTrainer
 
             def _init_trainer():
                 return OnlineEnvTrainer(
+                    data_manager=state.model.data_manager,
                     model_name=config.model,
                     reward_llm=config.reward_llm,
                     reward_llm_api_key=config.reward_llm_api_key or config.default_llm_api_key,
@@ -52,64 +56,78 @@ async def run_training_service(state: Any):
                     eval_with_llm_judge=config.eval_with_llm_judge,
                 )
 
-            state.trainer = await loop.run_in_executor(None, _init_trainer)
-            state.step_count = state.trainer._step
+            state.model.trainer = await loop.run_in_executor(None, _init_trainer)
             logger.info("Trainer initialized")
 
-            # Broadcast wandb URL if logging is enabled
             try:
                 import wandb
                 if wandb.run is not None:
                     wandb_url = wandb.run.get_url()
                     logger.info(f"WandB run: {wandb_url}")
-                    await broadcast(state, "wandb_url", {"url": wandb_url})
+                    await state.broadcast("wandb_url", {"url": wandb_url})
             except Exception:
                 pass
 
         else:
-            # Trainer already exists — refresh sampler (TTL may have expired while stopped)
             logger.info("Refreshing sampler for existing trainer...")
-            await loop.run_in_executor(None, state.trainer.refresh_sampler)
+            await loop.run_in_executor(None, state.model.trainer.refresh_sampler)
 
     # ── Predictor init ────────────────────────────────────────────────────────
-    if state.predictor is None:
+    if state.model.predictor is None:
         if config.model_type == "powernap":
             from user_models.powernap.inference import FinetunedPredictor
 
             def _init_predictor():
                 return FinetunedPredictor(
-                    renderer=state.trainer.renderer,
-                    tokenizer=state.trainer.tokenizer,
+                    data_manager=state.model.data_manager,
+                    renderer=state.model.trainer.renderer,
+                    tokenizer=state.model.trainer.tokenizer,
                     max_tokens=config.max_completion_length,
-                    retriever=state.trainer.retriever,
+                    retriever=state.model.trainer.retriever,
                     log_dir=config.log_dir,
-                    sampling_client=state.trainer.sampling_client,
+                    sampling_client=state.model.trainer.sampling_client,
                 )
 
-            state.predictor = await loop.run_in_executor(None, _init_predictor)
+            state.model.predictor = await loop.run_in_executor(None, _init_predictor)
 
         elif config.model_type == "prompted":
             from user_models.prompted import PromptedPredictor
 
             def _init_prompted():
                 return PromptedPredictor(
+                    data_manager=state.model.data_manager,
                     model=config.prompted_model,
                     api_key=config.default_llm_api_key,
                     max_tokens=config.max_completion_length,
                     log_dir=config.log_dir,
                 )
 
-            state.predictor = await loop.run_in_executor(None, _init_prompted)
+            state.model.predictor = await loop.run_in_executor(None, _init_prompted)
             logger.info(f"Prompted predictor initialized (model={config.prompted_model})")
 
-    # ── Prompted mode: no training loop ───────────────────────────────────────
+    # ── Prompted mode: watch for label updates, no training loop ──────────────
     if config.model_type != "powernap":
-        logger.info("Prompted mode: skipping training loop (context logging still active)")
+        logger.info("Prompted mode: watching for label updates")
+        while True:
+            try:
+                await asyncio.wait_for(data_manager.wait_for_label(), timeout=5.0)
+                screen = state.connectors.get("screen")
+                await state.broadcast("status", {
+                    "recording_active": screen is not None and not screen.paused,
+                    "training_active": False,
+                    "inference_active": state.model.inference_active,
+                    "labels_processed": data_manager.labels_processed,
+                })
+            except asyncio.TimeoutError:
+                continue
+            except asyncio.CancelledError:
+                logger.info("Prompted label watcher cancelled")
+                break
         return
 
     # ── Powernap training loop ─────────────────────────────────────────────────
-    trainer = state.trainer
-    label_queue = state.label_queue
+    trainer = state.model.trainer
+    data_manager = state.model.data_manager
     past_len = config.past_len
     future_len = config.future_len
     batch_size = config.batch_size
@@ -121,48 +139,36 @@ async def run_training_service(state: Any):
 
     while True:
         try:
-            # When paused: idle
-            if not state.training_active:
-                await state.training_resumed.wait()
+            if not state.model.training_active:
+                await state.model.training_resumed.wait()
                 continue
 
-            # Wait for a new screen label (used as trigger only)
             try:
-                item = await asyncio.wait_for(label_queue.get(), timeout=2.0)
+                await asyncio.wait_for(data_manager.wait_for_label(), timeout=2.0)
             except asyncio.TimeoutError:
                 continue
 
-            if item is None:
-                continue  # ignore stale sentinels
-
-            state.untrained_batches = label_queue.qsize()
-            predict_count = sum(1 for e in state.context_buffer if e.get("prediction_event"))
+            predict_count = sum(1 for e in data_manager.buffer if e.get("prediction_event"))
             logger.info(f"Training buffer: {predict_count}/{min_required} prediction events")
-            await broadcast(state, "status", {
-                "recording_active": state.recording_active,
-                "training_active": state.training_active,
-                "inference_active": state.inference_active,
-                "untrained_batches": state.untrained_batches,
-                "labels_processed": state.labels_processed,
-                "context_buffer_size": len(state.context_buffer),
+            screen = state.connectors.get("screen")
+            await state.broadcast("status", {
+                "recording_active": screen is not None and not screen.paused,
+                "training_active": state.model.training_active,
+                "inference_active": state.model.inference_active,
+                "labels_processed": data_manager.labels_processed,
             })
 
             if predict_count < min_required:
                 continue
 
-            # Build sample and run one training step
             step_start = time.time()
-            sample = make_sample(state.context_buffer, past_len, future_len, num_imgs_per_sample)
 
-            # Run batch_size rollouts concurrently
-            rollout_tasks = []
-            for i in range(batch_size):
-                if predict_count >= min_required:
-                    s = make_sample(state.context_buffer, past_len, future_len, num_imgs_per_sample)
-                    rollout_tasks.append(asyncio.create_task(trainer._rollout_one_sample(s)))
-
-            if not rollout_tasks:
-                continue
+            rollout_tasks = [
+                asyncio.create_task(trainer._rollout_one_sample(
+                    make_sample(data_manager.buffer, past_len, future_len, num_imgs_per_sample)
+                ))
+                for _ in range(batch_size)
+            ]
 
             results = await asyncio.gather(*rollout_tasks, return_exceptions=True)
 
@@ -174,7 +180,6 @@ async def run_training_service(state: Any):
                 samples_for_batch.append(sample_r)
                 builders_for_batch.append(builder)
 
-            # Batched training
             if config.loss_mode == "logprob_elbo":
                 fwdbwd_future, extra_metrics = trainer._train_batch_elbo(
                     traj_groups, samples_for_batch, builders_for_batch
@@ -194,13 +199,9 @@ async def run_training_service(state: Any):
                     builders=builders_for_batch,
                 )
 
-                state.step_count = trainer._step
+                if state.model.predictor is not None:
+                    state.model.predictor.sampling_client = trainer.sampling_client
 
-                # Keep predictor's sampling_client in sync with latest weights
-                if state.predictor is not None:
-                    state.predictor.sampling_client = trainer.sampling_client
-
-                # Broadcast training step
                 step_payload = {
                     "step": trainer._step,
                     "loss": metrics.get("train/loss", 0),
@@ -208,20 +209,17 @@ async def run_training_service(state: Any):
                     "accuracy_mean": metrics.get("train/accuracy_mean", 0),
                     "formatting_mean": metrics.get("train/formatting_mean", 0),
                 }
-                await broadcast(state, "training_step", step_payload)
+                await state.broadcast("training_step", step_payload)
 
-                # Persist metrics to disk
                 metrics_path = Path(config.log_dir) / "metrics.jsonl"
                 with open(metrics_path, "a") as f:
                     f.write(json.dumps(step_payload) + "\n")
 
-                # Broadcast ELBO scores if applicable
                 if "train/logprob_reward_mean" in metrics:
-                    await broadcast(state, "elbo_score", {
+                    await state.broadcast("elbo_score", {
                         "logprob_reward_mean": metrics["train/logprob_reward_mean"],
                         "logprob_reward_std": metrics.get("train/logprob_reward_std", 0),
                     })
-
 
         except asyncio.CancelledError:
             logger.info("Training service cancelled")

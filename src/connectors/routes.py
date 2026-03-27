@@ -1,4 +1,10 @@
-"""GET/PUT /api/connectors/{name} — query and toggle connector enabled state."""
+"""Connector routes — query and toggle connector enabled state.
+
+Registered by server/app.py under /api/connectors.
+"""
+
+import json
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -39,3 +45,16 @@ async def update_connector(name: str, update: ConnectorUpdate, request: Request)
             state.config.disabled_connectors.append(name)
     state.config.save()
     return {"ok": True, "name": name, "enabled": update.enabled}
+
+
+@router.get("/label-history")
+async def get_label_history(request: Request, limit: int = 50):
+    log_dir = Path(request.app.state.server.config.log_dir)
+    entries = []
+    for jsonl_path in log_dir.glob("*/filtered.jsonl"):
+        for line in jsonl_path.read_text().splitlines():
+            entry = json.loads(line)
+            text = entry["text"] if entry["prediction_event"] else f"[{entry['source_name']}] {entry['text']}"
+            entries.append({"text": text, "timestamp": entry["timestamp"]})
+    entries.sort(key=lambda e: e["timestamp"])
+    return entries[-limit:]

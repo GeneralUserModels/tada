@@ -123,6 +123,7 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
         else:
             to_write = items
         now = time.time()
+        
         for item in to_write:
             _append_jsonl(out_path, {
                 "timestamp": now,
@@ -130,22 +131,12 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
                 "source": cfg.connector.serialize_item(item),
                 "source_name": cfg.name,
                 "prediction_event": cfg.prediction_event,
-            })
-            entry = {
-                "timestamp": now,
-                "text": item.get("summary", ""),
-                "source": cfg.name,
-                "prediction_event": cfg.prediction_event,
                 "img_path": item.get("screenshot_path") if cfg.prediction_event else None,
-            }
-            state.context_buffer.append(entry)
-            from server.ws.handler import broadcast
+            })
             if cfg.prediction_event:
-                await state.label_queue.put(entry)
-                state.labels_processed += 1
-                await broadcast(state, "label", {"text": item.get("summary", "")[:200], "count": state.labels_processed})
+                await state.broadcast("label", {"text": item.get("summary", "")[:200]})
             else:
-                await broadcast(state, "label", {"text": f"[{cfg.name}] {item.get('summary', '')}"[:200]})
+                await state.broadcast("label", {"text": f"[{cfg.name}] {item.get('summary', '')}"[:200]})
         for item in items:
             seen.add(item["id"])
         _trim_seen(seen)
@@ -173,8 +164,8 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
             logger.warning(f"{cfg.name}: pausing — {user_msg}")
             await cfg.connector.stop(error=user_msg)
             if state is not None:
-                from server.ws.handler import broadcast
-                await broadcast(state, "connectors", {"name": cfg.name, "error": user_msg, "enabled": False})
+                
+                await state.broadcast("connectors", {"name": cfg.name, "error": user_msg, "enabled": False})
             error_occurred = True
         except Exception as e:
             logger.exception(f"{cfg.name} poll failed")

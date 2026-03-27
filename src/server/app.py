@@ -1,45 +1,20 @@
 """FastAPI application with CORS, lifespan, and route registration."""
 
 import asyncio
-import json
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.state import ServerState
-from server.routes import connectors, control, settings, status, training
+from server.routes import settings, status
+from connectors.routes import router as connectors_router
+from user_models.routes import router as user_models_router
 from server.ws.handler import ws_endpoint
-from server.services.context_logging import run_context_logging_service
+from connectors.service import run_context_logging_service
 
 logger = logging.getLogger(__name__)
-
-
-def _restore_context_from_disk(state: ServerState) -> None:
-    """Seed context_buffer and labels_processed from persisted JSONL files."""
-    log_dir = Path(state.config.log_dir)
-
-    all_entries = []
-    for jsonl_path in log_dir.glob("*/filtered.jsonl"):
-        for line in jsonl_path.read_text().splitlines():
-            if line.strip():
-                all_entries.append(json.loads(line))
-
-    all_entries.sort(key=lambda e: e["timestamp"])
-
-    state.context_buffer = [{
-        "timestamp": e["timestamp"],
-        "text": e["text"],
-        "source": e["source_name"],
-        "prediction_event": e["prediction_event"],
-        "img_path": e["source"].get("screenshot_path") if e["prediction_event"] else None,
-    } for e in all_entries]
-
-    state.labels_processed = sum(1 for e in all_entries if e["prediction_event"])
-    logger.info(f"Restored {len(state.context_buffer)} entries, {state.labels_processed} total labels")
-
 
 
 @asynccontextmanager
@@ -48,7 +23,13 @@ async def lifespan(app: FastAPI):
 
     state = ServerState()
     state.config.load_persisted()
-    _restore_context_from_disk(state)
+
+    # Auto-start DataManager so label counts are available immediately
+    from user_models.data_manager import DataManager
+    dm = DataManager(log_dir=state.config.log_dir)
+    await dm.start()
+    state.model.data_manager = dm
+    logger.info("DataManager started")
 
     # Start context logging service (creates and owns all connectors)
     state.context_logging_task = asyncio.create_task(run_context_logging_service(state))
@@ -59,19 +40,22 @@ async def lifespan(app: FastAPI):
 
     # Graceful shutdown: cancel running services
     state = app.state.server
-    state.recording_active = False
-    state.training_active = False
-    state.inference_active = False
+    state.model.training_resumed.clear()
+    state.model.inference_active = False
 
-    for task in [state.training_task, state.context_logging_task]:
+    for task in [state.model.training_task, state.context_logging_task]:
         if task and not task.done():
             task.cancel()
 
     # Wait for tasks to actually stop before touching connectors
     await asyncio.gather(
-        *[t for t in [state.training_task, state.context_logging_task] if t],
+        *[t for t in [state.model.training_task, state.context_logging_task] if t],
         return_exceptions=True,
     )
+
+    # Stop DataManager watchdog
+    if state.model.data_manager is not None:
+        state.model.data_manager.stop()
 
     # Pause all connectors (stops active ones like filesystem watcher)
     for connector in state.connectors.values():
@@ -100,11 +84,10 @@ def create_app() -> FastAPI:
     )
 
     # Register REST routes
-    app.include_router(connectors.router)
-    app.include_router(control.router)
+    app.include_router(connectors_router)
     app.include_router(settings.router)
     app.include_router(status.router)
-    app.include_router(training.router)
+    app.include_router(user_models_router)
 
     # WebSocket endpoint
     @app.websocket("/ws")
