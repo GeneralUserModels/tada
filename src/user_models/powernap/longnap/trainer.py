@@ -43,7 +43,7 @@ def make_sample(
     context_buffer: List[Dict],
     past_len: int,
     future_len: int,
-    num_imgs_per_sample: int = 0,
+    num_imgs_per_sample: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Create a training sample from the unified context buffer.
@@ -52,11 +52,11 @@ def make_sample(
         context_buffer: All connector events, each with prediction_event flag.
         past_len: Number of past screen (prediction) events to use as context boundary.
         future_len: Number of future screen events to predict (ground truth).
-        num_imgs_per_sample: Number of images to include (from most recent screen events).
+        num_imgs_per_sample: Max images to include (most recent). None means no cap.
 
     Returns a dict with 'messages' for the renderer.
     """
-    from PIL import ImageFile
+    from PIL import Image, ImageFile
     ImageFile.LOAD_TRUNCATED_IMAGES = True
 
     predict_events = [e for e in context_buffer if e.get("prediction_event")]
@@ -71,16 +71,13 @@ def make_sample(
     context_block = build_context_block(past_context)
     future_actions = build_actions_block(future)
 
-    if num_imgs_per_sample > 0:
-        screen_past = [e for e in past_predict if e.get("img") is not None]
-        imgs = screen_past[-num_imgs_per_sample:]
-        image_content = [{"type": "image", "image": e["img"].convert("RGB")} for e in imgs]
-        if image_content:
-            content = image_content + [
-                {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + context_block}
-            ]
-        else:
-            content = TASK_DESCRIPTION_MIXED + "\n\n" + context_block
+    screen_past = [e for e in past_predict if e.get("img_path") is not None]
+    imgs = screen_past[-num_imgs_per_sample:] if num_imgs_per_sample is not None else screen_past
+    image_content = [{"type": "image", "image": Image.open(e["img_path"]).convert("RGB")} for e in imgs]
+    if image_content:
+        content = image_content + [
+            {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + context_block}
+        ]
     else:
         content = TASK_DESCRIPTION_MIXED + "\n\n" + context_block
 
@@ -112,7 +109,7 @@ class OnlineEnvTrainer:
         max_tokens: int = 512,
         temperature: float = 1.0,
         lora_rank: int = 32,
-        num_imgs_per_sample: int = 0,
+        num_imgs_per_sample: Optional[int] = None,
         retrieval_top_k: int = 10,
         retrieval_mmr_k: int = 5,
         retrieval_mmr_alpha: float = 0.5,
