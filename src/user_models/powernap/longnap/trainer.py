@@ -25,10 +25,10 @@ from tinker_cookbook.supervised.common import datum_from_model_input_weights
 from tinker_cookbook.image_processing_utils import get_image_processor
 from tinker_cookbook.tokenizer_utils import get_tokenizer
 
-from powernap.longnap.env import LongNAPEnvGroupBuilder
+from user_models.powernap.longnap.env import LongNAPEnvGroupBuilder
 from retrievers import InMemoryBM25Temporal, jaccard_ngrams
-from powernap.longnap.scorer import create_reward_scorer
-from powernap.longnap.trainer_utils import (
+from user_models.powernap.longnap.scorer import create_reward_scorer
+from user_models.powernap.longnap.trainer_utils import (
     TASK_DESCRIPTION_WITH_IMAGES, TASK_DESCRIPTION_MIXED,
     build_actions_block, build_context_block,
 )
@@ -43,7 +43,7 @@ def make_sample(
     context_buffer: List[Dict],
     past_len: int,
     future_len: int,
-    num_imgs_per_sample: int = 0,
+    num_imgs_per_sample: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Create a training sample from the unified context buffer.
@@ -52,11 +52,11 @@ def make_sample(
         context_buffer: All connector events, each with prediction_event flag.
         past_len: Number of past screen (prediction) events to use as context boundary.
         future_len: Number of future screen events to predict (ground truth).
-        num_imgs_per_sample: Number of images to include (from most recent screen events).
+        num_imgs_per_sample: Max images to include (most recent). None means no cap.
 
     Returns a dict with 'messages' for the renderer.
     """
-    from PIL import ImageFile
+    from PIL import Image, ImageFile
     ImageFile.LOAD_TRUNCATED_IMAGES = True
 
     predict_events = [e for e in context_buffer if e.get("prediction_event")]
@@ -71,16 +71,13 @@ def make_sample(
     context_block = build_context_block(past_context)
     future_actions = build_actions_block(future)
 
-    if num_imgs_per_sample > 0:
-        screen_past = [e for e in past_predict if e.get("img") is not None]
-        imgs = screen_past[-num_imgs_per_sample:]
-        image_content = [{"type": "image", "image": e["img"].convert("RGB")} for e in imgs]
-        if image_content:
-            content = image_content + [
-                {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + context_block}
-            ]
-        else:
-            content = TASK_DESCRIPTION_MIXED + "\n\n" + context_block
+    screen_past = [e for e in past_predict if e.get("img_path") is not None]
+    imgs = screen_past[-num_imgs_per_sample:] if num_imgs_per_sample is not None else screen_past
+    image_content = [{"type": "image", "image": Image.open(e["img_path"]).convert("RGB")} for e in imgs]
+    if image_content:
+        content = image_content + [
+            {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + context_block}
+        ]
     else:
         content = TASK_DESCRIPTION_MIXED + "\n\n" + context_block
 
@@ -104,6 +101,7 @@ class OnlineEnvTrainer:
 
     def __init__(
         self,
+        data_manager=None,
         model_name: str = "Qwen/Qwen3-VL-30B-A3B-Instruct",
         reward_llm: str = "gemini/gemini-3-flash-preview",
         reward_llm_api_key: str = "",
@@ -112,7 +110,7 @@ class OnlineEnvTrainer:
         max_tokens: int = 512,
         temperature: float = 1.0,
         lora_rank: int = 32,
-        num_imgs_per_sample: int = 0,
+        num_imgs_per_sample: Optional[int] = None,
         retrieval_top_k: int = 10,
         retrieval_mmr_k: int = 5,
         retrieval_mmr_alpha: float = 0.5,
@@ -129,6 +127,7 @@ class OnlineEnvTrainer:
         loss_mode: str = "llm_judge",
         eval_with_llm_judge: bool = False,
     ):
+        self.data_manager = data_manager
         self.model_name = model_name
         self.loss_mode = loss_mode
         self.eval_with_llm_judge = eval_with_llm_judge
@@ -293,6 +292,9 @@ class OnlineEnvTrainer:
         logger.info(f"Resumed from step {self._step}")
 
         logger.info(f"Successfully restored checkpoint metadata from {checkpoint_path}")
+
+    def get_status(self) -> dict:
+        return {"step_count": self._step}
 
     def refresh_sampler(self):
         """Re-save weights and recreate sampling client (e.g. after pause/resume)."""

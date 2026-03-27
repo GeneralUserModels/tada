@@ -45,6 +45,7 @@ body {
 #root {
   flex: 1;
   min-height: 0;
+  padding-top: 36px;
   display: flex;
   flex-direction: column;
 }
@@ -56,10 +57,14 @@ body {
 }
 
 .drag-topbar {
-  width: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 36px;
-  flex-shrink: 0;
+  z-index: 9998;
   -webkit-app-region: drag;
+  user-select: none;
   background: rgba(0, 0, 0, 0.09);
   border-bottom: 1px solid rgba(var(--sage-rgb), 0.15);
 }

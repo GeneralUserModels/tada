@@ -1,4 +1,5 @@
 import { useState } from "react";
+import React from "react";
 import { ModelDropdown, LLM_MODELS } from "./ModelDropdown";
 
 export const ADVANCED_ROWS: { label: string; modelKey: string; apiKeyKey: string }[] = [
@@ -10,9 +11,10 @@ export const ADVANCED_ROWS: { label: string; modelKey: string; apiKeyKey: string
 interface Props {
   values: Record<string, string>;
   setValues: (updater: (prev: Record<string, string>) => Record<string, string>) => void;
+  children?: React.ReactNode;
 }
 
-export function AdvancedLLMSection({ values, setValues }: Props) {
+export function AdvancedLLMSection({ values, setValues, children }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -59,6 +61,7 @@ export function AdvancedLLMSection({ values, setValues }: Props) {
               </div>
             </div>
           ))}
+          {children}
         </div>
       )}
     </div>

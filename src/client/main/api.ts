@@ -35,13 +35,11 @@ async function request(
   return res.json();
 }
 
-// ── Control ──────────────────────────────────────────────────
-export const startRecording = () => request("POST", "/api/control/recording/start");
-export const stopRecording = () => request("POST", "/api/control/recording/stop");
-export const startTraining = () => request("POST", "/api/control/training/start");
-export const stopTraining = () => request("POST", "/api/control/training/stop");
-export const startInference = () => request("POST", "/api/control/inference/start");
-export const stopInference = () => request("POST", "/api/control/inference/stop");
+// ── User model control ────────────────────────────────────────
+export const startTraining = () => request("POST", "/api/user_models/training/start");
+export const stopTraining = () => request("POST", "/api/user_models/training/stop");
+export const startInference = () => request("POST", "/api/user_models/inference/start");
+export const stopInference = () => request("POST", "/api/user_models/inference/stop");
 
 // ── Status / Settings ────────────────────────────────────────
 export const getStatus = () => request("GET", "/api/status");
@@ -50,8 +48,8 @@ export const updateSettings = (data: Record<string, unknown>) =>
   request("PUT", "/api/settings", data);
 
 // ── Training ─────────────────────────────────────────────────
-export const getTrainingHistory = () => request("GET", "/api/training/history");
-export const getLabelHistory = () => request("GET", "/api/label-history");
+export const getTrainingHistory = () => request("GET", "/api/user_models/history");
+export const getLabelHistory = () => request("GET", "/api/connectors/label-history");
 
 // ── Connectors ───────────────────────────────────────────────
 export const getConnectors = () =>

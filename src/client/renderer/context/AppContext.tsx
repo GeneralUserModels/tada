@@ -22,9 +22,7 @@ export interface AppState {
   connected: boolean;
   trainingActive: boolean;
   labels: number;
-  queue: number;
   step: number;
-  buffer: number;
   activeView: ActiveView;
   prediction: { actions?: string; error?: string; timestamp?: string } | null;
   generating: boolean;
@@ -71,9 +69,7 @@ const initialState: AppState = {
   connected: false,
   trainingActive: false,
   labels: 0,
-  queue: 0,
   step: 0,
-  buffer: 0,
   activeView: "connectors",
   prediction: null,
   generating: false,
@@ -96,9 +92,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         connected: true,
         trainingActive: action.status.training_active ?? false,
         labels: action.status.labels_processed ?? 0,
-        queue: action.status.untrained_batches ?? 0,
         step: action.status.step_count ?? 0,
-        buffer: action.status.context_buffer_size ?? 0,
       };
 
     case "STATUS_UPDATE":
@@ -106,8 +100,6 @@ function reducer(state: AppState, action: AppAction): AppState {
         ...state,
         trainingActive: action.data.training_active ?? state.trainingActive,
         labels: action.data.labels_processed ?? state.labels,
-        queue: action.data.untrained_batches ?? state.queue,
-        buffer: action.data.context_buffer_size ?? state.buffer,
       };
 
     case "SET_TRAINING_ACTIVE":
