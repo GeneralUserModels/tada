@@ -24,7 +24,7 @@ def _get_last_trained_end_ts(log_dir: Path) -> float:
     lines = [l for l in ckpt_file.read_text().strip().splitlines() if l.strip()]
     if not lines:
         return 0.0
-    return json.loads(lines[-1])["end_ts"]
+    return json.loads(lines[-1]).get("end_ts", 0)
 
 
 def _restore_context_from_disk(state: ServerState) -> None:

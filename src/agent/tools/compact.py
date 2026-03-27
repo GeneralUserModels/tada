@@ -46,7 +46,27 @@ class CompactTool(BaseTool):
             for msg in messages:
                 f.write(json.dumps(msg, default=str) + "\n")
         conv_text = json.dumps(messages, default=str)[:80000]
-        summary = self._summarizer(f"Summarize for continuity:\n{conv_text}")
+        summary = self._summarizer(
+            "You are compacting a conversation between a user and an AI agent. "
+            "Your job is to produce a summary that lets the agent continue seamlessly "
+            "as if the conversation never reset.\n\n"
+            "Include ALL of the following in your summary:\n"
+            "1. **User's original request** — what the user asked for, in their words.\n"
+            "2. **Current plan and progress** — what steps were planned, which are done, "
+            "which remain. Include any todo list verbatim if one exists.\n"
+            "3. **Key decisions and context** — any choices made, constraints discovered, "
+            "or user preferences expressed (e.g. 'user said not to use X').\n"
+            "4. **Files read and modified** — list every file path that was read or edited, "
+            "with a one-line note on what was done or learned from each.\n"
+            "5. **Errors encountered** — any errors hit and how they were resolved "
+            "(or if they're still unresolved).\n"
+            "6. **Pending work** — what the agent should do next, as specifically as possible.\n"
+            "7. **Important code snippets** — any small but critical code (function signatures, "
+            "config values, key lines) that the agent will need to reference.\n\n"
+            "Be thorough but concise. Use bullet points. Do NOT omit file paths or error details "
+            "— these are the hardest to recover after compaction.\n\n"
+            f"Conversation to summarize:\n{conv_text}"
+        )
         return [
             {"role": "user", "content": f"[Compressed. Transcript: {path}]\n{summary}"},
             {"role": "assistant", "content": "Understood. Continuing with summary context."},

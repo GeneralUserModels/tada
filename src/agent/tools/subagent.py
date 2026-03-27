@@ -4,8 +4,7 @@ from typing import Callable
 
 from .base_tool import BaseTool
 
-EXPLORE_TOOLS = {"bash", "read_file"}
-GENERAL_TOOLS = {"bash", "read_file", "write_file", "edit_file"}
+EXCLUDED_TOOLS = {"task"}
 
 
 class SubAgentTool(BaseTool):
@@ -24,11 +23,6 @@ class SubAgentTool(BaseTool):
                         "type": "string",
                         "description": "The task for the child agent"
                     },
-                    "agent_type": {
-                        "type": "string",
-                        "enum": ["Explore", "general-purpose"],
-                        "description": "Explore = read-only tools, general-purpose = read + write tools"
-                    }
                 },
                 "required": ["prompt"]
             }
@@ -36,9 +30,8 @@ class SubAgentTool(BaseTool):
         self._agent_factory = agent_factory
         self._tools = {t.name: t for t in tools}
 
-    def run(self, prompt: str, agent_type: str = "Explore"):
-        allowed = EXPLORE_TOOLS if agent_type == "Explore" else GENERAL_TOOLS
-        child_tools = [t for name, t in self._tools.items() if name in allowed]
+    def run(self, prompt: str, agent_type: str = "general-purpose"):
+        child_tools = [t for name, t in self._tools.items() if name not in EXCLUDED_TOOLS]
         agent = self._agent_factory(child_tools)
-        result = agent.run(prompt)
+        result = agent.run([{"role": "user", "content": prompt}])
         return (result or "(no summary)")[:50000]
