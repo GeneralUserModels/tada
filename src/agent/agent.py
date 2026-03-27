@@ -136,9 +136,10 @@ class Agent:
             messages=[{"role": "system", "content": self.system_prompt}] + messages,
             tools=self._tool_schemas if self._tool_schemas else None,
             max_tokens=8000,
-            web_search_options=self._web_search_options,
         )
-        # Gemini requires this when combining web search with function calling
-        if self._web_search_options and self.model.startswith("gemini/"):
-            kwargs["include_server_side_tool_invocations"] = True
+        if self._web_search_options:
+            kwargs["web_search_options"] = self._web_search_options
+            # Gemini requires this when combining web search with function calling
+            if self.model.startswith("gemini/"):
+                kwargs["include_server_side_tool_invocations"] = True
         return litellm.completion(**kwargs)

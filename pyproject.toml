@@ -14,7 +14,7 @@ dependencies = [
     "fastapi",
     "litellm==1.82.6",
     "numpy",
-    "napsack",
+    "napsack>=0.1.2",
     "pandas",
     "peft",
     "pillow",
