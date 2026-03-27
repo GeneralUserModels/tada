@@ -114,7 +114,77 @@ export function SettingsView() {
             </div>
           </div>
 
-          <AdvancedLLMSection values={values} setValues={setValues} />
+          <AdvancedLLMSection values={values} setValues={setValues}>
+            {/* User model type */}
+            <div className="model-row" style={{ marginTop: 10 }}>
+              <span className="model-row-label">User Model</span>
+              <div style={{ display: "flex", gap: 4, background: "rgba(0,0,0,0.05)", borderRadius: 8, padding: 3, width: "fit-content" }}>
+                {(["prompted", "powernap"] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setValues(v => ({ ...v, model_type: type }))}
+                    style={{
+                      padding: "5px 14px",
+                      borderRadius: 6,
+                      border: "none",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      fontWeight: modelType === type ? 600 : 400,
+                      background: modelType === type ? "white" : "transparent",
+                      color: modelType === type ? "var(--text)" : "var(--text-tertiary)",
+                      boxShadow: modelType === type ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {type === "prompted" ? "Prompted" : "Tinker"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {isTinker && (
+              <>
+                <div className="model-row">
+                  <span className="model-row-label">Tinker</span>
+                  <div className="model-row-fields">
+                    <label className="field">
+                      <span>Model</span>
+                      <ModelDropdown
+                        value={values["model"] ?? ""}
+                        onChange={(val) => setValues(v => ({ ...v, model: val }))}
+                        options={TINKER_MODELS}
+                        placeholder="Select a model"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>API Key</span>
+                      <input
+                        type="text"
+                        placeholder="tml-..."
+                        value={values["tinker_api_key"] ?? ""}
+                        onChange={(e) => setValues(v => ({ ...v, tinker_api_key: e.target.value }))}
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div className="model-row">
+                  <span className="model-row-label">W&amp;B <span className="optional-tag">optional</span></span>
+                  <div className="model-row-fields">
+                    <label className="field">
+                      <span>API Key</span>
+                      <input type="text" placeholder="wandb-..." value={values["wandb_api_key"] ?? ""} onChange={(e) => setValues(v => ({ ...v, wandb_api_key: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>HuggingFace Token</span>
+                      <input type="text" placeholder="hf_..." value={values["hf_token"] ?? ""} onChange={(e) => setValues(v => ({ ...v, hf_token: e.target.value }))} />
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
+          </AdvancedLLMSection>
         </div>
 
         <div className="settings-footer">
@@ -145,101 +215,6 @@ export function SettingsView() {
         {userModelOpen && (
           <div className="training-section">
 
-            {/* Model type toggle */}
-            <div style={{ display: "flex", gap: 4, marginBottom: 20, background: "rgba(0,0,0,0.05)", borderRadius: 8, padding: 3, width: "fit-content" }}>
-              {(["prompted", "powernap"] as const).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setValues(v => ({ ...v, model_type: type }))}
-                  style={{
-                    padding: "5px 14px",
-                    borderRadius: 6,
-                    border: "none",
-                    fontSize: 12,
-                    fontFamily: "inherit",
-                    cursor: "pointer",
-                    fontWeight: modelType === type ? 600 : 400,
-                    background: modelType === type ? "white" : "transparent",
-                    color: modelType === type ? "var(--text)" : "var(--text-tertiary)",
-                    boxShadow: modelType === type ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
-                    transition: "all 0.15s",
-                  }}
-                >
-                  {type === "prompted" ? "Prompted" : "Tinker"}
-                </button>
-              ))}
-            </div>
-
-            {/* Prompted model selector */}
-            {!isTinker && (
-              <div className="settings-group" style={{ marginBottom: 20 }}>
-                <div className="model-row">
-                  <span className="model-row-label">Model</span>
-                  <div className="model-row-fields">
-                    <label className="field">
-                      <span>Prediction model</span>
-                      <ModelDropdown
-                        value={values["prompted_model"] ?? ""}
-                        onChange={(val) => setValues(v => ({ ...v, prompted_model: val }))}
-                        options={LLM_MODELS}
-                        placeholder="Select a model"
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Tinker config */}
-            {isTinker && (
-              <div className="settings-group" style={{ marginBottom: 20 }}>
-                <div className="model-row">
-                  <span className="model-row-label">Tinker</span>
-                  <div className="model-row-fields">
-                    <label className="field">
-                      <span>Model</span>
-                      <ModelDropdown
-                        value={values["model"] ?? ""}
-                        onChange={(val) => setValues(v => ({ ...v, model: val }))}
-                        options={TINKER_MODELS}
-                        placeholder="Select a model"
-                      />
-                    </label>
-                    <label className="field">
-                      <span>API Key</span>
-                      <input
-                        type="text"
-                        placeholder="tml-..."
-                        value={values["tinker_api_key"] ?? ""}
-                        onChange={(e) => setValues(v => ({ ...v, tinker_api_key: e.target.value }))}
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                <div className="model-row">
-                  <span className="model-row-label">W&amp;B <span className="optional-tag">optional</span></span>
-                  <div className="model-row-fields">
-                    <label className="field">
-                      <span>API Key</span>
-                      <input type="text" placeholder="wandb-..." value={values["wandb_api_key"] ?? ""} onChange={(e) => setValues(v => ({ ...v, wandb_api_key: e.target.value }))} />
-                    </label>
-                    <label className="field">
-                      <span>HuggingFace Token</span>
-                      <input type="text" placeholder="hf_..." value={values["hf_token"] ?? ""} onChange={(e) => setValues(v => ({ ...v, hf_token: e.target.value }))} />
-                    </label>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="settings-group" style={{ marginBottom: 20 }}>
-              <button className="pill-btn pill-start" onClick={handleSave}>
-                Save Changes
-              </button>
-            </div>
-
             {/* Stats + controls */}
             <div className="status-bar" style={{ marginBottom: "16px" }}>
               <div className="stat-pill">
@@ -254,10 +229,6 @@ export function SettingsView() {
                 <span className="stat-label">Step</span>
                 <span className="stat-value">{state.step}</span>
               </div>
-              <div className="stat-pill">
-                <span className="stat-label">Buffer</span>
-                <span className="stat-value">{state.buffer}</span>
-              </div>
             </div>
 
             <div className="controls-grid" style={{ marginBottom: "16px" }}>
@@ -270,9 +241,6 @@ export function SettingsView() {
                 generating={state.generating}
                 onGenerate={handleGenerate}
               />
-            </div>
-
-            <div className="split-row" style={{ marginBottom: "16px" }}>
               <PredictionCard prediction={state.prediction} />
               <RewardsChart data={state.rewardHistory} elboScore={state.elboScore} />
             </div>

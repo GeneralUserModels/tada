@@ -4,6 +4,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from PIL import Image
+
 import tinker
 
 from user_models.base import BasePredictor
@@ -117,24 +119,20 @@ class FinetunedPredictor(BasePredictor):
 
         return result
 
-    def predict_from_snapshot(self, past, future_len, num_imgs_per_sample=0, **kwargs):
+    def predict_from_snapshot(self, past, future_len, num_imgs_per_sample=None, **kwargs):
         """Run prediction from a pre-sliced list of past actions."""
         past_actions_block = build_actions_block(past)
 
         # Always build content as a list so predict() can append TextParts directly
-        if num_imgs_per_sample > 0:
-            image_content = []
-            for action in past[-num_imgs_per_sample:]:
-                img = action.get("img")
-                if img is not None:
-                    image_content.append({"type": "image", "image": img.convert("RGB")})
-
-            if image_content:
-                content = image_content + [
-                    {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + past_actions_block}
-                ]
-            else:
-                content = [{"type": "text", "text": TASK_DESCRIPTION + "\n\n" + past_actions_block}]
+        actions_with_imgs = past[-num_imgs_per_sample:] if num_imgs_per_sample is not None else past
+        image_content = [
+            {"type": "image", "image": Image.open(action["img_path"]).convert("RGB")}
+            for action in actions_with_imgs if action.get("img_path") is not None
+        ]
+        if image_content:
+            content = image_content + [
+                {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + past_actions_block}
+            ]
         else:
             content = [{"type": "text", "text": TASK_DESCRIPTION + "\n\n" + past_actions_block}]
 

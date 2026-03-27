@@ -53,6 +53,7 @@ async def run_training_service(state: Any):
                 )
 
             state.trainer = await loop.run_in_executor(None, _init_trainer)
+            state.step_count = state.trainer._step
             logger.info("Trainer initialized")
 
             # Broadcast wandb URL if logging is enabled
@@ -221,9 +222,6 @@ async def run_training_service(state: Any):
                         "logprob_reward_std": metrics.get("train/logprob_reward_std", 0),
                     })
 
-            # Trim buffer
-            if len(state.context_buffer) > min_required:
-                state.context_buffer = state.context_buffer[-min_required:]
 
         except asyncio.CancelledError:
             logger.info("Training service cancelled")

@@ -5,6 +5,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from PIL import Image
+
 from litellm import completion as litellm_completion
 
 from user_models.base import BasePredictor
@@ -131,7 +133,7 @@ class PromptedPredictor(BasePredictor):
         self._indexed_context_count = len(context)
 
     def predict_from_snapshot(self, past: list, future_len: int, context: list = None,
-                              num_imgs_per_sample: int = 0, **kwargs) -> dict:
+                              num_imgs_per_sample: int | None = None, **kwargs) -> dict:
         """Run prediction from a pre-sliced list of past actions.
 
         Args:
@@ -143,25 +145,23 @@ class PromptedPredictor(BasePredictor):
 
         past_actions_block = build_actions_block(past)
 
-        if num_imgs_per_sample > 0:
-            image_parts = []
-            for action in past[-num_imgs_per_sample:]:
-                img = action.get("img")
-                if img is not None:
-                    buf = io.BytesIO()
-                    img.save(buf, format="PNG")
-                    b64 = base64.b64encode(buf.getvalue()).decode()
-                    image_parts.append({
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{b64}"},
-                    })
+        actions_with_imgs = past[-num_imgs_per_sample:] if num_imgs_per_sample is not None else past
+        image_parts = []
+        for action in actions_with_imgs:
+            img_path = action.get("img_path")
+            if img_path is not None:
+                buf = io.BytesIO()
+                Image.open(img_path).save(buf, format="PNG")
+                b64 = base64.b64encode(buf.getvalue()).decode()
+                image_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{b64}"},
+                })
 
-            if image_parts:
-                content = image_parts + [
-                    {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + past_actions_block}
-                ]
-            else:
-                content = TASK_DESCRIPTION + "\n\n" + past_actions_block
+        if image_parts:
+            content = image_parts + [
+                {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + past_actions_block}
+            ]
         else:
             content = TASK_DESCRIPTION + "\n\n" + past_actions_block
 

@@ -16,12 +16,10 @@ class ServerState:
     training_active: bool = False
     inference_active: bool = False
 
-    # Resume events (set when active, cleared when paused)
-    recording_resumed: asyncio.Event = field(default_factory=asyncio.Event)
+    # Resume event (set when training active, cleared when paused)
     training_resumed: asyncio.Event = field(default_factory=asyncio.Event)
 
-    # Async queues (fed by context_logging, consumed by training)
-    aggregation_queue: asyncio.Queue | None = None
+    # Async queue (fed by context_logging, consumed by training)
     label_queue: asyncio.Queue | None = None
 
     # Unified context buffer: all connector events, each with a prediction_event flag
@@ -49,5 +47,4 @@ class ServerState:
     ws_connections: set = field(default_factory=set)
 
     def __post_init__(self):
-        self.aggregation_queue = asyncio.Queue()
         self.label_queue = asyncio.Queue()
