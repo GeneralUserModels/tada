@@ -222,21 +222,19 @@ export function SettingsView() {
                 <span className="stat-value">{state.labels}</span>
               </div>
               <div className="stat-pill">
-                <span className="stat-label">Queue</span>
-                <span className="stat-value">{state.queue}</span>
-              </div>
-              <div className="stat-pill">
                 <span className="stat-label">Step</span>
                 <span className="stat-value">{state.step}</span>
               </div>
             </div>
 
             <div className="controls-grid" style={{ marginBottom: "16px" }}>
-              <TrainingTile
-                state={training.state}
-                onStart={handleStartTraining}
-                onStop={handleStopTraining}
-              />
+              {isTinker && (
+                <TrainingTile
+                  state={training.state}
+                  onStart={handleStartTraining}
+                  onStop={handleStopTraining}
+                />
+              )}
               <InferenceTile
                 generating={state.generating}
                 onGenerate={handleGenerate}

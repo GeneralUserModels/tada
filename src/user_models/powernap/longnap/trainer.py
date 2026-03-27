@@ -101,6 +101,7 @@ class OnlineEnvTrainer:
 
     def __init__(
         self,
+        data_manager=None,
         model_name: str = "Qwen/Qwen3-VL-30B-A3B-Instruct",
         reward_llm: str = "gemini/gemini-3-flash-preview",
         reward_llm_api_key: str = "",
@@ -126,6 +127,7 @@ class OnlineEnvTrainer:
         loss_mode: str = "llm_judge",
         eval_with_llm_judge: bool = False,
     ):
+        self.data_manager = data_manager
         self.model_name = model_name
         self.loss_mode = loss_mode
         self.eval_with_llm_judge = eval_with_llm_judge
@@ -290,6 +292,9 @@ class OnlineEnvTrainer:
         logger.info(f"Resumed from step {self._step}")
 
         logger.info(f"Successfully restored checkpoint metadata from {checkpoint_path}")
+
+    def get_status(self) -> dict:
+        return {"step_count": self._step}
 
     def refresh_sampler(self):
         """Re-save weights and recreate sampling client (e.g. after pause/resume)."""

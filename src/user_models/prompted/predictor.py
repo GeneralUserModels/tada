@@ -25,10 +25,11 @@ class PromptedPredictor(BasePredictor):
     text messages (no Qwen-specific multipart format).
     """
 
-    def __init__(self, model: str, api_key: str = "", max_tokens: int = 512,
-                 temperature: float = 1.0, retriever=None, retriever_checkpoint=None,
-                 log_dir=None, top_k: int = 10, mmr_k: int = 5,
-                 mmr_alpha: float = 0.5, time_decay_lambda: float = 0.5):
+    def __init__(self, data_manager=None, model: str = "", api_key: str = "",
+                 max_tokens: int = 512, temperature: float = 1.0, retriever=None,
+                 retriever_checkpoint=None, log_dir=None, top_k: int = 10,
+                 mmr_k: int = 5, mmr_alpha: float = 0.5, time_decay_lambda: float = 0.5):
+        self.data_manager = data_manager
         self.model = model
         self.api_key = api_key
         self.max_tokens = max_tokens
@@ -119,9 +120,11 @@ class PromptedPredictor(BasePredictor):
 
         return result
 
-    def index_context(self, context: list) -> None:
+    def index_context(self) -> None:
         """Index new context buffer events into the retriever (incremental)."""
-        new_events = context[self._indexed_context_count:]
+        if self.data_manager is None:
+            return
+        new_events = self.data_manager.buffer[self._indexed_context_count:]
         for event in new_events:
             text = event.get("text")
             if text:
@@ -130,18 +133,12 @@ class PromptedPredictor(BasePredictor):
                     event_ts=int(event["timestamp"]),
                     namespace="context",
                 )
-        self._indexed_context_count = len(context)
+        self._indexed_context_count = len(self.data_manager.buffer)
 
-    def predict_from_snapshot(self, past: list, future_len: int, context: list = None,
+    def predict_from_snapshot(self, past: list, future_len: int,
                               num_imgs_per_sample: int | None = None, **kwargs) -> dict:
-        """Run prediction from a pre-sliced list of past actions.
-
-        Args:
-            context: Full context buffer (all connector events). Indexed into the
-                     retriever so the Think step can retrieve relevant history.
-        """
-        if context:
-            self.index_context(context)
+        """Run prediction from a pre-sliced list of past actions."""
+        self.index_context()
 
         past_actions_block = build_actions_block(past)
 
