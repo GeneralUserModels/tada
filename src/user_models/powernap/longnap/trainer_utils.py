@@ -42,12 +42,12 @@ REVISE_INSTRUCTION = (
 def build_context_block(events: List[Dict[str, Any]]) -> str:
     """Format a unified context buffer into a timestamped block.
 
-    Each event must have: timestamp (float), text (str), source (str).
-    Output format per line: [HH:MM] [source] text
+    Each event must have: timestamp (float), text (str), source_name (str).
+    Output format per line: [HH:MM] [source_name] text
     """
     sorted_events = sorted(events, key=lambda e: e["timestamp"])
     return "\n".join(
-        f"[{datetime.fromtimestamp(e['timestamp']).strftime('%H:%M')}] [{e['source']}] {e['text']}"
+        f"[{datetime.fromtimestamp(e['timestamp']).strftime('%H:%M')}] [{e['source_name']}] {e['text']}"
         for e in sorted_events
     )
 

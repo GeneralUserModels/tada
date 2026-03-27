@@ -18,6 +18,7 @@ _PERSISTED_FIELDS = {
     "filter_model", "filter_model_api_key",
     "fps", "num_generations",
     "learning_rate", "batch_size", "past_len", "future_len", "loss_mode",
+    "model_type", "prompted_model",
     "disabled_connectors", "mcp_connectors",
 }
 
@@ -78,6 +79,10 @@ class ServerConfig(BaseModel):
     filter_model_api_key: str = ""
     chunk_workers: int = 4
 
+    # Model selection
+    model_type: str = Field(default_factory=lambda: os.getenv("POWERNAP_MODEL_TYPE", "prompted"))
+    prompted_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_PROMPTED_MODEL", "gemini/gemini-3-flash-preview"))
+
     # Trainer
     model: str = Field(default_factory=lambda: os.getenv("POWERNAP_MODEL", "Qwen/Qwen3-VL-30B-A3B-Instruct"))
     reward_llm: str = "gemini/gemini-3-flash-preview"
@@ -85,7 +90,7 @@ class ServerConfig(BaseModel):
     num_generations: int = 4
     learning_rate: float = 5e-5
     max_completion_length: int = 512
-    num_imgs_per_sample: int = 2
+    num_imgs_per_sample: int | None = None
     loss_mode: str = Field(default_factory=lambda: os.getenv("POWERNAP_LOSS_MODE", "llm_judge"))
     eval_with_llm_judge: bool = False
     batch_size: int = 8

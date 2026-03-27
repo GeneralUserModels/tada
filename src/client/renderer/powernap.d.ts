@@ -5,9 +5,7 @@ declare global {
 interface StatusData {
   training_active: boolean;
   labels_processed: number;
-  untrained_batches: number;
   step_count: number;
-  context_buffer_size: number;
 }
 
 interface PredictionData {
