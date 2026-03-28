@@ -58,6 +58,10 @@ export const getConnectors = () =>
 export const updateConnector = (name: string, enabled: boolean) =>
   request("PUT", `/api/connectors/${name}`, { enabled });
 
+// ── Prediction ───────────────────────────────────────────────
+export const requestPrediction = () =>
+  request("POST", "/api/user_models/prediction");
+
 // ── Recordings ───────────────────────────────────────────────
 export const postAggregation = (data: unknown) =>
   request("POST", "/api/recordings/aggregation", data);
