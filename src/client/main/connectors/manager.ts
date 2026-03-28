@@ -1,12 +1,12 @@
 /** Dashboard connector IPC handlers — manage connector status from the dashboard. */
 
 import { ipcMain, shell } from "electron";
-import { IPC } from "./ipc";
-import { getConfig, markGoogleConfigured } from "./onboarding";
-import { isGoogleConnected, connectGoogle, disconnectGoogle } from "./google-auth";
-import { isOutlookConnected, connectOutlook, disconnectOutlook } from "./outlook-auth";
-import { connectorPermissions } from "./connector-permissions";
-import * as api from "./api";
+import { IPC } from "../ipc";
+import { getConfig, markGoogleConfigured } from "../features/onboarding";
+import { isGoogleConnected, connectGoogle, disconnectGoogle } from "../auth/google";
+import { isOutlookConnected, connectOutlook, disconnectOutlook } from "../auth/outlook";
+import { connectorPermissions } from "./permissions";
+import * as api from "../api";
 
 export function setupConnectorIpc(): void {
   ipcMain.handle(IPC.CONNECTOR_STATUS, async () => {
@@ -123,13 +123,4 @@ export function setupConnectorIpc(): void {
     return desc.request();
   });
 
-  ipcMain.handle(IPC.CONNECTOR_UPDATE, async (_e, name: string, enabled: boolean) => {
-    try {
-      await api.updateConnector(name, enabled);
-    } catch {
-      // Server may not be ready yet; state is persisted server-side so it
-      // will be correct on next launch once the server starts.
-    }
-    return { ok: true };
-  });
 }

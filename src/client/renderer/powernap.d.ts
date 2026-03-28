@@ -59,49 +59,24 @@ interface ConnectorPermissionInfo {
 }
 
 interface PowerNapAPI {
-  // Control
-  startRecording: () => Promise<unknown>;
-  stopRecording: () => Promise<unknown>;
-  startTraining: () => Promise<unknown>;
-  stopTraining: () => Promise<unknown>;
-  startInference: () => Promise<unknown>;
-  stopInference: () => Promise<unknown>;
-  requestPrediction: () => Promise<unknown>;
-
-  // Status / Settings
-  getStatus: () => Promise<StatusData>;
-  getSettings: () => Promise<Record<string, unknown>>;
-  updateSettings: (data: Record<string, unknown>) => Promise<unknown>;
-  getTrainingHistory: () => Promise<TrainingStepData[]>;
-  getLabelHistory: () => Promise<{ text: string; timestamp: number }[]>;
-
-  // Dashboard event listeners
-  onServerReady: (cb: () => void) => void;
-  onStatusUpdate: (cb: (data: StatusData) => void) => void;
-  onPrediction: (cb: (data: PredictionData) => void) => void;
-  onScore: (cb: (data: ScoreData) => void) => void;
-  onElboScore: (cb: (data: ElboScoreData) => void) => void;
-  onTrainingStep: (cb: (data: TrainingStepData) => void) => void;
-  onLabel: (cb: (data: LabelData) => void) => void;
+  // App lifecycle
+  onServerReady: (cb: (data: { url: string }) => void) => void;
   onPredictionRequested: (cb: () => void) => void;
 
-  // Overlay-specific
+  // Overlay
   onOverlayPrediction: (cb: (data: PredictionData) => void) => void;
   onOverlayWaiting: (cb: () => void) => void;
   onOverlayFlushing: (cb: () => void) => void;
-  onOverlaySleepwalk: (cb: () => void) => void;
   resizeOverlay: (height: number) => void;
 
-  // Connectors
+  // Connectors (OAuth and OS-level only — data fetching goes direct to Python)
   getConnectorStatus: () => Promise<Record<string, ConnectorInfo>>;
   connectorConnectGoogle: (scope?: string) => Promise<boolean>;
   connectorDisconnectGoogle: () => Promise<unknown>;
   connectorConnectOutlook: () => Promise<boolean>;
   connectorDisconnectOutlook: () => Promise<unknown>;
-  updateConnector: (name: string, enabled: boolean) => Promise<unknown>;
   openFdaSettings: (name?: string) => Promise<unknown>;
   getConnectorPermissionInfo: (name: string) => Promise<ConnectorPermissionInfo | null>;
-  checkConnectorPermission: (name: string) => Promise<boolean>;
   onConnectorUpdate: (cb: (data: { name: string; error: string | null; enabled: boolean }) => void) => void;
   requestConnectorPermission: (name: string) => Promise<boolean>;
 
@@ -126,6 +101,10 @@ interface PowerNapAPI {
   connectOutlook: () => Promise<boolean>;
   checkNotifications: () => Promise<boolean>;
   checkFilesystem: () => Promise<boolean>;
+  checkScreenPermission: () => Promise<boolean>;
+  openScreenSettings: () => Promise<unknown>;
+  requestScreenPermission: () => Promise<unknown>;
+  openNotifSettings: () => Promise<unknown>;
   submitOnboarding: (data: Record<string, unknown>) => void;
 }
 

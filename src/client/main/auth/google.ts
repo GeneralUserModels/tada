@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as http from "http";
 import { net, shell } from "electron";
-import { getGoogleTokenPath } from "./paths";
+import { getGoogleTokenPath } from "../paths";
 
 export interface GoogleUser {
   name: string;

@@ -3,8 +3,8 @@
 import { spawn, ChildProcess } from "child_process";
 import * as path from "path";
 import * as readline from "readline";
-import { postAggregation } from "./api";
-import { isDev, getDataDir, getPythonPath, getPythonSrcDir } from "./paths";
+import { postAggregation } from "../api";
+import { isDev, getDataDir, getPythonPath, getPythonSrcDir } from "../paths";
 
 let proc: ChildProcess | null = null;
 
