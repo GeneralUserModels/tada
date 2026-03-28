@@ -4,14 +4,13 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.state import ServerState
-from server.routes import settings, status
+from server.routes import settings, status, events
 from connectors.routes import router as connectors_router
 from user_models.routes import router as user_models_router
-from server.ws.handler import ws_endpoint
 from connectors.service import run_context_logging_service
 
 logger = logging.getLogger(__name__)
@@ -61,13 +60,6 @@ async def lifespan(app: FastAPI):
     for connector in state.connectors.values():
         connector.pause()
 
-    # Close all WebSocket connections
-    for ws in list(state.ws_connections):
-        try:
-            await ws.close()
-        except Exception:
-            pass
-
     logger.info("PowerNap server stopped")
 
 
@@ -83,15 +75,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Register REST routes
+    # Register REST + SSE routes
     app.include_router(connectors_router)
     app.include_router(settings.router)
     app.include_router(status.router)
     app.include_router(user_models_router)
-
-    # WebSocket endpoint
-    @app.websocket("/ws")
-    async def websocket_route(websocket: WebSocket):
-        await ws_endpoint(websocket, websocket.app.state.server)
+    app.include_router(events.router)
 
     return app
