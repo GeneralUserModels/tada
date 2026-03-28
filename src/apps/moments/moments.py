@@ -4,17 +4,12 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
-from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Add parent packages to path when run directly
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
-from agent.__main__ import _build_agent, DEFAULT_MODEL
+from agent.builder import build_agent, DEFAULT_MODEL
 
 INSTRUCTION_TEMPLATE = """\
 You are analyzing a user's digital activity logs to discover opportunities for an AI agent to augment their workflow.
@@ -53,7 +48,7 @@ Focus on the SESSION LOGS. Look for:
 - **Monitoring patterns** — repeatedly checking the same dashboards, outputs, or status pages. The agent should watch in the background and proactively report summaries or flag anomalies.
 - **Content production drudgery** — manually exporting, downloading, copying, and arranging artifacts. The agent should do the entire pipeline end-to-end.
 - **Information foraging** — searching for, reading, and comparing information from multiple sources. The agent should do the research and present a structured summary.
-- **Communication overhead** — triaging, classifying, and responding to messages. The agent should handle the routine parts and surface only what needs human judgment.
+- **Communication overhead** — triaging, classifying, and responding to messages. The agent should handle the routine parts and surface only what needs human judgment. Preparing draft responses to emails, Slack messages, or PR reviews is high-value — the user can review and send in seconds instead of writing from scratch.
 - **Things the user SHOULD do but doesn't** — valuable habits (note-taking, tracking, summarizing) that the user skips. The agent can maintain these proactively.
 
 ## Quality bar for tasks
@@ -108,7 +103,7 @@ When you are done, run `ls -la {logs_dir}/tasks/` to verify all task files exist
 
 
 def run(logs_dir: str, model: str = DEFAULT_MODEL) -> str:
-    agent, _ = _build_agent(model)
+    agent, _ = build_agent(model)
     agent.max_rounds = 200
     instruction = INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir)
     messages = [{"role": "user", "content": instruction}]

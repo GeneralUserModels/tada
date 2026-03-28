@@ -64,6 +64,12 @@ export const IPC = {
   CONNECTOR_DISCONNECT_OUTLOOK: "connector:disconnect-outlook",
   CONNECTOR_UPDATE: "connector:update",
 
+  // Moments (Ta-Da)
+  MOMENTS_GET_TASKS: "moments:get-tasks",
+  MOMENTS_GET_RESULTS: "moments:get-results",
+  MOMENTS_GET_RESULT_HTML: "moments:get-result-html",
+  MOMENT_COMPLETED: "moment:completed",
+
   // Auto-update
   UPDATE_DOWNLOADED: "update:downloaded",
   UPDATE_ERROR: "update:error",

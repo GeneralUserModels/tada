@@ -90,6 +90,13 @@ contextBridge.exposeInMainWorld("powernap", {
   dismissUpdate: () => ipcRenderer.invoke("update:dismiss"),
   checkForUpdates: () => ipcRenderer.invoke("update:check"),
 
+  // Moments (Ta-Da)
+  getMomentsTasks: () => ipcRenderer.invoke("moments:get-tasks"),
+  getMomentsResults: () => ipcRenderer.invoke("moments:get-results"),
+  getMomentResultHtml: (slug: string) => ipcRenderer.invoke("moments:get-result-html", slug),
+  onMomentCompleted: (cb: (data: unknown) => void) =>
+    ipcRenderer.on("moment:completed", (_e, data) => cb(data)),
+
   // Bootstrap
   onBootstrapProgress: (cb: (msg: string, pct: number) => void) =>
     ipcRenderer.on("bootstrap:progress", (_e, msg, pct) => cb(msg, pct)),

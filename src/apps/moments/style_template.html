@@ -1,0 +1,121 @@
+<!--
+  PowerNap Moments — HTML Style Guide Template
+
+  This file is loaded by the moment executor and embedded in the agent's prompt
+  as a style reference. The agent has full freedom to modify, extend, or restructure.
+
+  Design tokens are pulled from the app's main.css (src/client/renderer/styles/main.css).
+  If the app palette changes, update the :root variables here to match.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moment Result</title>
+<style>
+  :root {
+    /* Palette — synced with main.css */
+    --sage: #84B179;
+    --fern: #A2CB8B;
+    --mint: #C7EABB;
+    --cream: #E8F5BD;
+    --sage-rgb: 132,177,121;
+
+    /* Surfaces */
+    --bg: #F4F2EE;
+    --bg-warm: #EBE8E2;
+    --glass: rgba(255,255,255,0.55);
+    --glass-border: rgba(var(--sage-rgb), 0.18);
+    --glass-shadow: rgba(var(--sage-rgb), 0.06);
+
+    /* Text */
+    --text: #2C3A28;
+    --text-secondary: #6B7A65;
+    --text-tertiary: #9BA896;
+
+    /* Accents */
+    --danger: #C9594B;
+
+    /* Radii */
+    --r-sm: 8px;
+    --r-md: 14px;
+    --r-lg: 20px;
+  }
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Typography */
+  h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; }
+  h2 { font-size: 14px; font-weight: 650; margin-bottom: 12px; }
+  h3 { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
+
+  /* Glass card — primary container */
+  .card {
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg);
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px var(--glass-shadow), 0 8px 24px rgba(var(--sage-rgb), 0.04);
+  }
+
+  /* Badge / pill label */
+  .badge {
+    font-size: 9px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 2px 8px; border-radius: 20px;
+    color: var(--sage); background: rgba(var(--sage-rgb), 0.12); display: inline-block;
+  }
+
+  /* Metadata line */
+  .meta { font-size: 10.5px; color: var(--text-tertiary); margin-bottom: 16px; }
+
+  /* Stats row */
+  .stat-row { display: flex; gap: 12px; margin-bottom: 16px; }
+  .stat-box {
+    flex: 1; background: rgba(255,255,255,0.5); border: 1px solid rgba(var(--sage-rgb), 0.1);
+    border-radius: var(--r-md); padding: 14px; text-align: center;
+  }
+  .stat-value { font-size: 22px; font-weight: 700; color: var(--sage); font-variant-numeric: tabular-nums; }
+  .stat-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; font-weight: 600; color: var(--text-secondary); padding: 8px 10px; border-bottom: 1px solid var(--glass-border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+  td { padding: 8px 10px; border-bottom: 1px solid rgba(var(--sage-rgb), 0.08); }
+  tr:hover td { background: rgba(var(--sage-rgb), 0.04); }
+
+  /* Lists */
+  ul, ol { padding-left: 20px; margin-bottom: 12px; }
+  li { margin-bottom: 4px; }
+
+  /* Links */
+  a { color: var(--sage); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Code */
+  pre, code { font-family: 'SF Mono', 'Menlo', monospace; font-size: 11.5px; }
+  pre { background: rgba(255,255,255,0.6); border: 1px solid var(--glass-border); border-radius: var(--r-sm); padding: 12px 14px; overflow-x: auto; margin-bottom: 12px; }
+
+  /* Semantic colors */
+  .success { color: var(--sage); }
+  .warning { color: #D4A843; }
+  .danger { color: var(--danger); }
+</style>
+</head>
+<body>
+  <!-- Agent: Replace this body with your content.
+       Use .card for sections, .stat-row + .stat-box for metrics,
+       table for data, .badge for labels. -->
+</body>
+</html>

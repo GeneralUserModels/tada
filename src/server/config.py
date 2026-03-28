@@ -19,6 +19,7 @@ _PERSISTED_FIELDS = {
     "fps", "num_generations",
     "learning_rate", "batch_size", "past_len", "future_len", "loss_mode",
     "disabled_connectors", "mcp_connectors",
+    "tada_dir", "moments_agent_model", "moments_discovery_interval",
 }
 
 
@@ -115,6 +116,11 @@ class ServerConfig(BaseModel):
     resume_from_checkpoint: str | None = Field(default_factory=lambda: os.getenv("POWERNAP_RESUME_FROM_CHECKPOINT") or None)
     retriever_checkpoint: str | None = Field(default_factory=lambda: os.getenv("POWERNAP_RETRIEVER_CHECKPOINT") or None)
     sampler_ttl_seconds: int = 60
+
+    # Moments
+    tada_dir: str = Field(default_factory=lambda: os.getenv("POWERNAP_TADA_DIR", "./logs-tada"))
+    moments_agent_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_AGENT_MODEL", "anthropic/claude-sonnet-4-20250514"))
+    moments_discovery_interval: int = 43200  # 12 hours
 
     # Connectors: names of connectors that are disabled (paused)
     disabled_connectors: list[str] = Field(default_factory=list)

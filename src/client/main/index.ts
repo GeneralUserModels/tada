@@ -283,6 +283,10 @@ function setupWsForwarding() {
   ws.on("connectors", (data) => {
     dashboardWindow?.webContents.send(IPC.CONNECTOR_STATUS_UPDATE, data);
   });
+
+  ws.on("moment_completed", (data) => {
+    dashboardWindow?.webContents.send(IPC.MOMENT_COMPLETED, data);
+  });
 }
 
 // ── IPC handlers ─────────────────────────────────────────────
@@ -300,6 +304,11 @@ function setupIpc() {
   ipcMain.handle(IPC.UPDATE_SETTINGS, (_e, data) => api.updateSettings(data));
   ipcMain.handle(IPC.GET_TRAINING_HISTORY, () => api.getTrainingHistory());
   ipcMain.handle(IPC.GET_LABEL_HISTORY, () => api.getLabelHistory());
+
+  // Moments
+  ipcMain.handle(IPC.MOMENTS_GET_TASKS, () => api.getMomentsTasks());
+  ipcMain.handle(IPC.MOMENTS_GET_RESULTS, () => api.getMomentsResults());
+  ipcMain.handle(IPC.MOMENTS_GET_RESULT_HTML, (_e, slug: string) => api.getMomentResultHtml(slug));
 
   // Overlay resize
   ipcMain.on("overlay:resize", (_e, height: number) => {

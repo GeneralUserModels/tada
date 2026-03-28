@@ -4,16 +4,13 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
-from agent.__main__ import _build_agent, DEFAULT_MODEL
+from agent.builder import build_agent, DEFAULT_MODEL
 
 INSTRUCTION_TEMPLATE = """\
 You are analyzing a user's digital activity logs to discover one-off tasks that an AI agent can help with RIGHT NOW.
@@ -48,6 +45,7 @@ Focus on what the user is CURRENTLY doing or interested in. Look for:
 - **Active research** — the user is searching for, reading about, or comparing something specific. The agent can do deeper research and compile a structured summary.
 - **Planning or decision-making** — the user is planning a trip, evaluating options, comparing products, etc. The agent can gather more information, build a comparison, or draft an itinerary.
 - **Unfinished work** — something the user started but hasn't completed. The agent can pick it up and finish it or prepare a draft.
+- **Draft responses** — emails, Slack messages, or PR reviews the user needs to reply to. The agent can prepare draft responses the user can review and send in seconds instead of writing from scratch.
 - **Information the user needs** — based on upcoming calendar events, recent emails, or notifications, what context or preparation would be helpful?
 - **Content the user is consuming** — videos watched, articles read, threads followed. The agent can summarize, extract key points, or find related resources.
 
@@ -108,7 +106,7 @@ When you are done, run `ls -la {logs_dir}/oneoffs/` to verify all task files exi
 def run(logs_dir: str, model: str = DEFAULT_MODEL) -> str:
     logs_dir = str(Path(logs_dir).resolve())
     Path(logs_dir, "oneoffs").mkdir(parents=True, exist_ok=True)
-    agent, _ = _build_agent(model)
+    agent, _ = build_agent(model)
     agent.max_rounds = 200
     instruction = INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir)
     messages = [{"role": "user", "content": instruction}]

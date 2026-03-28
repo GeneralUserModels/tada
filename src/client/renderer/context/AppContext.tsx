@@ -2,7 +2,7 @@ import { createContext, useContext, useReducer, useRef, useEffect, ReactNode } f
 
 // ── Types ─────────────────────────────────────────────────────
 
-export type ActiveView = "connectors" | "settings";
+export type ActiveView = "connectors" | "tada" | "settings";
 
 export interface HistoryItem {
   id: number;
@@ -31,6 +31,7 @@ export interface AppState {
   rewardHistory: RewardPoint[];
   elboScore: string | null;
   historyItems: HistoryItem[];
+  momentResults: MomentResult[];
   settings: Record<string, unknown>;
   updateVersion: string | null;
   permModal: { connectorName: string } | null;
@@ -52,6 +53,8 @@ type AppAction =
   | { type: "LOAD_SETTINGS"; settings: Record<string, unknown> }
   | { type: "UPDATE_DOWNLOADED"; version: string }
   | { type: "UPDATE_DISMISSED" }
+  | { type: "LOAD_MOMENTS"; results: MomentResult[] }
+  | { type: "MOMENT_COMPLETED"; result: MomentResult }
   | { type: "OPEN_PERM_MODAL"; connectorName: string }
   | { type: "CLOSE_PERM_MODAL" };
 
@@ -80,6 +83,7 @@ const initialState: AppState = {
   rewardHistory: [],
   elboScore: null,
   historyItems: [],
+  momentResults: [],
   settings: {},
   updateVersion: null,
   permModal: null,
@@ -195,6 +199,12 @@ function reducer(state: AppState, action: AppAction): AppState {
     case "UPDATE_DISMISSED":
       return { ...state, updateVersion: null };
 
+    case "LOAD_MOMENTS":
+      return { ...state, momentResults: action.results };
+
+    case "MOMENT_COMPLETED":
+      return { ...state, momentResults: [action.result, ...state.momentResults] };
+
     case "OPEN_PERM_MODAL":
       return { ...state, permModal: { connectorName: action.connectorName } };
 
@@ -283,6 +293,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     window.powernap.onLabel((data) => {
       dispatch({ type: "LABEL", data });
+    });
+
+    window.powernap.onMomentCompleted((data) => {
+      dispatch({ type: "MOMENT_COMPLETED", result: data as MomentResult });
     });
 
     window.powernap.onUpdateDownloaded((data) => {
