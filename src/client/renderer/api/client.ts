@@ -60,8 +60,10 @@ export const requestPrediction = () =>
   request("POST", "/api/user_models/prediction");
 
 // ── Auth (Google + Outlook OAuth — runs in Python) ────────────
+export const startGoogleSignIn = () =>
+  request("POST", "/api/auth/google/signin") as Promise<{ name: string; email: string }>;
 export const startGoogleAuth = () =>
-  request("POST", "/api/auth/google/start") as Promise<{ name: string; email: string }>;
+  request("POST", "/api/auth/google/start") as Promise<{ ok: boolean }>;
 export const disconnectGoogle = () => request("DELETE", "/api/auth/google");
 export const startOutlookAuth = () => request("POST", "/api/auth/outlook/start");
 export const disconnectOutlook = () => request("DELETE", "/api/auth/outlook");
