@@ -2,7 +2,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { getDataDir } from "./paths";
+import { getDataDir } from "../paths";
 
 function loadConfig(): Record<string, string> {
   try {

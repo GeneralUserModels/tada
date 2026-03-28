@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { useTraining } from "../../hooks/useTraining";
+import { updateSettings, startInference, requestPrediction } from "../../api/client";
 import { TrainingTile, InferenceTile } from "../dashboard/PipelineTile";
 import { PredictionCard } from "../dashboard/PredictionCard";
 import { RewardsChart } from "../dashboard/RewardsChart";
@@ -55,7 +56,7 @@ export function SettingsView() {
       }
     }
     if (Object.keys(data).length > 0) {
-      await window.powernap.updateSettings(data);
+      await updateSettings(data);
     }
   };
 
@@ -75,8 +76,8 @@ export function SettingsView() {
 
   const handleGenerate = async () => {
     dispatch({ type: "PREDICTION_REQUESTED" });
-    await window.powernap.startInference();
-    await window.powernap.requestPrediction();
+    await startInference();
+    await requestPrediction();
   };
 
   const modelType = values["model_type"] ?? "prompted";

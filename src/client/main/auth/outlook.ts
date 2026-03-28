@@ -7,8 +7,8 @@ import * as https from "https";
 import * as url from "url";
 import * as crypto from "crypto";
 import { shell } from "electron";
-import { getOutlookTokenPath } from "./paths";
-import { MICROSOFT_CLIENT_ID } from "./auth-config";
+import { getOutlookTokenPath } from "../paths";
+import { MICROSOFT_CLIENT_ID } from "./config";
 
 const SCOPES = ["Mail.Read", "Calendars.Read", "User.Read", "offline_access"];
 const AUTHORITY = "https://login.microsoftonline.com/common";

@@ -4,13 +4,13 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { app, BrowserWindow, desktopCapturer, ipcMain, shell, systemPreferences } from "electron";
-import { getDataDir, isDev } from "./paths";
-import { IPC } from "./ipc";
-import { startGoogleLogin, connectGoogle } from "./google-auth";
-import { connectOutlook } from "./outlook-auth";
+import { getDataDir, isDev } from "../paths";
+import { IPC } from "../ipc";
+import { startGoogleLogin, connectGoogle } from "../auth/google";
+import { connectOutlook } from "../auth/outlook";
 import { canReadNotifications } from "./notifications";
-import { upsertUser } from "./supabase";
-import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth-config";
+import { upsertUser } from "../auth/supabase";
+import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SUPABASE_URL, SUPABASE_ANON_KEY } from "../auth/config";
 
 export interface ConnectorState {
   screen: boolean;
@@ -92,7 +92,7 @@ export function runOnboarding(): Promise<void> {
       backgroundColor: "#F4F2EE",
       resizable: false,
       webPreferences: {
-        preload: path.join(__dirname, "..", "preload", "preload.js"),
+        preload: path.join(__dirname, "..", "..", "preload", "preload.js"),
         contextIsolation: true,
         nodeIntegration: false,
       },
@@ -101,7 +101,7 @@ export function runOnboarding(): Promise<void> {
     if (isDev()) {
       win.loadURL("http://localhost:5173/onboarding.html");
     } else {
-      win.loadFile(path.join(__dirname, "..", "renderer", "onboarding.html"));
+      win.loadFile(path.join(__dirname, "..", "..", "renderer", "onboarding.html"));
     }
 
     const handleCheckPermission = () => {

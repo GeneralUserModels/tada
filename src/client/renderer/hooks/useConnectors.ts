@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { updateConnector } from "../api/client";
 
 export function useConnectors() {
   const [connectors, setConnectors] = useState<Record<string, ConnectorInfo>>({});
@@ -8,6 +9,8 @@ export function useConnectors() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // getConnectorStatus stays in IPC — it combines Python state with main-process
+      // auth state (token file existence, config) that the renderer can't access directly.
       const status = await window.powernap.getConnectorStatus();
       setConnectors(status);
     } catch {
@@ -26,7 +29,7 @@ export function useConnectors() {
   const toggle = async (name: string, enabled: boolean) => {
     setToggling(prev => new Set(prev).add(name));
     try {
-      await window.powernap.updateConnector(name, enabled);
+      await updateConnector(name, enabled);
       await load();
     } finally {
       setToggling(prev => { const next = new Set(prev); next.delete(name); return next; });
@@ -37,7 +40,7 @@ export function useConnectors() {
     const scope = otherIsOn ? "calendar,gmail" : svc;
     const ok = await window.powernap.connectorConnectGoogle(scope);
     if (ok) {
-      await window.powernap.updateConnector(svc, true);
+      await updateConnector(svc, true);
     }
     await load();
     return ok;
@@ -46,15 +49,15 @@ export function useConnectors() {
   const connectOutlook = async () => {
     const ok = await window.powernap.connectorConnectOutlook();
     if (ok) {
-      await window.powernap.updateConnector("outlook_calendar", true);
-      await window.powernap.updateConnector("outlook_email", true);
+      await updateConnector("outlook_calendar", true);
+      await updateConnector("outlook_email", true);
     }
     await load();
     return ok;
   };
 
   const retry = async (name: string) => {
-    await window.powernap.updateConnector(name, true);
+    await updateConnector(name, true);
     await load();
   };
 
