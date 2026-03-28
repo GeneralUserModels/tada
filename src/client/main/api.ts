@@ -65,3 +65,7 @@ export const requestPrediction = () =>
 // ── Recordings ───────────────────────────────────────────────
 export const postAggregation = (data: unknown) =>
   request("POST", "/api/recordings/aggregation", data);
+
+// ── Onboarding ───────────────────────────────────────────────
+export const getOnboardingStatus = () =>
+  request("GET", "/api/onboarding/status");

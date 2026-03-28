@@ -19,30 +19,18 @@ export const IPC = {
   // Bootstrap (setup window -> main)
   BOOTSTRAP_RETRY: "bootstrap:retry",
 
-  // Onboarding
-  ONBOARDING_SUBMIT: "onboarding:submit",
+  // Onboarding — screen permission (Electron-only) + completion signal
   ONBOARDING_CHECK_SCREEN_PERMISSION: "onboarding:check-screen-permission",
   ONBOARDING_OPEN_SCREEN_SETTINGS: "onboarding:open-screen-settings",
   ONBOARDING_REQUEST_SCREEN_PERMISSION: "onboarding:request-screen-permission",
-  ONBOARDING_GOOGLE_LOGIN: "onboarding:google-login",
-
-  // Connectors (onboarding)
-  ONBOARDING_CONNECT_GOOGLE: "onboarding:connect-google",
-  ONBOARDING_CONNECT_OUTLOOK: "onboarding:connect-outlook",
-  ONBOARDING_CHECK_NOTIFICATIONS: "onboarding:check-notifications",
-  ONBOARDING_CHECK_FILESYSTEM: "onboarding:check-filesystem",
   ONBOARDING_OPEN_FDA_SETTINGS: "onboarding:open-fda-settings",
+  ONBOARDING_COMPLETE: "onboarding:complete",
 
-  // Connectors (dashboard — OAuth and OS-level only)
-  CONNECTOR_STATUS: "connector:status",
-  CONNECTOR_STATUS_UPDATE: "connector:status-update",
+  // Connectors (OS-level permissions only — data fetching goes direct to Python)
   CONNECTOR_OPEN_FDA_SETTINGS: "connector:open-fda-settings",
   CONNECTOR_GET_PERMISSION_INFO: "connector:get-permission-info",
   CONNECTOR_REQUEST_PERMISSION: "connector:request-permission",
-  CONNECTOR_CONNECT_GOOGLE: "connector:connect-google",
-  CONNECTOR_DISCONNECT_GOOGLE: "connector:disconnect-google",
-  CONNECTOR_CONNECT_OUTLOOK: "connector:connect-outlook",
-  CONNECTOR_DISCONNECT_OUTLOOK: "connector:disconnect-outlook",
+  CONNECTOR_CHECK_PERMISSION: "connector:check-permission",
 
   // Auto-update
   UPDATE_DOWNLOADED: "update:downloaded",

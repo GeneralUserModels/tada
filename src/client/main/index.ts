@@ -15,10 +15,8 @@ import * as sse from "./sse";
 import * as recorder from "./features/recorder";
 import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogleTokenPath, getOutlookTokenPath } from "./paths";
 import * as bootstrap from "./features/bootstrap";
-import * as onboarding from "./features/onboarding";
+import { runOnboarding } from "./features/onboarding";
 import { setupConnectorIpc } from "./connectors/manager";
-import { initGoogleAuth } from "./auth/google";
-import { initOutlookAuth } from "./auth/outlook";
 import { initAutoUpdater, installNow, installOnNextLaunch, dismissUpdate, checkForUpdates } from "./features/updater";
 
 let serverProc: ChildProcess | null = null;
@@ -261,12 +259,6 @@ function setupSseForwarding() {
       overlayWindow.webContents.send(IPC.OVERLAY_PREDICTION, data);
     }
   });
-
-  sse.on("connectors", (data) => {
-    // Connector status requires main-process auth state; dashboard asks main for it.
-    // Signal that something changed so it knows to re-fetch.
-    dashboardWindow?.webContents.send(IPC.CONNECTOR_STATUS_UPDATE, data);
-  });
 }
 
 // ── IPC handlers ─────────────────────────────────────────────
@@ -322,7 +314,30 @@ async function runBootstrap(): Promise<void> {
   });
 }
 
-function launchApp(port: number) {
+
+// ── App lifecycle ────────────────────────────────────────────
+
+app.whenReady().then(async () => {
+  app.dock?.show();
+  setupIpc();
+  setupConnectorIpc();
+
+  // In packaged mode, check if bootstrap is needed
+  if (!isDev() && !bootstrap.isReady()) {
+    await runBootstrap();
+  }
+
+  // Start server before onboarding so the onboarding window calls Python directly
+  const port = await findFreePort();
+  api.setServerUrl(`http://127.0.0.1:${port}`);
+  startServer(port);
+  await waitForServer(`http://127.0.0.1:${port}/api/status`);
+
+  const { complete } = await api.getOnboardingStatus() as { complete: boolean };
+  if (!complete) {
+    await runOnboarding();
+  }
+
   createDashboard();
   createOverlay();
   setupSseForwarding();
@@ -330,8 +345,6 @@ function launchApp(port: number) {
   if (!isDev() && dashboardWindow) {
     initAutoUpdater(dashboardWindow);
   }
-
-  startServer(port);
 
   // Re-send SERVER_READY whenever the SSE (re)connects (covers sleep/wake).
   sse.onConnected(() => {
@@ -345,35 +358,8 @@ function launchApp(port: number) {
     }
   });
 
-  waitForServer(`http://127.0.0.1:${port}/api/status`).then(async () => {
-    sse.connect();
-  });
-
+  sse.connect();
   globalShortcut.register("Control+H", toggleOverlay);
-}
-
-// ── App lifecycle ────────────────────────────────────────────
-
-app.whenReady().then(async () => {
-  app.dock?.show();
-  setupIpc();
-  setupConnectorIpc();
-  initGoogleAuth();
-  initOutlookAuth();
-
-  // In packaged mode, check if bootstrap is needed
-  if (!isDev() && !bootstrap.isReady()) {
-    await runBootstrap();
-  }
-
-  // Onboarding: collect API keys and model on first launch
-  if (!onboarding.isComplete()) {
-    await onboarding.runOnboarding();
-  }
-
-  const port = await findFreePort();
-  api.setServerUrl(`http://127.0.0.1:${port}`);
-  launchApp(port);
 });
 
 app.on("before-quit", () => {

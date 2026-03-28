@@ -19,33 +19,23 @@ contextBridge.exposeInMainWorld("powernap", {
   resizeOverlay: (height: number) =>
     ipcRenderer.send("overlay:resize", height),
 
-  // Onboarding
-  googleLogin: () => ipcRenderer.invoke("onboarding:google-login"),
-  submitOnboarding: (data: Record<string, unknown>) =>
-    ipcRenderer.invoke("onboarding:submit", data),
+  // Onboarding — screen permission (Electron-only) + completion signal
   checkScreenPermission: () =>
     ipcRenderer.invoke("onboarding:check-screen-permission"),
   openScreenSettings: () =>
     ipcRenderer.invoke("onboarding:open-screen-settings"),
   requestScreenPermission: () =>
     ipcRenderer.invoke("onboarding:request-screen-permission"),
-  connectGoogle: (scope?: string) => ipcRenderer.invoke("onboarding:connect-google", scope),
-  connectOutlook: () => ipcRenderer.invoke("onboarding:connect-outlook"),
-  checkNotifications: () => ipcRenderer.invoke("onboarding:check-notifications"),
-  checkFilesystem: () => ipcRenderer.invoke("onboarding:check-filesystem"),
-  openNotifSettings: () => ipcRenderer.invoke("onboarding:open-fda-settings"),
+  openNotifSettings: () =>
+    ipcRenderer.invoke("onboarding:open-fda-settings"),
+  onboardingComplete: () =>
+    ipcRenderer.send("onboarding:complete"),
 
-  // Connectors (OAuth and OS-level only — data fetching goes direct to Python)
-  getConnectorStatus: () => ipcRenderer.invoke("connector:status"),
-  connectorConnectGoogle: (scope?: string) => ipcRenderer.invoke("connector:connect-google", scope),
-  connectorDisconnectGoogle: () => ipcRenderer.invoke("connector:disconnect-google"),
-  connectorConnectOutlook: () => ipcRenderer.invoke("connector:connect-outlook"),
-  connectorDisconnectOutlook: () => ipcRenderer.invoke("connector:disconnect-outlook"),
+  // Connectors (OS-level permission checks only)
   openFdaSettings: (name?: string) => ipcRenderer.invoke("connector:open-fda-settings", name),
-  onConnectorUpdate: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("connector:status-update", (_e, data) => cb(data)),
   getConnectorPermissionInfo: (name: string) => ipcRenderer.invoke("connector:get-permission-info", name),
   requestConnectorPermission: (name: string) => ipcRenderer.invoke("connector:request-permission", name),
+  checkConnectorPermission: (name: string) => ipcRenderer.invoke("connector:check-permission", name),
 
   // Auto-update
   onUpdateDownloaded: (cb: (data: unknown) => void) =>
