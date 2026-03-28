@@ -33,10 +33,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # ── Constants ──────────────────────────────────────────────────
 
-GOOGLE_SCOPES = [
-    "openid",
-    "email",
-    "profile",
+GOOGLE_AUTH_SCOPES = ["openid", "email", "profile"]
+GOOGLE_DATA_SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/gmail.readonly",
 ]
@@ -179,9 +177,63 @@ def _supabase_upsert(supabase_url: str, anon_key: str, name: str, email: str, go
 
 # ── Google endpoints ───────────────────────────────────────────
 
+def _google_oauth_exchange(client_id: str, client_secret: str, code: str, redirect_uri: str) -> tuple[dict, dict]:
+    """Exchange an auth code for tokens; returns (token_data, user_info)."""
+    token_data = _http_post("https://oauth2.googleapis.com/token", {
+        "code": code,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+    })
+    id_token = token_data.get("id_token", "")
+    payload_b64 = id_token.split(".")[1] if "." in id_token else ""
+    padding = "=" * (-len(payload_b64) % 4)
+    user_info = json.loads(base64.b64decode(payload_b64 + padding)) if payload_b64 else {}
+    return token_data, user_info
+
+
+@router.post("/google/signin")
+async def google_signin():
+    """Identity-only Google OAuth (openid/email/profile). No data scopes requested.
+
+    Returns the user's name and email; records them in Supabase. Does not write
+    a connector token — use /google/start to grant calendar/gmail access.
+    """
+    cfg = _get_app_config()
+    client_id = cfg.get("google_client_id", "")
+    client_secret = cfg.get("google_client_secret", "")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=400, detail="Google client credentials not configured")
+
+    port = _free_port()
+    redirect_uri = f"http://localhost:{port}"
+
+    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": " ".join(GOOGLE_AUTH_SCOPES),
+        "access_type": "online",
+    })
+
+    code = await _oauth_loopback(auth_url, port)
+    _, user_info = _google_oauth_exchange(client_id, client_secret, code, redirect_uri)
+
+    _supabase_upsert(
+        cfg.get("supabase_url", ""),
+        cfg.get("supabase_anon_key", ""),
+        user_info.get("name", ""),
+        user_info.get("email", ""),
+        user_info.get("sub", ""),
+    )
+
+    return {"name": user_info.get("name", ""), "email": user_info.get("email", "")}
+
+
 @router.post("/google/start")
 async def google_start(request: Request):
-    """Run the full Google OAuth flow; blocks until complete or times out."""
+    """Data-access Google OAuth (calendar + gmail scopes). Writes the connector token file."""
     state = request.app.state.server
     cfg = _get_app_config()
     client_id = cfg.get("google_client_id", "")
@@ -196,26 +248,13 @@ async def google_start(request: Request):
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "response_type": "code",
-        "scope": " ".join(GOOGLE_SCOPES),
+        "scope": " ".join(GOOGLE_DATA_SCOPES),
         "access_type": "offline",
         "prompt": "consent",
     })
 
     code = await _oauth_loopback(auth_url, port)
-
-    token_data = _http_post("https://oauth2.googleapis.com/token", {
-        "code": code,
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "redirect_uri": redirect_uri,
-        "grant_type": "authorization_code",
-    })
-
-    # Decode id_token JWT payload to get user info
-    id_token = token_data.get("id_token", "")
-    payload_b64 = id_token.split(".")[1] if "." in id_token else ""
-    padding = "=" * (-len(payload_b64) % 4)
-    user_info = json.loads(base64.b64decode(payload_b64 + padding)) if payload_b64 else {}
+    token_data, _ = _google_oauth_exchange(client_id, client_secret, code, redirect_uri)
 
     token = {
         "access_token": token_data["access_token"],
@@ -223,20 +262,12 @@ async def google_start(request: Request):
         "expires_at": time.time() * 1000 + token_data.get("expires_in", 3600) * 1000,
         "client_id": client_id,
         "client_secret": client_secret,
-        "scopes": GOOGLE_SCOPES,
+        "scopes": GOOGLE_DATA_SCOPES,
     }
     _write_token(state.config.google_token_path, token)
 
-    _supabase_upsert(
-        cfg.get("supabase_url", ""),
-        cfg.get("supabase_anon_key", ""),
-        user_info.get("name", ""),
-        user_info.get("email", ""),
-        user_info.get("sub", ""),
-    )
-
     await state.broadcast("connectors", {})
-    return {"name": user_info.get("name", ""), "email": user_info.get("email", "")}
+    return {"ok": True}
 
 
 @router.delete("/google")

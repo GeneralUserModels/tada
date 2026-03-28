@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AdvancedLLMSection } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 import {
+  startGoogleSignIn,
   startGoogleAuth,
   startOutlookAuth,
   checkNotificationsPermission,
@@ -178,11 +179,8 @@ export function Onboarding() {
     setGoogleLoading(true);
     setGoogleError("");
     try {
-      const result = await startGoogleAuth();
+      const result = await startGoogleSignIn();
       setGoogleUser(result);
-      // Google OAuth always grants all scopes
-      setCalendarConnected(true);
-      setGmailConnected(true);
     } catch {
       setGoogleError("Sign in failed. Please try again.");
     } finally {
