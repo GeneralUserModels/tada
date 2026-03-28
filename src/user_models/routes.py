@@ -89,6 +89,16 @@ async def stop_inference(request: Request):
     return {"status": "ok"}
 
 
+# ── Prediction ─────────────────────────────────────────────────
+
+@router.post("/prediction")
+async def request_prediction(request: Request):
+    state = request.app.state.server
+    from user_models.inference import handle_prediction_request
+    await handle_prediction_request(state)
+    return {"status": "ok"}
+
+
 # ── History ────────────────────────────────────────────────────
 
 @router.get("/history")

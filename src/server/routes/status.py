@@ -15,7 +15,7 @@ async def get_status(request: Request):
         "training_active": model.training_active,
         "inference_active": model.inference_active,
         "latest_scores": model.latest_scores,
-        "ws_connections": len(state.ws_connections),
+        "sse_connections": len(state.sse_queues),
     }
     if model.data_manager is not None:
         status.update(model.data_manager.get_status())  # labels_processed
