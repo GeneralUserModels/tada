@@ -11,7 +11,7 @@ import * as path from "path";
 import { spawn, ChildProcess } from "child_process";
 import { IPC } from "./ipc";
 import * as api from "./api";
-import * as ws from "./ws";
+import * as sse from "./sse";
 import * as recorder from "./recorder";
 import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogleTokenPath, getOutlookTokenPath } from "./paths";
 import * as bootstrap from "./bootstrap";
@@ -230,7 +230,7 @@ function toggleOverlay() {
     overlayWindow.show();
     // Notify dashboard first (before overlay send which could fail)
     dashboardWindow?.webContents.send(IPC.PREDICTION_REQUESTED);
-    ws.send("request_prediction");
+    api.requestPrediction().catch((err) => console.error("[prediction]", err));
     overlayWindow.webContents.send(IPC.OVERLAY_WAITING);
   }
   overlayVisible = !overlayVisible;
@@ -250,37 +250,37 @@ function resizeOverlay(contentHeight: number) {
   });
 }
 
-// ── WebSocket event forwarding ───────────────────────────────
+// ── SSE event forwarding ─────────────────────────────────────
 
-function setupWsForwarding() {
-  ws.on("prediction", (data) => {
+function setupSseForwarding() {
+  sse.on("prediction", (data) => {
     dashboardWindow?.webContents.send(IPC.PREDICTION, data);
     if (overlayVisible && overlayWindow) {
       overlayWindow.webContents.send(IPC.OVERLAY_PREDICTION, data);
     }
   });
 
-  ws.on("score", (data) => {
+  sse.on("score", (data) => {
     dashboardWindow?.webContents.send(IPC.SCORE, data);
   });
 
-  ws.on("elbo_score", (data) => {
+  sse.on("elbo_score", (data) => {
     dashboardWindow?.webContents.send(IPC.ELBO_SCORE, data);
   });
 
-  ws.on("training_step", (data) => {
+  sse.on("training_step", (data) => {
     dashboardWindow?.webContents.send(IPC.TRAINING_STEP, data);
   });
 
-  ws.on("label", (data) => {
+  sse.on("label", (data) => {
     dashboardWindow?.webContents.send(IPC.LABEL, data);
   });
 
-  ws.on("status", (data) => {
+  sse.on("status", (data) => {
     dashboardWindow?.webContents.send(IPC.STATUS_UPDATE, data);
   });
 
-  ws.on("connectors", (data) => {
+  sse.on("connectors", (data) => {
     dashboardWindow?.webContents.send(IPC.CONNECTOR_STATUS_UPDATE, data);
   });
 }
@@ -292,9 +292,7 @@ function setupIpc() {
   ipcMain.handle(IPC.CONTROL_TRAINING_STOP, () => api.stopTraining());
   ipcMain.handle(IPC.CONTROL_INFERENCE_START, () => api.startInference());
   ipcMain.handle(IPC.CONTROL_INFERENCE_STOP, () => api.stopInference());
-  ipcMain.handle(IPC.REQUEST_PREDICTION, () => {
-    ws.send("request_prediction");
-  });
+  ipcMain.handle(IPC.REQUEST_PREDICTION, () => api.requestPrediction());
   ipcMain.handle(IPC.GET_STATUS, () => api.getStatus());
   ipcMain.handle(IPC.GET_SETTINGS, () => api.getSettings());
   ipcMain.handle(IPC.UPDATE_SETTINGS, (_e, data) => api.updateSettings(data));
@@ -354,7 +352,7 @@ async function runBootstrap(): Promise<void> {
 function launchApp(port: number) {
   createDashboard();
   createOverlay();
-  setupWsForwarding();
+  setupSseForwarding();
 
   if (!isDev() && dashboardWindow) {
     initAutoUpdater(dashboardWindow);
@@ -362,20 +360,20 @@ function launchApp(port: number) {
 
   startServer(port);
 
-  // Re-send SERVER_READY whenever the WS (re)connects (covers sleep/wake).
-  ws.onConnected(() => {
+  // Re-send SERVER_READY whenever the SSE (re)connects (covers sleep/wake).
+  sse.onConnected(() => {
     dashboardWindow?.webContents.send(IPC.SERVER_READY);
   });
 
   // Re-send SERVER_READY on renderer reload if already connected (covers HMR).
   dashboardWindow?.webContents.on("did-finish-load", () => {
-    if (ws.isConnected()) {
+    if (sse.isConnected()) {
       dashboardWindow?.webContents.send(IPC.SERVER_READY);
     }
   });
 
   waitForServer(`http://127.0.0.1:${port}/api/status`).then(async () => {
-    ws.connect();
+    sse.connect();
   });
 
   globalShortcut.register("Control+H", toggleOverlay);
@@ -412,7 +410,7 @@ app.on("before-quit", () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     recorder.stopRecording();
-    ws.disconnect();
+    sse.disconnect();
     stopServer();
     app.quit();
   }
