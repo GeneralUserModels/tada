@@ -19,9 +19,24 @@ class ConnectorUpdate(BaseModel):
 @router.get("")
 async def get_connectors(request: Request):
     state = request.app.state.server
+    google_ok = bool(
+        state.config.google_token_path and Path(state.config.google_token_path).exists()
+    )
+    outlook_ok = bool(
+        state.config.outlook_token_path and Path(state.config.outlook_token_path).exists()
+    )
+
+    def _available(ra: str | None) -> bool:
+        if ra == "google":
+            return google_ok
+        if ra == "outlook":
+            return outlook_ok
+        return True
+
     return {
         name: {
             "enabled": not conn.paused,
+            "available": _available(state.connector_auth.get(name)),
             "error": conn.error,
             "requires_auth": state.connector_auth.get(name),
         }

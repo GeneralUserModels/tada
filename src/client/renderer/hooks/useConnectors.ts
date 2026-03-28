@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
-import { updateConnector } from "../api/client";
+import { getConnectors, updateConnector, startGoogleAuth, startOutlookAuth, disconnectGoogle, disconnectOutlook } from "../api/client";
+import { on as sseOn } from "../api/sse";
 
 export function useConnectors() {
   const [connectors, setConnectors] = useState<Record<string, ConnectorInfo>>({});
@@ -9,9 +10,7 @@ export function useConnectors() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // getConnectorStatus stays in IPC — it combines Python state with main-process
-      // auth state (token file existence, config) that the renderer can't access directly.
-      const status = await window.powernap.getConnectorStatus();
+      const status = await getConnectors() as Record<string, ConnectorInfo>;
       setConnectors(status);
     } catch {
       // silently ignore — caller handles empty state
@@ -21,10 +20,9 @@ export function useConnectors() {
   }, []);
 
   useEffect(() => {
-    window.powernap.onConnectorUpdate(() => {
-      load();
-    });
-  }, [load]);
+    load();
+    sseOn("connectors", () => load());
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = async (name: string, enabled: boolean) => {
     setToggling(prev => new Set(prev).add(name));
@@ -36,24 +34,25 @@ export function useConnectors() {
     }
   };
 
-  const connectGoogle = async (svc: string, otherIsOn: boolean) => {
-    const scope = otherIsOn ? "calendar,gmail" : svc;
-    const ok = await window.powernap.connectorConnectGoogle(scope);
-    if (ok) {
-      await updateConnector(svc, true);
-    }
+  const connectGoogle = async (_svc: string, _otherIsOn: boolean) => {
+    // Python OAuth always requests all Google scopes at once
+    await startGoogleAuth();
     await load();
-    return ok;
   };
 
   const connectOutlook = async () => {
-    const ok = await window.powernap.connectorConnectOutlook();
-    if (ok) {
-      await updateConnector("outlook_calendar", true);
-      await updateConnector("outlook_email", true);
-    }
+    await startOutlookAuth();
     await load();
-    return ok;
+  };
+
+  const disconnectGoogleAll = async () => {
+    await disconnectGoogle();
+    await load();
+  };
+
+  const disconnectOutlookAll = async () => {
+    await disconnectOutlook();
+    await load();
   };
 
   const retry = async (name: string) => {
@@ -61,5 +60,5 @@ export function useConnectors() {
     await load();
   };
 
-  return { connectors, loading, load, toggle, toggling, connectGoogle, connectOutlook, retry };
+  return { connectors, loading, load, toggle, toggling, connectGoogle, connectOutlook, disconnectGoogleAll, disconnectOutlookAll, retry };
 }

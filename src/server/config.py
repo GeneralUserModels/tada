@@ -20,6 +20,7 @@ _PERSISTED_FIELDS = {
     "learning_rate", "batch_size", "past_len", "future_len", "loss_mode",
     "model_type", "prompted_model",
     "disabled_connectors", "mcp_connectors",
+    "onboarding_complete",
 }
 
 
@@ -126,6 +127,9 @@ class ServerConfig(BaseModel):
 
     # Community / custom MCP connectors added by the user
     mcp_connectors: list[MCPConnectorDef] = Field(default_factory=list)
+
+    # Onboarding completion flag (set by POST /api/onboarding/complete)
+    onboarding_complete: bool = False
 
     def load_persisted(self) -> None:
         """Load user-settable fields from the config file, if it exists.

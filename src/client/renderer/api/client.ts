@@ -58,3 +58,19 @@ export const updateConnector = (name: string, enabled: boolean) =>
 // ── Prediction ───────────────────────────────────────────────
 export const requestPrediction = () =>
   request("POST", "/api/user_models/prediction");
+
+// ── Auth (Google + Outlook OAuth — runs in Python) ────────────
+export const startGoogleAuth = () =>
+  request("POST", "/api/auth/google/start") as Promise<{ name: string; email: string }>;
+export const disconnectGoogle = () => request("DELETE", "/api/auth/google");
+export const startOutlookAuth = () => request("POST", "/api/auth/outlook/start");
+export const disconnectOutlook = () => request("DELETE", "/api/auth/outlook");
+
+// ── Onboarding ───────────────────────────────────────────────
+export const getOnboardingStatus = () =>
+  request("GET", "/api/onboarding/status") as Promise<{ complete: boolean }>;
+export const completeOnboarding = () => request("POST", "/api/onboarding/complete");
+export const checkNotificationsPermission = () =>
+  request("GET", "/api/permissions/notifications") as Promise<{ granted: boolean }>;
+export const checkFilesystemPermission = () =>
+  request("GET", "/api/permissions/filesystem") as Promise<{ granted: boolean }>;

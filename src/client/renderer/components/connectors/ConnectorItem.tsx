@@ -91,7 +91,7 @@ export function ConnectorItem({
         >Retry</button>
       </>
     );
-  } else if (!info.configured && name.startsWith("outlook_")) {
+  } else if (!info.available && name.startsWith("outlook_")) {
     action = (
       <button
         className="pill-btn pill-start"
@@ -99,7 +99,7 @@ export function ConnectorItem({
         onClick={onConnectOutlook}
       >Connect</button>
     );
-  } else if (!info.configured) {
+  } else if (!info.available) {
     action = (
       <button
         className="pill-btn pill-start"

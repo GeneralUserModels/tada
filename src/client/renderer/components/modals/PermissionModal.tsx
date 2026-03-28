@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { updateConnector } from "../../api/client";
 
 interface Props {
   connectorName: string;
@@ -51,7 +52,7 @@ export function PermissionModal({ connectorName, onClose, onGranted }: Props) {
   async function handleGranted() {
     setGranted(true);
     setStatusText("Access granted!");
-    await window.powernap.updateConnector(connectorName, true);
+    await updateConnector(connectorName, true);
     setTimeout(() => {
       onClose();
       onGranted?.();

@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { AdvancedLLMSection } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
+import {
+  startGoogleAuth,
+  startOutlookAuth,
+  checkNotificationsPermission,
+  checkFilesystemPermission,
+  updateSettings,
+  completeOnboarding,
+} from "../../api/client";
 
 // ── Permission modal ──────────────────────────────────────────
 
@@ -146,7 +154,8 @@ export function Onboarding() {
   useEffect(() => {
     if (step !== 2) return;
     async function checkScreen() {
-      const granted = await window.powernap.checkConnectorPermission("screen");
+      const status = await window.powernap.checkScreenPermission();
+      const granted = status === "granted";
       setScreenGranted(granted);
       if (!granted) {
         setPermModal({ name: "screen", onGranted: () => setScreenGranted(true) });
@@ -155,10 +164,10 @@ export function Onboarding() {
     checkScreen();
 
     async function checkAvailability() {
-      const notif = await window.powernap.checkNotifications();
+      const { granted: notif } = await checkNotificationsPermission();
       setNotifAvailable(notif);
       if (notif) setNotifEnabled(true);
-      const fs = await window.powernap.checkFilesystem();
+      const { granted: fs } = await checkFilesystemPermission();
       setFsAvailable(fs);
       if (fs) setFsEnabled(true);
     }
@@ -169,8 +178,11 @@ export function Onboarding() {
     setGoogleLoading(true);
     setGoogleError("");
     try {
-      const result = await window.powernap.googleLogin();
+      const result = await startGoogleAuth();
       setGoogleUser(result);
+      // Google OAuth always grants all scopes
+      setCalendarConnected(true);
+      setGmailConnected(true);
     } catch {
       setGoogleError("Sign in failed. Please try again.");
     } finally {
@@ -181,13 +193,10 @@ export function Onboarding() {
   const handleConnectGoogle = async (svc: string) => {
     setConnectingGoogle(svc);
     try {
-      const scope = svc === "calendar" ? (gmailConnected ? "calendar,gmail" : "calendar")
-                                       : (calendarConnected ? "calendar,gmail" : "gmail");
-      const ok = await window.powernap.connectGoogle(scope);
-      if (ok) {
-        if (svc === "calendar") setCalendarConnected(true);
-        else setGmailConnected(true);
-      }
+      await startGoogleAuth();
+      // Python always requests both calendar and gmail scopes
+      setCalendarConnected(true);
+      setGmailConnected(true);
     } finally {
       setConnectingGoogle(null);
     }
@@ -196,8 +205,8 @@ export function Onboarding() {
   const handleConnectOutlook = async () => {
     setConnectingOutlook(true);
     try {
-      const ok = await window.powernap.connectOutlook();
-      if (ok) setOutlookConnected(true);
+      await startOutlookAuth();
+      setOutlookConnected(true);
     } finally {
       setConnectingOutlook(false);
     }
@@ -212,32 +221,23 @@ export function Onboarding() {
     return true;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const advanced: Record<string, string> = {};
     for (const [k, v] of Object.entries(advancedValues)) {
       if (v.trim()) advanced[k] = v.trim();
     }
-    window.powernap.submitOnboarding({
+    const settings: Record<string, unknown> = {
       reward_llm: model || "anthropic/claude-haiku-4-5-20251001",
       model: tinkerModel || undefined,
       default_llm_api_key: geminiKey.trim(),
       ...advanced,
-      tinker_api_key: tinkerKey.trim() || undefined,
-      wandb_api_key: wandbKey.trim() || undefined,
-      user_name: googleUser?.name,
-      user_email: googleUser?.email,
-      connectors: {
-        screen: screenGranted,
-        calendar: calendarConnected,
-        gmail: gmailConnected,
-        outlook_calendar: outlookConnected,
-        outlook_email: outlookConnected,
-        notifications: notifEnabled,
-        filesystem: fsEnabled,
-      },
-      google_configured: { calendar: !!googleUser, gmail: !!googleUser },
-      outlook_configured: { calendar: outlookConnected, email: outlookConnected },
-    });
+    };
+    if (tinkerKey.trim()) settings.tinker_api_key = tinkerKey.trim();
+    if (wandbKey.trim()) settings.wandb_api_key = wandbKey.trim();
+
+    await updateSettings(settings);
+    await completeOnboarding();
+    window.powernap.onboardingComplete();
   };
 
   return (
