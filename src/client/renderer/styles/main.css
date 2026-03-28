@@ -901,3 +901,104 @@ button, input, select, textarea, canvas, a, label,
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Ta-Da View ──────────────────────────────────────────── */
+
+.tada-card {
+  cursor: pointer;
+  transition: box-shadow 0.2s, border-color 0.2s, transform 0.15s;
+}
+
+.tada-card:hover {
+  box-shadow:
+    0 2px 6px var(--glass-shadow),
+    0 12px 32px rgba(var(--sage-rgb), 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.6);
+  border-color: rgba(var(--sage-rgb), 0.3);
+  transform: translateY(-1px);
+}
+
+.tada-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.tada-card-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.tada-card-badge {
+  font-size: 9px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 20px;
+  color: var(--sage);
+  background: rgba(var(--sage-rgb), 0.12);
+}
+
+.tada-card-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin-bottom: 10px;
+}
+
+.tada-card-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.tada-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.tada-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-secondary);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.tada-back-btn:hover {
+  background: var(--glass-hover);
+}
+
+.tada-detail-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tada-detail {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.tada-detail iframe {
+  flex: 1;
+  min-height: 500px;
+}

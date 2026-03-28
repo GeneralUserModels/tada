@@ -10,7 +10,7 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.state import ServerState
-from server.routes import connectors, control, settings, status, training
+from server.routes import connectors, control, moments, settings, status, training
 from server.ws.handler import ws_endpoint
 from server.services.context_logging import _load_img, run_context_logging_service
 
@@ -97,6 +97,12 @@ async def lifespan(app: FastAPI):
     # Start context logging service (creates and owns all connectors)
     state.context_logging_task = asyncio.create_task(run_context_logging_service(state))
 
+    # Start moments services (scheduler + periodic discovery)
+    from server.services.moments_scheduler import run_moments_scheduler
+    from server.services.moments_discovery import run_moments_discovery
+    state.moments_scheduler_task = asyncio.create_task(run_moments_scheduler(state))
+    state.moments_discovery_task = asyncio.create_task(run_moments_discovery(state))
+
     app.state.server = state
     logger.info("PowerNap server started")
     yield
@@ -107,13 +113,15 @@ async def lifespan(app: FastAPI):
     state.training_active = False
     state.inference_active = False
 
-    for task in [state.training_task, state.context_logging_task]:
+    for task in [state.training_task, state.context_logging_task,
+                 state.moments_scheduler_task, state.moments_discovery_task]:
         if task and not task.done():
             task.cancel()
 
     # Wait for tasks to actually stop before touching connectors
     await asyncio.gather(
-        *[t for t in [state.training_task, state.context_logging_task] if t],
+        *[t for t in [state.training_task, state.context_logging_task,
+                     state.moments_scheduler_task, state.moments_discovery_task] if t],
         return_exceptions=True,
     )
 
@@ -146,6 +154,7 @@ def create_app() -> FastAPI:
     # Register REST routes
     app.include_router(connectors.router)
     app.include_router(control.router)
+    app.include_router(moments.router)
     app.include_router(settings.router)
     app.include_router(status.router)
     app.include_router(training.router)

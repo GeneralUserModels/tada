@@ -4,16 +4,13 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
-from agent.__main__ import _build_agent, DEFAULT_MODEL
+from agent.builder import build_agent, DEFAULT_MODEL
 
 INSTRUCTION_TEMPLATE = """\
 Filter task definitions: copy the good ones to {tada_dir}/.
@@ -45,7 +42,7 @@ def run(logs_dir: str, model: str = DEFAULT_MODEL) -> str:
     tasks_dir = str(Path(logs_dir).resolve() / "tasks")
     tada_dir = str(Path(logs_dir).resolve().parent / "logs-tada")
     Path(tada_dir).mkdir(parents=True, exist_ok=True)
-    agent, _ = _build_agent(model)
+    agent, _ = build_agent(model)
     agent.max_rounds = 50
     instruction = INSTRUCTION_TEMPLATE.format(tasks_dir=tasks_dir, tada_dir=tada_dir)
     messages = [{"role": "user", "content": instruction}]

@@ -34,6 +34,11 @@ class ServerState:
     # Service tasks
     training_task: asyncio.Task | None = None
     context_logging_task: asyncio.Task | None = None
+    moments_scheduler_task: asyncio.Task | None = None
+    moments_discovery_task: asyncio.Task | None = None
+
+    # Moments executor lock (one at a time)
+    moments_executor_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     # Connector instances (populated by context_logging service)
     connectors: dict = field(default_factory=dict)

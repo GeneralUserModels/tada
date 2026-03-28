@@ -45,11 +45,13 @@ class Agent:
     def run(self, messages: list) -> str:
         rounds_without_todo = 0
 
-        for _ in range(self.max_rounds):
+        for round_num in range(self.max_rounds):
             # compression
             if self._compact:
                 self._compact.microcompact(messages)
-                if self._compact.estimate_tokens(messages) > TOKEN_THRESHOLD:
+                token_est = self._compact.estimate_tokens(messages)
+                if token_est > TOKEN_THRESHOLD:
+                    print(f"  [round {round_num+1}] compacting ({token_est} est tokens)")
                     messages[:] = self._compact.auto_compact(messages)
 
             # drain background notifications
@@ -57,6 +59,7 @@ class Agent:
                 notifs = self._bg.drain()
                 if notifs:
                     txt = "\n".join(f"[bg:{n['task_id']}] {n['status']}: {n['result']}" for n in notifs)
+                    print(f"  [round {round_num+1}] {len(notifs)} background notification(s)")
                     messages.append({"role": "user", "content": f"<background-results>\n{txt}\n</background-results>"})
 
             # ensure conversation ends with user/tool message (Anthropic rejects assistant-last)
@@ -64,10 +67,15 @@ class Agent:
                 messages.append({"role": "user", "content": "Continue."})
 
             # LLM call
+            print(f"  [round {round_num+1}/{self.max_rounds}] calling {self.model}...")
             response = self._call_llm(messages)
             choice = response.choices[0]
             assistant_msg = choice.message
             messages.append(assistant_msg.model_dump())
+
+            # log assistant text if any
+            if assistant_msg.content:
+                print(f"  [assistant] {assistant_msg.content[:500]}")
 
             # pause_turn: search still running server-side, loop back
             if choice.finish_reason == "pause_turn":
@@ -82,11 +90,12 @@ class Agent:
             for call in server_calls:
                 try:
                     args = json.loads(call.function.arguments)
-                    print(f"  > {call.function.name} (server): {args.get('query', '')[:200]}")
+                    print(f"  > {call.function.name} (server): {args.get('query', '')[:500]}")
                 except (json.JSONDecodeError, AttributeError):
                     print(f"  > {call.function.name} (server)")
 
             if not local_calls:
+                print(f"  [round {round_num+1}] no tool calls, finishing (reason={choice.finish_reason})")
                 return assistant_msg.content or ""
 
             # tool dispatch
@@ -95,18 +104,30 @@ class Agent:
 
             for call in local_calls:
                 name = call.function.name
-                args = json.loads(call.function.arguments)
+                raw_args = call.function.arguments
+                try:
+                    args = json.loads(raw_args)
+                except json.JSONDecodeError:
+                    output = f"Error: invalid JSON in tool call arguments: {raw_args[:500]}"
+                    print(f"  > {name}: {output}")
+                    messages.append({"role": "tool", "tool_call_id": call.id, "content": output})
+                    continue
 
                 if name == "compress":
                     manual_compress = True
+
+                # log the call args (truncated)
+                args_summary = {k: (v[:200] + "..." if isinstance(v, str) and len(v) > 200 else v) for k, v in args.items()}
+                print(f"  > {name}({json.dumps(args_summary, default=str)[:800]})")
 
                 tool = self._tool_map.get(name)
                 try:
                     output = tool.run(**args) if tool else f"Unknown tool: {name}"
                 except Exception as e:
                     output = f"Error: {e}"
+                    print(f"  > {name} ERROR: {e}")
 
-                print(f"  > {name}: {str(output)[:200]}")
+                print(f"  > {name} result: {str(output)[:500]}")
                 messages.append({"role": "tool", "tool_call_id": call.id, "content": str(output)})
 
                 if name == "TodoWrite":
@@ -123,6 +144,7 @@ class Agent:
             if manual_compress and self._compact:
                 messages[:] = self._compact.auto_compact(messages)
 
+        print(f"  [agent] max rounds ({self.max_rounds}) reached")
         return "(max rounds reached)"
 
     @retry(
