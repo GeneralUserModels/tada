@@ -48,7 +48,7 @@ Focus on the SESSION LOGS. Look for:
 - **Monitoring patterns** — repeatedly checking the same dashboards, outputs, or status pages. The agent should watch in the background and proactively report summaries or flag anomalies.
 - **Content production drudgery** — manually exporting, downloading, copying, and arranging artifacts. The agent should do the entire pipeline end-to-end.
 - **Information foraging** — searching for, reading, and comparing information from multiple sources. The agent should do the research and present a structured summary.
-- **Communication overhead** — triaging, classifying, and responding to messages. The agent should handle the routine parts and surface only what needs human judgment. Preparing draft responses to emails, Slack messages, or PR reviews is high-value — the user can review and send in seconds instead of writing from scratch.
+- **Communication overhead** — triaging, classifying, and responding to messages. The agent should handle the routine parts, surface what needs human judgment, and prepare drafts the user can review and send in seconds.
 - **Things the user SHOULD do but doesn't** — valuable habits (note-taking, tracking, summarizing) that the user skips. The agent can maintain these proactively.
 
 ## Quality bar for tasks
