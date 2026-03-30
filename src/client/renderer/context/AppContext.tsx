@@ -33,7 +33,6 @@ export interface AppState {
   historyItems: HistoryItem[];
   settings: Record<string, unknown>;
   updateVersion: string | null;
-  permModal: { connectorName: string } | null;
 }
 
 type AppAction =
@@ -51,9 +50,7 @@ type AppAction =
   | { type: "SEED_LABEL_HISTORY"; history: { text: string; timestamp: number }[] }
   | { type: "LOAD_SETTINGS"; settings: Record<string, unknown> }
   | { type: "UPDATE_DOWNLOADED"; version: string }
-  | { type: "UPDATE_DISMISSED" }
-  | { type: "OPEN_PERM_MODAL"; connectorName: string }
-  | { type: "CLOSE_PERM_MODAL" };
+  | { type: "UPDATE_DISMISSED" };
 
 let historyCounter = 0;
 
@@ -80,7 +77,6 @@ const initialState: AppState = {
   historyItems: [],
   settings: {},
   updateVersion: null,
-  permModal: null,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -188,12 +184,6 @@ function reducer(state: AppState, action: AppAction): AppState {
 
     case "UPDATE_DISMISSED":
       return { ...state, updateVersion: null };
-
-    case "OPEN_PERM_MODAL":
-      return { ...state, permModal: { connectorName: action.connectorName } };
-
-    case "CLOSE_PERM_MODAL":
-      return { ...state, permModal: null };
 
     default:
       return state;
