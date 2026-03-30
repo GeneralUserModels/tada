@@ -191,6 +191,8 @@ class TabracadabraService:
         self._first_piece_event: threading.Event | None = None
         self._spinner_thread: threading.Thread | None = None
         self._spinner_active = False
+        self._last_other_key_down_t = 0.0  # timestamp of last non-tab keydown
+        self._combo_window = 1.0  # 1s window to detect key combos
 
     # ------------- Lifecycle -------------
     def start(self):
@@ -540,22 +542,31 @@ class TabracadabraService:
                 keycode = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
 
                 if keycode == KC_TAB:
-                    flags = Quartz.CGEventGetFlags(event)
-                    cmd_pressed = bool(flags & Quartz.kCGEventFlagMaskCommand)
-                    opt_pressed = bool(flags & Quartz.kCGEventFlagMaskAlternate)
-                    ctrl_pressed = bool(flags & Quartz.kCGEventFlagMaskControl)
-
-                    if cmd_pressed or opt_pressed or ctrl_pressed:
-                        return event
-
                     if event_type == Quartz.kCGEventKeyDown:
                         autorepeat = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventAutorepeat)
                         if not autorepeat and not self._tab_down:
+                            # If another key was pressed very recently, this is a combo (x + tab)
+                            if (time.monotonic() - self._last_other_key_down_t) < self._combo_window:
+                                return event
                             self._handle_tab_down()
                         return None
                     else:
                         self._handle_tab_up()
                         return None
+
+                # Non-tab key handling
+                if event_type == Quartz.kCGEventKeyDown:
+                    self._last_other_key_down_t = time.monotonic()
+                    # If tab is held but not yet activated, this is a combo (tab + y)
+                    if self._tab_down and not self._activated:
+                        self._stop_spinner_and_cleanup()
+                        self._clear_suppress_flag()
+                        self._tab_down = False
+                        self._activation_timer = None
+                        self._first_piece_event = None
+                        self._cancel_event = None
+                        # Synthesize the original tab before this key
+                        self._synthesize_tab_keypress()
 
                 return event
 
