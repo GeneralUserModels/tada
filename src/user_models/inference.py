@@ -78,7 +78,7 @@ async def handle_prediction_request(state: Any):
     })
 
     actions_parsed = bool(re.search(r"<action>", result["actions"]))
-    if actions_parsed:
+    if actions_parsed and predictor.should_score_prediction:
         asyncio.create_task(_score_prediction(state, result, cutoff_ts, future_len))
 
 
