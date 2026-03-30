@@ -241,6 +241,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const status = await api.getStatus();
         dispatch({ type: "SERVER_READY", status: status as StatusData });
+        console.log("[app] server ready, url:", url);
 
         try {
           const history = await api.getTrainingHistory();
@@ -260,7 +261,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const settings = await api.getSettings();
           dispatch({ type: "LOAD_SETTINGS", settings: settings as Record<string, unknown> });
         } catch { /* settings fetch failed */ }
-      } catch { /* server not running yet */ }
+      } catch (e) { console.error("[app] getStatus failed:", e); }
     });
 
     // IPC events — native OS operations that can only come from main
