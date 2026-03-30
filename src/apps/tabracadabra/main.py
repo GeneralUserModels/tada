@@ -192,7 +192,7 @@ class TabracadabraService:
         self._spinner_thread: threading.Thread | None = None
         self._spinner_active = False
         self._last_other_key_down_t = 0.0  # timestamp of last non-tab keydown
-        self._combo_window = 1.0  # 1s window to detect key combos
+        self._combo_window = 0.5  # 0.5s window to detect key combos
 
     # ------------- Lifecycle -------------
     def start(self):
