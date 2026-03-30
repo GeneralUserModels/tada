@@ -32,6 +32,10 @@ dependencies = [
     "mcp>=1.0.0",
     "watchdog",
     "websockets",
+    "pynput>=1.7",
+    "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",
+    "pyobjc-framework-ApplicationServices>=10.0; sys_platform == 'darwin'",
+    "mss>=9.0",
 ]
 
 [tool.uv.sources]

@@ -7,6 +7,7 @@ import { PredictionCard } from "../dashboard/PredictionCard";
 import { RewardsChart } from "../dashboard/RewardsChart";
 import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
+import { CollapsibleSection } from "../shared/CollapsibleSection";
 
 // All keys used across all sections
 function allKeys(): string[] {
@@ -21,6 +22,9 @@ function allKeys(): string[] {
   keys.add("tinker_api_key");
   keys.add("hf_token");
   keys.add("wandb_api_key");
+  keys.add("tabracadabra_hold_threshold");
+  keys.add("tabracadabra_model");
+  keys.add("tabracadabra_api_key");
   return Array.from(keys);
 }
 
@@ -28,7 +32,6 @@ function allKeys(): string[] {
 export function SettingsView() {
   const { state, dispatch } = useAppContext();
   const [values, setValues] = useState<Record<string, string>>({});
-  const [userModelOpen, setUserModelOpen] = useState(false);
   const training = useTraining();
 
   useEffect(() => {
@@ -54,13 +57,16 @@ export function SettingsView() {
         data[key] = val;
       }
     }
+    if ("tabracadabra_hold_threshold" in data) {
+      data["tabracadabra_hold_threshold"] = parseFloat(data["tabracadabra_hold_threshold"] as string) || 1.0;
+    }
     if (Object.keys(data).length > 0) {
       await updateSettings(data);
     }
   };
 
   const handleLLMModelChange = (val: string) => {
-    setValues(v => ({ ...v, reward_llm: val, label_model: val, filter_model: val }));
+    setValues(v => ({ ...v, reward_llm: val, label_model: val, filter_model: val, tabracadabra_model: val }));
   };
 
   const handleStartTraining = async () => {
@@ -194,60 +200,55 @@ export function SettingsView() {
         </div>
       </section>
 
-      <section className="glass-card">
-        <button
-          className="collapsible-header"
-          onClick={() => setUserModelOpen((o) => !o)}
-          aria-expanded={userModelOpen}
-        >
-          <h2>User Model</h2>
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            style={{ transform: userModelOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
-          >
-            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-
-        {userModelOpen && (
-          <div className="training-section">
-
-            {/* Stats + controls */}
-            <div className="status-bar" style={{ marginBottom: "16px" }}>
+      <CollapsibleSection title="User Model">
+        <div className="training-section">
+          <div className="status-bar" style={{ marginBottom: "16px" }}>
+            <div className="stat-pill">
+              <span className="stat-label">Labels</span>
+              <span className="stat-value">{state.labels}</span>
+            </div>
+            {isTinker && (
               <div className="stat-pill">
-                <span className="stat-label">Labels</span>
-                <span className="stat-value">{state.labels}</span>
+                <span className="stat-label">Step</span>
+                <span className="stat-value">{state.step}</span>
               </div>
-              {isTinker && (
-                <div className="stat-pill">
-                  <span className="stat-label">Step</span>
-                  <span className="stat-value">{state.step}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="controls-grid" style={{ marginBottom: "16px" }}>
-              {isTinker && (
-                <TrainingTile
-                  state={training.state}
-                  onStart={handleStartTraining}
-                  onStop={handleStopTraining}
-                />
-              )}
-              <InferenceTile
-                generating={state.generating}
-                onGenerate={handleGenerate}
-              />
-              <PredictionCard prediction={state.prediction} />
-              {isTinker && <RewardsChart data={state.rewardHistory} elboScore={state.elboScore} />}
-            </div>
-
+            )}
           </div>
-        )}
-      </section>
+          <div className="controls-grid" style={{ marginBottom: "16px" }}>
+            {isTinker && (
+              <TrainingTile
+                state={training.state}
+                onStart={handleStartTraining}
+                onStop={handleStopTraining}
+              />
+            )}
+            <InferenceTile generating={state.generating} onGenerate={handleGenerate} />
+            <PredictionCard prediction={state.prediction} />
+            {isTinker && <RewardsChart data={state.rewardHistory} elboScore={state.elboScore} />}
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Tabracadabra">
+        <div className="settings-group">
+          <div className="model-row">
+            <span className="model-row-label">Hold Threshold (s)</span>
+            <div className="model-row-fields">
+              <label className="field">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  placeholder="1.0"
+                  value={values["tabracadabra_hold_threshold"] ?? ""}
+                  onChange={(e) => setValues(v => ({ ...v, tabracadabra_hold_threshold: e.target.value }))}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+      </CollapsibleSection>
     </div>
   );
 }
+

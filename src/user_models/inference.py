@@ -71,6 +71,8 @@ async def handle_prediction_request(state: Any):
         await state.broadcast("prediction", {"error": str(e)})
         return
 
+    state.model.latest_prediction = result
+
     await state.broadcast("prediction", {
         "actions": result["actions"],
         "think": result["think"],

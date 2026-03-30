@@ -27,6 +27,9 @@ class SettingsUpdate(BaseModel):
     past_len: int | None = None
     future_len: int | None = None
     loss_mode: str | None = None
+    tabracadabra_hold_threshold: float | None = None
+    tabracadabra_model: str | None = None
+    tabracadabra_api_key: str | None = None
 
 
 @router.get("/settings")
@@ -52,6 +55,9 @@ async def get_settings(request: Request):
         "past_len": cfg.past_len,
         "future_len": cfg.future_len,
         "loss_mode": cfg.loss_mode,
+        "tabracadabra_hold_threshold": cfg.tabracadabra_hold_threshold,
+        "tabracadabra_model": cfg.tabracadabra_model,
+        "tabracadabra_api_key": cfg.tabracadabra_api_key,
     }
 
 
