@@ -221,10 +221,12 @@ export function SettingsView() {
                 <span className="stat-label">Labels</span>
                 <span className="stat-value">{state.labels}</span>
               </div>
-              <div className="stat-pill">
-                <span className="stat-label">Step</span>
-                <span className="stat-value">{state.step}</span>
-              </div>
+              {isTinker && (
+                <div className="stat-pill">
+                  <span className="stat-label">Step</span>
+                  <span className="stat-value">{state.step}</span>
+                </div>
+              )}
             </div>
 
             <div className="controls-grid" style={{ marginBottom: "16px" }}>
@@ -240,7 +242,7 @@ export function SettingsView() {
                 onGenerate={handleGenerate}
               />
               <PredictionCard prediction={state.prediction} />
-              <RewardsChart data={state.rewardHistory} elboScore={state.elboScore} />
+              {isTinker && <RewardsChart data={state.rewardHistory} elboScore={state.elboScore} />}
             </div>
 
           </div>
