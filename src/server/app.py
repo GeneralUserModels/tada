@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -49,12 +51,37 @@ async def lifespan(app: FastAPI):
     # Background prediction loop (keeps tabracadabra context cache warm)
     state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
 
+    # Start Tabracadabra event tap service (macOS only)
+    if sys.platform == "darwin":
+        try:
+            from apps.tabracadabra.main import TabracadabraService, load_prompt
+
+            config = {
+                "model": state.config.tabracadabra_model,
+                "api_key": state.config.tabracadabra_api_key or state.config.default_llm_api_key,
+                "hold_threshold": state.config.tabracadabra_hold_threshold,
+                "powernap_base_url": f"http://localhost:{os.environ.get('POWERNAP_PORT', '8000')}",
+            }
+            service = TabracadabraService(config=config, prompt_text=load_prompt())
+            service.start()
+            state.tabracadabra_service = service
+        except Exception:
+            logger.warning("Tabracadabra service failed to start", exc_info=True)
+
     app.state.server = state
     logger.info("PowerNap server started")
     yield
 
-    # Graceful shutdown: cancel running services
+    # Graceful shutdown
     state = app.state.server
+
+    # Stop Tabracadabra first (synchronous, quick)
+    if state.tabracadabra_service is not None:
+        try:
+            state.tabracadabra_service.stop()
+        except Exception:
+            logger.warning("Error stopping Tabracadabra service", exc_info=True)
+
     state.model.training_resumed.clear()
 
     all_tasks = [
