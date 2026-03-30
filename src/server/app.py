@@ -39,6 +39,10 @@ async def lifespan(app: FastAPI):
     state.google_refresh_task = asyncio.create_task(refresh_google_tokens(state.config))
     state.outlook_refresh_task = asyncio.create_task(refresh_outlook_tokens(state.config))
 
+    # Background prediction loop (keeps tabracadabra context cache warm)
+    from apps.tabracadabra.prediction_loop import run_prediction_loop
+    state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
+
     app.state.server = state
     logger.info("PowerNap server started")
     yield
@@ -53,6 +57,7 @@ async def lifespan(app: FastAPI):
         state.context_logging_task,
         state.google_refresh_task,
         state.outlook_refresh_task,
+        state.prediction_loop_task,
     ]
     for task in all_tasks:
         if task and not task.done():

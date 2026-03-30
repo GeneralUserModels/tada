@@ -28,6 +28,9 @@ class ModelState:
     # Latest inference scores (written by inference service after scoring)
     latest_scores: dict = field(default_factory=dict)
 
+    # Latest prediction result (written by inference service; read by tabracadabra)
+    latest_prediction: dict | None = None
+
     @property
     def training_active(self) -> bool:
         return self.training_resumed.is_set()

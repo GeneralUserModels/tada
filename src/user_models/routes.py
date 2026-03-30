@@ -99,6 +99,14 @@ async def request_prediction(request: Request):
     return {"status": "ok"}
 
 
+@router.get("/latest_prediction")
+async def get_latest_prediction(request: Request):
+    model = request.app.state.server.model
+    if model.latest_prediction is None:
+        return {"available": False}
+    return {"available": True, **model.latest_prediction}
+
+
 # ── History ────────────────────────────────────────────────────
 
 @router.get("/history")

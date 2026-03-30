@@ -6,8 +6,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-_default_config_path = str(Path.home() / ".config" / "powernap" / "powernap-config.json")
-CONFIG_PATH = Path(os.environ.get("POWERNAP_CONFIG_PATH", _default_config_path))
+CONFIG_PATH = Path(os.environ.get("POWERNAP_CONFIG_PATH", "powernap-config.json"))
 
 # Fields that are user-settable via the API and persisted to disk.
 # CLI-arg fields (log_dir, token paths, etc.) are excluded — they always win.
@@ -21,6 +20,7 @@ _PERSISTED_FIELDS = {
     "model_type", "prompted_model",
     "disabled_connectors", "connector_errors", "mcp_connectors",
     "onboarding_complete",
+    "tabracadabra_hold_threshold", "tabracadabra_model", "tabracadabra_api_key",
 }
 
 
@@ -100,6 +100,11 @@ class ServerConfig(BaseModel):
 
     # Inference
     predict_every_n_seconds: int = 10
+
+    # Tabracadabra
+    tabracadabra_hold_threshold: float = 1.0
+    tabracadabra_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_PROMPTED_MODEL", "gemini/gemini-3-flash-preview"))
+    tabracadabra_api_key: str = ""
 
     # Logging
     log_dir: str = Field(default_factory=lambda: os.getenv("POWERNAP_LOG_DIR", "./logs"))
