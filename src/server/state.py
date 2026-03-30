@@ -1,53 +1,31 @@
-"""ServerState: central shared state, queues, component instances, metrics."""
+"""ServerState: central shared state for server infrastructure."""
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any
 
 from server.config import ServerConfig
+from user_models.model_state import ModelState
 
 
 @dataclass
 class ServerState:
     config: ServerConfig = field(default_factory=ServerConfig)
-
-    # Runtime flags
-    recording_active: bool = False
-    training_active: bool = False
-    inference_active: bool = False
-
-    # Resume events (set when active, cleared when paused)
-    recording_resumed: asyncio.Event = field(default_factory=asyncio.Event)
-    training_resumed: asyncio.Event = field(default_factory=asyncio.Event)
-
-    # Async queues (fed by context_logging, consumed by training)
-    aggregation_queue: asyncio.Queue | None = None
-    label_queue: asyncio.Queue | None = None
-
-    # Unified context buffer: all connector events, each with a prediction_event flag
-    context_buffer: list = field(default_factory=list)
-
-    # Component instances (lazy-initialized)
-    trainer: Any = None
-    predictor: Any = None
+    model: ModelState = field(default_factory=ModelState)
 
     # Service tasks
-    training_task: asyncio.Task | None = None
     context_logging_task: asyncio.Task | None = None
+    google_refresh_task: asyncio.Task | None = None
+    outlook_refresh_task: asyncio.Task | None = None
 
-    # Connector instances (populated by context_logging service)
+    # Connector instances (populated by connectors service on startup)
     connectors: dict = field(default_factory=dict)
     connector_auth: dict = field(default_factory=dict)  # name → requires_auth value
 
-    # Metrics
-    step_count: int = 0
-    untrained_batches: int = 0
-    labels_processed: int = 0
-    latest_scores: dict = field(default_factory=dict)
+    # SSE client queues
+    sse_queues: set = field(default_factory=set)
 
-    # WebSocket connections
-    ws_connections: set = field(default_factory=set)
-
-    def __post_init__(self):
-        self.aggregation_queue = asyncio.Queue()
-        self.label_queue = asyncio.Queue()
+    async def broadcast(self, event: str, data: dict):
+        """Push an event to all connected SSE clients."""
+        message = {"event": event, **data}
+        for q in list(self.sse_queues):
+            await q.put(message)
