@@ -22,6 +22,9 @@ class ServerState:
     connectors: dict = field(default_factory=dict)
     connector_auth: dict = field(default_factory=dict)  # name → requires_auth value
 
+    # Tabracadabra event tap service (macOS only)
+    tabracadabra_service: object | None = None
+
     # SSE client queues
     sse_queues: set = field(default_factory=set)
 
