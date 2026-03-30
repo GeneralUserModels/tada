@@ -17,9 +17,6 @@ class ModelState:
     training_resumed: asyncio.Event = field(default_factory=asyncio.Event)
     training_task: asyncio.Task | None = None
 
-    # Inference toggle (independent of training)
-    inference_active: bool = False
-
     # Component instances (lazy-initialized on first training start)
     data_manager: Any = None
     trainer: Any = None

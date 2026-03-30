@@ -19,10 +19,6 @@ async def handle_prediction_request(state: Any):
 
     model = state.model
 
-    if not model.inference_active:
-        await state.broadcast("prediction", {"error": "inference not active"})
-        return
-
     if model.predictor is None:
         await state.broadcast("prediction", {"error": "predictor not initialized (start training first)"})
         return
