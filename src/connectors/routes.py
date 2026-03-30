@@ -54,6 +54,7 @@ async def update_connector(name: str, update: ConnectorUpdate, request: Request)
         connector.resume()  # also clears connector.error
         if name in state.config.disabled_connectors:
             state.config.disabled_connectors.remove(name)
+        state.config.connector_errors.pop(name, None)
     else:
         await connector.stop()
         if name not in state.config.disabled_connectors:

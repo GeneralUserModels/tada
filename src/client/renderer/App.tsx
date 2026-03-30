@@ -3,7 +3,6 @@ import { Sidebar } from "./components/Sidebar";
 import { ConnectorsView } from "./components/views/ConnectorsView";
 import { SettingsView } from "./components/views/SettingsView";
 import { UpdateModal } from "./components/modals/UpdateModal";
-import { PermissionModal } from "./components/modals/PermissionModal";
 
 export function App() {
   const { state, dispatch } = useAppContext();
@@ -26,12 +25,6 @@ export function App() {
           <UpdateModal
             version={state.updateVersion}
             onDismiss={() => dispatch({ type: "UPDATE_DISMISSED" })}
-          />
-        )}
-        {state.permModal && (
-          <PermissionModal
-            connectorName={state.permModal.connectorName}
-            onClose={() => dispatch({ type: "CLOSE_PERM_MODAL" })}
           />
         )}
         {state.activeView === "connectors" && <ConnectorsView />}
