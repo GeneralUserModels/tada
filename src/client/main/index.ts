@@ -207,7 +207,7 @@ function createOverlay() {
 
   // Click-through + visible on all workspaces
   overlayWindow.setIgnoreMouseEvents(true);
-  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
 
   if (isDev()) {
     overlayWindow.loadURL("http://localhost:5173/overlay.html");
