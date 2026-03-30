@@ -65,6 +65,10 @@ export function ConnectorsView() {
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {Object.entries(connectors)
               .filter(([name]) => CONNECTOR_META[name])
+              .sort(([a], [b]) => {
+                const keys = Object.keys(CONNECTOR_META);
+                return keys.indexOf(a) - keys.indexOf(b);
+              })
               .map(([name, info]) => (
                 <ConnectorItem
                   key={name}
