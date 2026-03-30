@@ -2,10 +2,22 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 
+// Cache server:ready so late-registering renderers (e.g. after Vite JS load)
+// still get the payload even if the IPC fired before React mounted.
+let serverReadyCache: { url: string } | null = null;
+ipcRenderer.once("server:ready", (_e, data: { url: string }) => {
+  serverReadyCache = data;
+});
+
 contextBridge.exposeInMainWorld("powernap", {
   // App lifecycle
-  onServerReady: (cb: (data: { url: string }) => void) =>
-    ipcRenderer.once("server:ready", (_e, data) => cb(data)),
+  onServerReady: (cb: (data: { url: string }) => void) => {
+    if (serverReadyCache) {
+      cb(serverReadyCache);
+    } else {
+      ipcRenderer.once("server:ready", (_e, data) => cb(data));
+    }
+  },
   onPredictionRequested: (cb: () => void) =>
     ipcRenderer.on("prediction:requested", () => cb()),
 

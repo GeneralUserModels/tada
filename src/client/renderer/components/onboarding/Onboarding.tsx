@@ -181,7 +181,8 @@ export function Onboarding() {
     try {
       const result = await startGoogleSignIn();
       setGoogleUser(result);
-    } catch {
+    } catch (e) {
+      console.error("[google signin]", e);
       setGoogleError("Sign in failed. Please try again.");
     } finally {
       setGoogleLoading(false);

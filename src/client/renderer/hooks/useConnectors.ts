@@ -4,7 +4,7 @@ import { on as sseOn } from "../api/sse";
 
 export function useConnectors() {
   const [connectors, setConnectors] = useState<Record<string, ConnectorInfo>>({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [toggling, setToggling] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
@@ -12,15 +12,14 @@ export function useConnectors() {
     try {
       const status = await getConnectors() as Record<string, ConnectorInfo>;
       setConnectors(status);
-    } catch {
-      // silently ignore — caller handles empty state
+    } catch (e) {
+      console.error("[connectors] load failed:", e);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    load();
     sseOn("connectors", () => load());
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
