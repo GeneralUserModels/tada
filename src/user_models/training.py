@@ -4,7 +4,6 @@ import asyncio
 import logging
 from typing import Any
 
-from user_models.data_manager import DataManager
 from user_models.powernap.training import (
     init_trainer as powernap_init_trainer,
     init_predictor as powernap_init_predictor,
@@ -18,25 +17,37 @@ from user_models.prompted.training import (
 logger = logging.getLogger(__name__)
 
 
-async def run_training_service(state: Any):
+async def init_model(state: Any) -> None:
+    """Initialize trainer + predictor for the configured model type.
+
+    Called once at startup after DataManager is running. Does not start any loops.
+    """
     config = state.config
     loop = asyncio.get_running_loop()
 
-    # ── DataManager init (shared by all model types) ───────────────────────────
-    if state.model.data_manager is None:
-        dm = DataManager(log_dir=config.log_dir)
-        await dm.start()
-        state.model.data_manager = dm
-        logger.info("DataManager started")
-
-    # ── Dispatch ───────────────────────────────────────────────────────────────
     if config.model_type == "powernap":
-        await powernap_init_trainer(state, config, loop)
-        if state.model.predictor is None:
-            await powernap_init_predictor(state, config, loop)
-        await run_training_loop(state)
-
+        try:
+            await powernap_init_trainer(state, config, loop)
+        except Exception:
+            logger.exception("Powernap trainer init failed; predictor unavailable until config is fixed and server restarted")
+            return  # predictor depends on trainer
+        await powernap_init_predictor(state, config, loop)
     else:
-        if state.model.predictor is None:
-            await prompted_init_predictor(state, config, loop)
+        await prompted_init_predictor(state, config, loop)
+
+
+async def run_training_service(state: Any) -> None:
+    """Long-running background loop. Expects init_model already called.
+
+    For powernap: runs training loop (pauses on training_resumed event).
+    For prompted: watches for label updates.
+    """
+    config = state.config
+
+    if config.model_type == "powernap":
+        if state.model.trainer is None:
+            logger.warning("Trainer not initialized (check API key/model config); training unavailable")
+            return
+        await run_training_loop(state)
+    else:
         await run_label_watcher(state)

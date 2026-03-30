@@ -13,8 +13,7 @@ async def run_prediction_loop(state) -> None:
     logger.info("Prediction loop started (interval=%ss)", state.config.predict_every_n_seconds)
     while True:
         await asyncio.sleep(state.config.predict_every_n_seconds)
-        if state.model.inference_active:
-            try:
-                await handle_prediction_request(state)
-            except Exception as e:
-                logger.warning("Prediction loop error: %s", e)
+        try:
+            await handle_prediction_request(state)
+        except Exception as e:
+            logger.warning("Prediction loop error: %s", e)

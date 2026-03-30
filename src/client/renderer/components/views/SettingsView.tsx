@@ -1,10 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
-import { useTraining } from "../../hooks/useTraining";
-import { updateSettings, startInference, requestPrediction } from "../../api/client";
-import { TrainingTile, InferenceTile } from "../dashboard/PipelineTile";
-import { PredictionCard } from "../dashboard/PredictionCard";
-import { RewardsChart } from "../dashboard/RewardsChart";
+import { updateSettings } from "../../api/client";
 import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 import { CollapsibleSection } from "../shared/CollapsibleSection";
@@ -30,9 +26,8 @@ function allKeys(): string[] {
 
 
 export function SettingsView() {
-  const { state, dispatch } = useAppContext();
+  const { state } = useAppContext();
   const [values, setValues] = useState<Record<string, string>>({});
-  const training = useTraining();
 
   useEffect(() => {
     const populated: Record<string, string> = {};
@@ -44,10 +39,6 @@ export function SettingsView() {
     }
     setValues(populated);
   }, [state.settings]);
-
-  useEffect(() => {
-    training.syncFromServer(state.trainingActive);
-  }, [state.trainingActive]);
 
   const handleSave = async () => {
     const data: Record<string, unknown> = {};
@@ -67,22 +58,6 @@ export function SettingsView() {
 
   const handleLLMModelChange = (val: string) => {
     setValues(v => ({ ...v, reward_llm: val, label_model: val, filter_model: val, tabracadabra_model: val }));
-  };
-
-  const handleStartTraining = async () => {
-    dispatch({ type: "SET_TRAINING_ACTIVE", active: true });
-    await training.startTraining();
-  };
-
-  const handleStopTraining = async () => {
-    await training.stopTraining();
-    dispatch({ type: "SET_TRAINING_ACTIVE", active: false });
-  };
-
-  const handleGenerate = async () => {
-    dispatch({ type: "PREDICTION_REQUESTED" });
-    await startInference();
-    await requestPrediction();
   };
 
   const modelType = values["model_type"] ?? "prompted";
@@ -199,35 +174,6 @@ export function SettingsView() {
           </button>
         </div>
       </section>
-
-      <CollapsibleSection title="User Model">
-        <div className="training-section">
-          <div className="status-bar" style={{ marginBottom: "16px" }}>
-            <div className="stat-pill">
-              <span className="stat-label">Labels</span>
-              <span className="stat-value">{state.labels}</span>
-            </div>
-            {isTinker && (
-              <div className="stat-pill">
-                <span className="stat-label">Step</span>
-                <span className="stat-value">{state.step}</span>
-              </div>
-            )}
-          </div>
-          <div className="controls-grid" style={{ marginBottom: "16px" }}>
-            {isTinker && (
-              <TrainingTile
-                state={training.state}
-                onStart={handleStartTraining}
-                onStop={handleStopTraining}
-              />
-            )}
-            <InferenceTile generating={state.generating} onGenerate={handleGenerate} />
-            <PredictionCard prediction={state.prediction} />
-            {isTinker && <RewardsChart data={state.rewardHistory} elboScore={state.elboScore} />}
-          </div>
-        </div>
-      </CollapsibleSection>
 
       <CollapsibleSection title="Tabracadabra">
         <div className="settings-group">

@@ -14,6 +14,8 @@ from server.routes.onboarding import router as onboarding_router
 from connectors.routes import router as connectors_router
 from user_models.routes import router as user_models_router
 from connectors.service import run_context_logging_service
+from user_models.training import init_model, run_training_service
+from apps.tabracadabra.prediction_loop import run_prediction_loop
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +41,12 @@ async def lifespan(app: FastAPI):
     state.google_refresh_task = asyncio.create_task(refresh_google_tokens(state.config))
     state.outlook_refresh_task = asyncio.create_task(refresh_outlook_tokens(state.config))
 
+    # Initialize predictor (and trainer for powernap) before starting loops
+    await init_model(state)
+    state.model.training_task = asyncio.create_task(run_training_service(state))
+    logger.info("Training service started (%s mode)", state.config.model_type)
+
     # Background prediction loop (keeps tabracadabra context cache warm)
-    from apps.tabracadabra.prediction_loop import run_prediction_loop
     state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
 
     app.state.server = state
@@ -50,7 +56,6 @@ async def lifespan(app: FastAPI):
     # Graceful shutdown: cancel running services
     state = app.state.server
     state.model.training_resumed.clear()
-    state.model.inference_active = False
 
     all_tasks = [
         state.model.training_task,

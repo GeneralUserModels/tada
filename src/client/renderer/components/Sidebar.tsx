@@ -17,6 +17,16 @@ const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
     ),
   },
   {
+    view: "usermodel",
+    label: "User Model",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
+        <path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  {
     view: "settings",
     label: "Settings",
     icon: (
