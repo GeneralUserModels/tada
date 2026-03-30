@@ -2,83 +2,52 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 
+// Cache server:ready so late-registering renderers (e.g. after Vite JS load)
+// still get the payload even if the IPC fired before React mounted.
+let serverReadyCache: { url: string } | null = null;
+ipcRenderer.once("server:ready", (_e, data: { url: string }) => {
+  serverReadyCache = data;
+});
+
 contextBridge.exposeInMainWorld("powernap", {
-  // Control
-  startTraining: () => ipcRenderer.invoke("control:training:start"),
-  stopTraining: () => ipcRenderer.invoke("control:training:stop"),
-  startInference: () => ipcRenderer.invoke("control:inference:start"),
-  stopInference: () => ipcRenderer.invoke("control:inference:stop"),
-  requestPrediction: () => ipcRenderer.invoke("request:prediction"),
-
-  // Status / Settings
-  getStatus: () => ipcRenderer.invoke("get:status"),
-  getSettings: () => ipcRenderer.invoke("get:settings"),
-  updateSettings: (data: Record<string, unknown>) =>
-    ipcRenderer.invoke("update:settings", data),
-  getTrainingHistory: () => ipcRenderer.invoke("get:training:history"),
-  getLabelHistory: () => ipcRenderer.invoke("get:label:history"),
-
-  // Event listeners (main -> renderer)
-  onServerReady: (cb: () => void) =>
-    ipcRenderer.once("server:ready", () => cb()),
-  onStatusUpdate: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("status:update", (_e, data) => cb(data)),
-  onPrediction: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("prediction", (_e, data) => cb(data)),
-  onScore: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("score", (_e, data) => cb(data)),
-  onElboScore: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("elbo:score", (_e, data) => cb(data)),
-  onTrainingStep: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("training:step", (_e, data) => cb(data)),
-  onLabel: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("label", (_e, data) => cb(data)),
-
+  // App lifecycle
+  onServerReady: (cb: (data: { url: string }) => void) => {
+    if (serverReadyCache) {
+      cb(serverReadyCache);
+    } else {
+      ipcRenderer.once("server:ready", (_e, data) => cb(data));
+    }
+  },
   onPredictionRequested: (cb: () => void) =>
     ipcRenderer.on("prediction:requested", () => cb()),
 
-  // Overlay-specific
+  // Overlay
   onOverlayPrediction: (cb: (data: unknown) => void) =>
     ipcRenderer.on("overlay:prediction", (_e, data) => cb(data)),
   onOverlayWaiting: (cb: () => void) =>
     ipcRenderer.on("overlay:waiting", () => cb()),
   onOverlayFlushing: (cb: () => void) =>
     ipcRenderer.on("overlay:flushing", () => cb()),
-  // Overlay resize (renderer -> main)
   resizeOverlay: (height: number) =>
     ipcRenderer.send("overlay:resize", height),
 
-  // Onboarding
-  googleLogin: () => ipcRenderer.invoke("onboarding:google-login"),
-  submitOnboarding: (data: Record<string, unknown>) =>
-    ipcRenderer.invoke("onboarding:submit", data),
+  // Onboarding — screen permission (Electron-only) + completion signal
   checkScreenPermission: () =>
     ipcRenderer.invoke("onboarding:check-screen-permission"),
   openScreenSettings: () =>
     ipcRenderer.invoke("onboarding:open-screen-settings"),
   requestScreenPermission: () =>
     ipcRenderer.invoke("onboarding:request-screen-permission"),
+  openNotifSettings: () =>
+    ipcRenderer.invoke("onboarding:open-fda-settings"),
+  onboardingComplete: () =>
+    ipcRenderer.send("onboarding:complete"),
 
-  // Onboarding connectors
-  connectGoogle: (scope?: string) => ipcRenderer.invoke("onboarding:connect-google", scope),
-  connectOutlook: () => ipcRenderer.invoke("onboarding:connect-outlook"),
-  checkNotifications: () => ipcRenderer.invoke("onboarding:check-notifications"),
-  checkFilesystem: () => ipcRenderer.invoke("onboarding:check-filesystem"),
-  openNotifSettings: () => ipcRenderer.invoke("onboarding:open-fda-settings"),
-
-  // Dashboard connectors
-  getConnectorStatus: () => ipcRenderer.invoke("connector:status"),
-  connectorConnectGoogle: (scope?: string) => ipcRenderer.invoke("connector:connect-google", scope),
-  connectorDisconnectGoogle: () => ipcRenderer.invoke("connector:disconnect-google"),
-  connectorConnectOutlook: () => ipcRenderer.invoke("connector:connect-outlook"),
-  connectorDisconnectOutlook: () => ipcRenderer.invoke("connector:disconnect-outlook"),
-  updateConnector: (name: string, enabled: boolean) =>
-    ipcRenderer.invoke("connector:update", name, enabled),
+  // Connectors (OS-level permission checks only)
   openFdaSettings: (name?: string) => ipcRenderer.invoke("connector:open-fda-settings", name),
-  onConnectorUpdate: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("connector:status-update", (_e, data) => cb(data)),
   getConnectorPermissionInfo: (name: string) => ipcRenderer.invoke("connector:get-permission-info", name),
   requestConnectorPermission: (name: string) => ipcRenderer.invoke("connector:request-permission", name),
+  checkConnectorPermission: (name: string) => ipcRenderer.invoke("connector:check-permission", name),
 
   // Auto-update
   onUpdateDownloaded: (cb: (data: unknown) => void) =>
