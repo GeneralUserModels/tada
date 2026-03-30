@@ -17,7 +17,6 @@ function allKeys(): string[] {
   keys.add("label_model");
   keys.add("filter_model");
   keys.add("model_type");
-  keys.add("prompted_model");
   keys.add("model");
   keys.add("tinker_api_key");
   keys.add("hf_token");
@@ -52,7 +51,7 @@ export function SettingsView() {
     for (const key of allKeys()) {
       const val = (values[key] ?? "").trim();
       if (val) {
-        data[key] = key === "fps" ? parseInt(val, 10) : val;
+        data[key] = val;
       }
     }
     if (Object.keys(data).length > 0) {

@@ -21,6 +21,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -361,55 +362,60 @@ async def outlook_status(request: Request):
 
 # ── Background token refresh tasks ────────────────────────────
 
-async def refresh_google_tokens(config) -> None:
-    """Background task: refresh Google access token every 45 minutes."""
+async def _refresh_token_loop(
+    config,
+    token_path_getter: Callable,
+    token_url: str,
+    build_body: Callable[[dict], dict],
+    name: str,
+) -> None:
     while True:
         await asyncio.sleep(45 * 60)
-        token_path = config.google_token_path
+        token_path = token_path_getter(config)
         if not token_path:
             continue
         token = _read_token(token_path)
         if not token or not token.get("refresh_token"):
             continue
         try:
-            data = _http_post("https://oauth2.googleapis.com/token", {
-                "grant_type": "refresh_token",
-                "refresh_token": token["refresh_token"],
-                "client_id": token["client_id"],
-                "client_secret": token["client_secret"],
-            })
+            data = _http_post(token_url, build_body(token))
             token["access_token"] = data["access_token"]
             if "refresh_token" in data:
                 token["refresh_token"] = data["refresh_token"]
             token["expires_at"] = time.time() * 1000 + data.get("expires_in", 3600) * 1000
             _write_token(token_path, token)
-            logger.info("[auth] Google token refreshed")
+            logger.info("[auth] %s token refreshed", name)
         except Exception as e:
-            logger.warning(f"[auth] Google token refresh failed: {e}")
+            logger.warning("[auth] %s token refresh failed: %s", name, e)
+
+
+async def refresh_google_tokens(config) -> None:
+    """Background task: refresh Google access token every 45 minutes."""
+    await _refresh_token_loop(
+        config,
+        token_path_getter=lambda c: c.google_token_path,
+        token_url="https://oauth2.googleapis.com/token",
+        build_body=lambda t: {
+            "grant_type": "refresh_token",
+            "refresh_token": t["refresh_token"],
+            "client_id": t["client_id"],
+            "client_secret": t["client_secret"],
+        },
+        name="Google",
+    )
 
 
 async def refresh_outlook_tokens(config) -> None:
     """Background task: refresh Outlook access token every 45 minutes."""
-    while True:
-        await asyncio.sleep(45 * 60)
-        token_path = config.outlook_token_path
-        if not token_path:
-            continue
-        token = _read_token(token_path)
-        if not token or not token.get("refresh_token"):
-            continue
-        try:
-            data = _http_post(f"{MICROSOFT_AUTHORITY}/oauth2/v2.0/token", {
-                "grant_type": "refresh_token",
-                "refresh_token": token["refresh_token"],
-                "client_id": token["client_id"],
-                "scope": " ".join(MICROSOFT_SCOPES),
-            })
-            token["access_token"] = data["access_token"]
-            if "refresh_token" in data:
-                token["refresh_token"] = data["refresh_token"]
-            token["expires_at"] = time.time() * 1000 + data.get("expires_in", 3600) * 1000
-            _write_token(token_path, token)
-            logger.info("[auth] Outlook token refreshed")
-        except Exception as e:
-            logger.warning(f"[auth] Outlook token refresh failed: {e}")
+    await _refresh_token_loop(
+        config,
+        token_path_getter=lambda c: c.outlook_token_path,
+        token_url=f"{MICROSOFT_AUTHORITY}/oauth2/v2.0/token",
+        build_body=lambda t: {
+            "grant_type": "refresh_token",
+            "refresh_token": t["refresh_token"],
+            "client_id": t["client_id"],
+            "scope": " ".join(MICROSOFT_SCOPES),
+        },
+        name="Outlook",
+    )

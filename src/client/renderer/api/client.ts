@@ -1,42 +1,12 @@
 /** REST client — thin fetch wrapper for the PowerNap server. */
 
-let serverUrl = "";
-
-export function setServerUrl(url: string) {
-  serverUrl = url.replace(/\/$/, "");
-}
-
-export function getServerUrl(): string {
-  return serverUrl;
-}
-
-async function request(
-  method: string,
-  path: string,
-  body?: unknown
-): Promise<unknown> {
-  const url = `${serverUrl}${path}`;
-  const opts: RequestInit = {
-    method,
-    headers: { "Content-Type": "application/json" },
-  };
-  if (body !== undefined) {
-    opts.body = JSON.stringify(body);
-  }
-
-  const res = await fetch(url, opts);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`${method} ${path} ${res.status}: ${text}`);
-  }
-  return res.json();
-}
+export { setServerUrl, getServerUrl } from "../../shared/api-core";
+import { request } from "../../shared/api-core";
 
 // ── User model control ────────────────────────────────────────
 export const startTraining = () => request("POST", "/api/user_models/training/start");
 export const stopTraining = () => request("POST", "/api/user_models/training/stop");
 export const startInference = () => request("POST", "/api/user_models/inference/start");
-export const stopInference = () => request("POST", "/api/user_models/inference/stop");
 
 // ── Status / Settings ────────────────────────────────────────
 export const getStatus = () => request("GET", "/api/status");
