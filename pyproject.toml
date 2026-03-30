@@ -12,9 +12,9 @@ dependencies = [
     "accelerate",
     "datasets",
     "fastapi",
-    "litellm==1.81.3",
+    "litellm==1.82.6",
     "numpy",
-    "napsack",
+    "napsack>=0.1.2",
     "pandas",
     "peft",
     "pillow",
@@ -32,6 +32,10 @@ dependencies = [
     "mcp>=1.0.0",
     "watchdog",
     "websockets",
+    "tenacity",
+    "sandbox-runtime",
+    "playwright",
+    "pycookiecheat",
 ]
 
 [tool.uv.sources]
