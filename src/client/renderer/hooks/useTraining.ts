@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { startTraining as apiStartTraining, stopTraining as apiStopTraining } from "../api/client";
 
 export type TrainingState = "idle" | "starting" | "running" | "stopping";
 
@@ -7,13 +8,13 @@ export function useTraining(initialState: TrainingState = "idle") {
 
   const startTraining = async () => {
     setState("starting");
-    await window.powernap.startTraining();
+    await apiStartTraining();
     setState("running");
   };
 
   const stopTraining = async () => {
     setState("stopping");
-    await window.powernap.stopTraining();
+    await apiStopTraining();
     setState("idle");
   };
 

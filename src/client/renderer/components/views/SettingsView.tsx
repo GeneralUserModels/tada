@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { useTraining } from "../../hooks/useTraining";
+import { updateSettings, startInference, requestPrediction } from "../../api/client";
 import { TrainingTile, InferenceTile } from "../dashboard/PipelineTile";
 import { PredictionCard } from "../dashboard/PredictionCard";
 import { RewardsChart } from "../dashboard/RewardsChart";
@@ -16,7 +17,6 @@ function allKeys(): string[] {
   keys.add("label_model");
   keys.add("filter_model");
   keys.add("model_type");
-  keys.add("prompted_model");
   keys.add("model");
   keys.add("tinker_api_key");
   keys.add("hf_token");
@@ -51,11 +51,11 @@ export function SettingsView() {
     for (const key of allKeys()) {
       const val = (values[key] ?? "").trim();
       if (val) {
-        data[key] = key === "fps" ? parseInt(val, 10) : val;
+        data[key] = val;
       }
     }
     if (Object.keys(data).length > 0) {
-      await window.powernap.updateSettings(data);
+      await updateSettings(data);
     }
   };
 
@@ -75,8 +75,8 @@ export function SettingsView() {
 
   const handleGenerate = async () => {
     dispatch({ type: "PREDICTION_REQUESTED" });
-    await window.powernap.startInference();
-    await window.powernap.requestPrediction();
+    await startInference();
+    await requestPrediction();
   };
 
   const modelType = values["model_type"] ?? "prompted";
@@ -221,10 +221,12 @@ export function SettingsView() {
                 <span className="stat-label">Labels</span>
                 <span className="stat-value">{state.labels}</span>
               </div>
-              <div className="stat-pill">
-                <span className="stat-label">Step</span>
-                <span className="stat-value">{state.step}</span>
-              </div>
+              {isTinker && (
+                <div className="stat-pill">
+                  <span className="stat-label">Step</span>
+                  <span className="stat-value">{state.step}</span>
+                </div>
+              )}
             </div>
 
             <div className="controls-grid" style={{ marginBottom: "16px" }}>
@@ -240,7 +242,7 @@ export function SettingsView() {
                 onGenerate={handleGenerate}
               />
               <PredictionCard prediction={state.prediction} />
-              <RewardsChart data={state.rewardHistory} elboScore={state.elboScore} />
+              {isTinker && <RewardsChart data={state.rewardHistory} elboScore={state.elboScore} />}
             </div>
 
           </div>

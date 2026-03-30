@@ -1,4 +1,6 @@
 import { createContext, useContext, useReducer, useRef, useEffect, ReactNode } from "react";
+import * as api from "../api/client";
+import * as sse from "../api/sse";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -31,7 +33,6 @@ export interface AppState {
   historyItems: HistoryItem[];
   settings: Record<string, unknown>;
   updateVersion: string | null;
-  permModal: { connectorName: string } | null;
 }
 
 type AppAction =
@@ -49,9 +50,7 @@ type AppAction =
   | { type: "SEED_LABEL_HISTORY"; history: { text: string; timestamp: number }[] }
   | { type: "LOAD_SETTINGS"; settings: Record<string, unknown> }
   | { type: "UPDATE_DOWNLOADED"; version: string }
-  | { type: "UPDATE_DISMISSED" }
-  | { type: "OPEN_PERM_MODAL"; connectorName: string }
-  | { type: "CLOSE_PERM_MODAL" };
+  | { type: "UPDATE_DISMISSED" };
 
 let historyCounter = 0;
 
@@ -78,7 +77,6 @@ const initialState: AppState = {
   historyItems: [],
   settings: {},
   updateVersion: null,
-  permModal: null,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -187,12 +185,6 @@ function reducer(state: AppState, action: AppAction): AppState {
     case "UPDATE_DISMISSED":
       return { ...state, updateVersion: null };
 
-    case "OPEN_PERM_MODAL":
-      return { ...state, permModal: { connectorName: action.connectorName } };
-
-    case "CLOSE_PERM_MODAL":
-      return { ...state, permModal: null };
-
     default:
       return state;
   }
@@ -223,62 +215,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (registered.current) return;
     registered.current = true;
 
-    window.powernap.onServerReady(async () => {
+    // SSE events — direct from Python, no IPC hop
+    sse.on("status",        (data) => dispatch({ type: "STATUS_UPDATE", data: data as StatusData }));
+    sse.on("prediction",    (data) => dispatch({ type: "PREDICTION", data: data as PredictionData }));
+    sse.on("score",         (data) => dispatch({ type: "SCORE", data: data as ScoreData }));
+    sse.on("elbo_score",    (data) => dispatch({ type: "ELBO_SCORE", data: data as ElboScoreData }));
+    sse.on("training_step", (data) => dispatch({ type: "TRAINING_STEP", data: data as TrainingStepData }));
+    sse.on("label",         (data) => dispatch({ type: "LABEL", data: data as LabelData }));
+
+    // server:ready — main sends URL once server is up; we initialize api + sse then seed state
+    window.powernap.onServerReady(async ({ url }: { url: string }) => {
+      api.setServerUrl(url);
+      sse.connect();
+
       try {
-        const status = await window.powernap.getStatus();
-        dispatch({ type: "SERVER_READY", status });
+        const status = await api.getStatus();
+        dispatch({ type: "SERVER_READY", status: status as StatusData });
+        console.log("[app] server ready, url:", url);
 
         try {
-          const history = await window.powernap.getTrainingHistory();
+          const history = await api.getTrainingHistory();
           if (Array.isArray(history)) {
             dispatch({ type: "SEED_HISTORY", history });
           }
         } catch { /* metrics may not exist yet */ }
 
         try {
-          const labelHistory = await window.powernap.getLabelHistory();
+          const labelHistory = await api.getLabelHistory();
           if (Array.isArray(labelHistory) && labelHistory.length > 0) {
             dispatch({ type: "SEED_LABEL_HISTORY", history: labelHistory });
           }
         } catch { /* label history may not exist yet */ }
 
         try {
-          const settings = await window.powernap.getSettings();
-          dispatch({ type: "LOAD_SETTINGS", settings });
+          const settings = await api.getSettings();
+          dispatch({ type: "LOAD_SETTINGS", settings: settings as Record<string, unknown> });
         } catch { /* settings fetch failed */ }
-      } catch { /* server not running yet */ }
+      } catch (e) { console.error("[app] getStatus failed:", e); }
     });
 
-    window.powernap.onStatusUpdate((data) => {
-      dispatch({ type: "STATUS_UPDATE", data });
-    });
-
-    window.powernap.onPrediction((data) => {
-      dispatch({ type: "PREDICTION", data });
-    });
-
+    // IPC events — native OS operations that can only come from main
     window.powernap.onPredictionRequested(() => {
       dispatch({ type: "PREDICTION_REQUESTED" });
     });
 
-    window.powernap.onScore((data) => {
-      dispatch({ type: "SCORE", data });
-    });
-
-    window.powernap.onElboScore((data) => {
-      dispatch({ type: "ELBO_SCORE", data });
-    });
-
-    window.powernap.onTrainingStep((data) => {
-      dispatch({ type: "TRAINING_STEP", data });
-    });
-
-    window.powernap.onLabel((data) => {
-      dispatch({ type: "LABEL", data });
-    });
-
     window.powernap.onUpdateDownloaded((data) => {
-      dispatch({ type: "UPDATE_DOWNLOADED", version: data.version });
+      dispatch({ type: "UPDATE_DOWNLOADED", version: (data as { version: string }).version });
     });
   }, []);
 

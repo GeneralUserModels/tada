@@ -9,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from server.state import ServerState
 from server.routes import settings, status, events
+from server.routes.auth import router as auth_router, refresh_google_tokens, refresh_outlook_tokens
+from server.routes.onboarding import router as onboarding_router
 from connectors.routes import router as connectors_router
 from user_models.routes import router as user_models_router
 from connectors.service import run_context_logging_service
@@ -33,6 +35,10 @@ async def lifespan(app: FastAPI):
     # Start context logging service (creates and owns all connectors)
     state.context_logging_task = asyncio.create_task(run_context_logging_service(state))
 
+    # Background OAuth token refresh (every 45 min, no-ops if no token)
+    state.google_refresh_task = asyncio.create_task(refresh_google_tokens(state.config))
+    state.outlook_refresh_task = asyncio.create_task(refresh_outlook_tokens(state.config))
+
     app.state.server = state
     logger.info("PowerNap server started")
     yield
@@ -42,13 +48,19 @@ async def lifespan(app: FastAPI):
     state.model.training_resumed.clear()
     state.model.inference_active = False
 
-    for task in [state.model.training_task, state.context_logging_task]:
+    all_tasks = [
+        state.model.training_task,
+        state.context_logging_task,
+        state.google_refresh_task,
+        state.outlook_refresh_task,
+    ]
+    for task in all_tasks:
         if task and not task.done():
             task.cancel()
 
     # Wait for tasks to actually stop before touching connectors
     await asyncio.gather(
-        *[t for t in [state.model.training_task, state.context_logging_task] if t],
+        *[t for t in all_tasks if t],
         return_exceptions=True,
     )
 
@@ -76,6 +88,8 @@ def create_app() -> FastAPI:
     )
 
     # Register REST + SSE routes
+    app.include_router(auth_router)
+    app.include_router(onboarding_router)
     app.include_router(connectors_router)
     app.include_router(settings.router)
     app.include_router(status.router)
