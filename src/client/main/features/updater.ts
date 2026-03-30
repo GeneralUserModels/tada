@@ -2,7 +2,7 @@
 
 import { autoUpdater } from "electron-updater";
 import { BrowserWindow } from "electron";
-import { IPC } from "./ipc";
+import { IPC } from "../ipc";
 
 let mainWindow: BrowserWindow | null = null;
 

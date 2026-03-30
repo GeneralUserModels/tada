@@ -156,15 +156,19 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
             if "unable to open database file" in raw:
                 user_msg = "Permission denied — grant Full Disk Access in System Settings → Privacy & Security"
             elif "No such file or directory" in raw or "FileNotFoundError" in raw:
-                user_msg = "Not signed in — connect your account in Settings"
+                user_msg = "Not signed in"
             elif "401" in raw or "Unauthorized" in raw:
                 user_msg = "Authentication expired — reconnect your account"
             else:
                 user_msg = raw
             logger.warning(f"{cfg.name}: pausing — {user_msg}")
             await cfg.connector.stop(error=user_msg)
+            # Persist so the connector stays paused-with-error across restarts
+            if cfg.name not in state.config.disabled_connectors:
+                state.config.disabled_connectors.append(cfg.name)
+            state.config.connector_errors[cfg.name] = user_msg
+            state.config.save()
             if state is not None:
-                
                 await state.broadcast("connectors", {"name": cfg.name, "error": user_msg, "enabled": False})
             error_occurred = True
         except Exception as e:
@@ -298,10 +302,12 @@ async def run_context_logging_service(state) -> None:
     state.connectors = {c.name: c.connector for c in connector_configs}
     state.connector_auth = {c.name: c.requires_auth for c in connector_configs}
 
-    # Apply persisted enabled/disabled state from server config
+    # Apply persisted enabled/disabled state and error messages from server config
     for cfg in connector_configs:
         if cfg.name in config.disabled_connectors:
             cfg.connector.pause()
+        if cfg.name in config.connector_errors:
+            cfg.connector.error = config.connector_errors[cfg.name]
 
     logger.info("Context logging service started")
     filter_api_key = config.filter_model_api_key or config.default_llm_api_key

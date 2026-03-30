@@ -19,7 +19,8 @@ _PERSISTED_FIELDS = {
     "fps", "num_generations",
     "learning_rate", "batch_size", "past_len", "future_len", "loss_mode",
     "model_type", "prompted_model",
-    "disabled_connectors", "mcp_connectors",
+    "disabled_connectors", "connector_errors", "mcp_connectors",
+    "onboarding_complete",
 }
 
 
@@ -124,8 +125,14 @@ class ServerConfig(BaseModel):
     # Connectors: names of connectors that are disabled (paused)
     disabled_connectors: list[str] = Field(default_factory=list)
 
+    # Connector error messages persisted across restarts (name → error string)
+    connector_errors: dict[str, str] = Field(default_factory=dict)
+
     # Community / custom MCP connectors added by the user
     mcp_connectors: list[MCPConnectorDef] = Field(default_factory=list)
+
+    # Onboarding completion flag (set by POST /api/onboarding/complete)
+    onboarding_complete: bool = False
 
     def load_persisted(self) -> None:
         """Load user-settable fields from the config file, if it exists.

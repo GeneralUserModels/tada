@@ -14,6 +14,8 @@ class ServerState:
 
     # Service tasks
     context_logging_task: asyncio.Task | None = None
+    google_refresh_task: asyncio.Task | None = None
+    outlook_refresh_task: asyncio.Task | None = None
 
     # Connector instances (populated by connectors service on startup)
     connectors: dict = field(default_factory=dict)
