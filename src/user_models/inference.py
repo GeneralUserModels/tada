@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
+from user_models.powernap.longnap.trainer_utils import build_actions_block
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +85,6 @@ async def handle_prediction_request(state: Any):
 async def _score_prediction(state: Any, result: dict, cutoff_ts: float, future_len: int):
     """Background task: wait for enough ground truth, then score the prediction."""
     
-    from user_models.powernap.longnap.trainer_utils import build_actions_block
-
     data_manager = state.model.data_manager
 
     for _ in range(120):

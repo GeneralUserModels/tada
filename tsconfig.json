@@ -14,6 +14,5 @@
     "sourceMap": true
   },
   "include": ["src/client/main/**/*", "src/client/preload/**/*", "src/client/shared/**/*"],
-  "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "./tsconfig.renderer.json" }]
+  "exclude": ["node_modules", "dist"]
 }
