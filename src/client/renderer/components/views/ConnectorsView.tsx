@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppContext, HistoryItem } from "../../context/AppContext";
 import { useConnectors } from "../../hooks/useConnectors";
 import { ConnectorItem, CONNECTOR_META } from "../connectors/ConnectorItem";
@@ -10,10 +10,9 @@ const BADGE_CLASS: Record<HistoryItem["type"], string> = {
 };
 
 export function ConnectorsView() {
-  const { state, dispatch } = useAppContext();
+  const { state } = useAppContext();
   const { connectors, loading, load, toggle, toggling, connectGoogle, connectOutlook, retry } = useConnectors();
   const [connectingName, setConnectingName] = useState<string | null>(null);
-  const prevPermModal = useRef(state.permModal);
 
   // Load connectors when server becomes ready
   useEffect(() => {
@@ -21,14 +20,6 @@ export function ConnectorsView() {
       load();
     }
   }, [state.connected, load]);
-
-  // Reload connectors when permission modal closes (permission may have been granted)
-  useEffect(() => {
-    if (prevPermModal.current !== null && state.permModal === null) {
-      load();
-    }
-    prevPermModal.current = state.permModal;
-  }, [state.permModal, load]);
 
   const calendarOn = !!(connectors.calendar?.enabled && connectors.calendar?.available);
   const gmailOn = !!(connectors.gmail?.enabled && connectors.gmail?.available);
@@ -43,10 +34,6 @@ export function ConnectorsView() {
     setConnectingName("outlook_calendar");
     await connectOutlook();
     setConnectingName(null);
-  };
-
-  const handleOpenPermModal = (name: string) => {
-    dispatch({ type: "OPEN_PERM_MODAL", connectorName: name });
   };
 
   return (
@@ -65,6 +52,10 @@ export function ConnectorsView() {
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {Object.entries(connectors)
               .filter(([name]) => CONNECTOR_META[name])
+              .sort(([a], [b]) => {
+                const keys = Object.keys(CONNECTOR_META);
+                return keys.indexOf(a) - keys.indexOf(b);
+              })
               .map(([name, info]) => (
                 <ConnectorItem
                   key={name}
@@ -72,11 +63,10 @@ export function ConnectorsView() {
                   info={info}
                   calendarOn={calendarOn}
                   gmailOn={gmailOn}
-                  toggling={toggling.has(name)}
+                  toggling={toggling.has(name) || connectingName === name}
                   onToggle={toggle}
                   onConnectGoogle={handleConnectGoogle}
                   onConnectOutlook={handleConnectOutlook}
-                  onFix={handleOpenPermModal}
                   onRetry={retry}
                 />
               ))}

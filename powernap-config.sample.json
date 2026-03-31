@@ -1,0 +1,7 @@
+{
+  "google_client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+  "google_client_secret": "YOUR_CLIENT_SECRET",
+  "microsoft_client_id": "YOUR_MICROSOFT_CLIENT_ID",
+  "supabase_url": "https://YOUR_PROJECT.supabase.co",
+  "supabase_anon_key": "YOUR_SUPABASE_ANON_KEY"
+}

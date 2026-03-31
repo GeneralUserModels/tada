@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 const CONNECTOR_ICONS: Record<string, JSX.Element> = {
   monitor: (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
@@ -57,41 +59,79 @@ interface Props {
   onToggle: (name: string, enabled: boolean) => Promise<void>;
   onConnectGoogle: (svc: string, otherIsOn: boolean) => Promise<void>;
   onConnectOutlook: () => Promise<void>;
-  onFix: (name: string) => void;
   onRetry: (name: string) => Promise<void>;
 }
 
 export function ConnectorItem({
   name, info, calendarOn, gmailOn, toggling,
-  onToggle, onConnectGoogle, onConnectOutlook,
-  onFix, onRetry,
+  onToggle, onConnectGoogle, onConnectOutlook, onRetry,
 }: Props) {
   const meta = CONNECTOR_META[name] ?? { label: name, desc: "", icon: "plug" };
-
   const icon = CONNECTOR_ICONS[meta.icon];
+  const [waitingPermission, setWaitingPermission] = useState(false);
+
+  // Clear waiting state when error resolves
+  useEffect(() => {
+    if (!info.error) setWaitingPermission(false);
+  }, [info.error]);
+
+  // Poll for OS permission grant on screen/notifications
+  useEffect(() => {
+    if (!waitingPermission) return;
+
+    const id = setInterval(async () => {
+      const ok = await window.powernap.checkConnectorPermission(name);
+      if (ok) {
+        clearInterval(id);
+        setWaitingPermission(false);
+        await onRetry(name);
+      }
+    }, 1500);
+
+    return () => clearInterval(id);
+  }, [waitingPermission, name, onRetry]);
+
+  async function handlePermissionClick() {
+    setWaitingPermission(true);
+    if (name === "screen") {
+      await window.powernap.requestConnectorPermission("screen");
+    } else {
+      window.powernap.openFdaSettings(name);
+    }
+  }
 
   let action: JSX.Element;
 
   if (info.error) {
+    let label: string;
+    let handleClick: () => void;
+
+    if (name === "calendar" || name === "gmail") {
+      label = "Sign in";
+      handleClick = () => onConnectGoogle(name, name === "calendar" ? gmailOn : calendarOn);
+    } else if (name.startsWith("outlook_")) {
+      label = "Sign in";
+      handleClick = onConnectOutlook;
+    } else if (name === "screen") {
+      label = waitingPermission ? "Waiting\u2026" : "Grant Access";
+      handleClick = handlePermissionClick;
+    } else if (name === "notifications") {
+      label = waitingPermission ? "Waiting\u2026" : "Open Settings";
+      handleClick = handlePermissionClick;
+    } else {
+      label = "Retry";
+      handleClick = () => onRetry(name);
+    }
+
     action = (
-      <>
-        <span style={{
-          fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
-          background: "rgba(201,89,75,0.1)", color: "#C9594B", whiteSpace: "nowrap",
-        }}>Error</span>
-        <button
-          className="pill-btn"
-          style={{ fontSize: 10, padding: "3px 10px", background: "rgba(201,89,75,0.06)", color: "#C9594B", border: "1px solid rgba(201,89,75,0.2)" }}
-          onClick={() => onFix(name)}
-        >Fix</button>
-        <button
-          className="pill-btn"
-          style={{ fontSize: 10, padding: "3px 10px" }}
-          onClick={() => onRetry(name)}
-        >Retry</button>
-      </>
+      <button
+        className="pill-btn"
+        style={{ fontSize: 10, padding: "3px 10px" }}
+        disabled={waitingPermission}
+        onClick={handleClick}
+      >{label}</button>
     );
-  } else if (!info.configured && name.startsWith("outlook_")) {
+  } else if (!info.available && name.startsWith("outlook_")) {
     action = (
       <button
         className="pill-btn pill-start"
@@ -99,7 +139,7 @@ export function ConnectorItem({
         onClick={onConnectOutlook}
       >Connect</button>
     );
-  } else if (!info.configured) {
+  } else if (!info.available) {
     action = (
       <button
         className="pill-btn pill-start"
