@@ -103,12 +103,14 @@ class PromptedPredictor(BasePredictor):
         # 4) Actions — predict the next N actions
         messages.append(build_actions_user_message(future_len))
         actions_text = self._sample(messages, stop=["</actions>"])
+        messages.append({"role": "assistant", "content": actions_text})
 
         result = {
             "think": think_text,
             "retrieved": retrieved_text,
             "revise": revise_text,
             "actions": actions_text,
+            "messages": messages,
             "timestamp": datetime.now().isoformat(),
             "model": self.model,
         }
@@ -157,10 +159,14 @@ class PromptedPredictor(BasePredictor):
 
         if image_parts:
             content = image_parts + [
-                {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + past_actions_block}
+                {"type": "text", "text": TASK_DESCRIPTION_WITH_IMAGES + "\n\n" + past_actions_block,
+                 "cache_control": {"type": "ephemeral"}}
             ]
         else:
-            content = TASK_DESCRIPTION + "\n\n" + past_actions_block
+            content = [
+                {"type": "text", "text": TASK_DESCRIPTION + "\n\n" + past_actions_block,
+                 "cache_control": {"type": "ephemeral"}}
+            ]
 
         messages = [{"role": "user", "content": content}]
         ts = past[0]["timestamp"]

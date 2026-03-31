@@ -294,7 +294,8 @@ class TabracadabraService:
         self._last_char_space = (piece[-1] == " ")
 
     # ------------- PowerNap prediction context -------------
-    def _fetch_latest_prediction(self) -> str:
+    def _fetch_predictor_messages(self) -> list | None:
+        """Fetch the predictor's full conversation to use as cached prefix."""
         try:
             req = urllib.request.Request(
                 f"{self._powernap_base_url}/api/user_models/latest_prediction",
@@ -302,35 +303,26 @@ class TabracadabraService:
             )
             with urllib.request.urlopen(req, timeout=2) as resp:
                 data = json.loads(resp.read().decode())
-            if not data.get("available"):
-                return ""
-            parts = []
-            retrieved = (data.get("retrieved") or "").strip()
-            if retrieved:
-                parts.append(f"### Retrieved observations:\n{retrieved}")
-            revise = (data.get("revise") or "").strip()
-            think = (data.get("think") or "").strip()
-            reasoning = revise or think
-            if reasoning:
-                parts.append(f"### Reasoning about next steps:\n{reasoning}")
-            actions = (data.get("actions") or "").strip()
-            if actions:
-                parts.append(f"### Predicted next actions:\n{actions}")
-            if not parts:
-                return ""
-            return "## User model context:\n" + "\n\n".join(parts)
+            if not data.get("available") or not data.get("messages"):
+                return None
+            return data["messages"]
         except Exception as e:
-            print(f"[tabracadabra] Could not fetch prediction context ({e}), proceeding without.")
-            return ""
+            print(f"[tabracadabra] Could not fetch predictor messages ({e})")
+            return None
 
     def _build_messages(self):
         data_url, _ = capture_active_monitor_as_data_url()
-        powernap_context = self._fetch_latest_prediction()
-        prompt = self._prompt_text.format(POWERNAP_CONTEXT=powernap_context)
-        return [{"role": "user", "content": [
+        predictor_messages = self._fetch_predictor_messages()
+
+        tabracadabra_turn = {"role": "user", "content": [
             {"type": "image_url", "image_url": {"url": data_url}},
-            {"type": "text", "text": prompt},
-        ]}]
+            {"type": "text", "text": self._prompt_text},
+        ]}
+
+        if predictor_messages:
+            return predictor_messages + [tabracadabra_turn]
+        else:
+            return [tabracadabra_turn]
 
     # ------------- Loading animation (spinner) -------------
     def _loading_spinner(self, first_piece_event: threading.Event, cancel_event: threading.Event):

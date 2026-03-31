@@ -4,8 +4,6 @@ The provided image shows what the user is looking at right now. The cursor is an
 
 Generate a continuation for the textbox closest to the cursor.
 
-{POWERNAP_CONTEXT}
-
 IMPORTANT:
 - Mirror the user's writing style.
 - Avoid special formatting: this includes things like new lines or lists.
