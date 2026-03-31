@@ -91,7 +91,7 @@ class ServerConfig(BaseModel):
     num_generations: int = 4
     learning_rate: float = 5e-5
     max_completion_length: int = 512
-    num_imgs_per_sample: int | None = None
+    num_imgs_per_sample: int | None = 3
     loss_mode: str = Field(default_factory=lambda: os.getenv("POWERNAP_LOSS_MODE", "llm_judge"))
     eval_with_llm_judge: bool = False
     batch_size: int = 8
