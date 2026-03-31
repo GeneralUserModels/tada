@@ -1,26 +1,26 @@
 import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { useTraining } from "../../hooks/useTraining";
+import { updateSettings, startInference, requestPrediction } from "../../api/client";
 import { TrainingTile, InferenceTile } from "../dashboard/PipelineTile";
 import { PredictionCard } from "../dashboard/PredictionCard";
 import { RewardsChart } from "../dashboard/RewardsChart";
 import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 
-const MODEL_ROWS: { label: string; modelKey: string; modelPlaceholder: string; apiKeyKey: string; apiKeyPlaceholder: string; required?: boolean }[] = [
-  { label: "LLM",    modelKey: "reward_llm",  modelPlaceholder: "gemini/gemini-3-flash-preview",   apiKeyKey: "default_llm_api_key",  apiKeyPlaceholder: "AIza...", required: true },
-  { label: "Tinker", modelKey: "model",       modelPlaceholder: "Qwen/Qwen3-VL-30B-A3B-Instruct", apiKeyKey: "tinker_api_key",  apiKeyPlaceholder: "tk-..." },
-];
-
 // All keys used across all sections
 function allKeys(): string[] {
   const keys = new Set<string>();
-  for (const row of MODEL_ROWS) { keys.add(row.modelKey); keys.add(row.apiKeyKey); }
   for (const row of ADVANCED_ROWS) { keys.add(row.modelKey); keys.add(row.apiKeyKey); }
-  keys.add("hf_token"); keys.add("wandb_api_key");
-  // Also sync LLM model to label_model and filter_model
+  keys.add("default_llm_api_key");
+  keys.add("reward_llm");
   keys.add("label_model");
   keys.add("filter_model");
+  keys.add("model_type");
+  keys.add("model");
+  keys.add("tinker_api_key");
+  keys.add("hf_token");
+  keys.add("wandb_api_key");
   return Array.from(keys);
 }
 
@@ -28,7 +28,7 @@ function allKeys(): string[] {
 export function SettingsView() {
   const { state, dispatch } = useAppContext();
   const [values, setValues] = useState<Record<string, string>>({});
-  const [trainingOpen, setTrainingOpen] = useState(false);
+  const [userModelOpen, setUserModelOpen] = useState(false);
   const training = useTraining();
 
   useEffect(() => {
@@ -51,15 +51,14 @@ export function SettingsView() {
     for (const key of allKeys()) {
       const val = (values[key] ?? "").trim();
       if (val) {
-        data[key] = key === "fps" ? parseInt(val, 10) : val;
+        data[key] = val;
       }
     }
     if (Object.keys(data).length > 0) {
-      await window.powernap.updateSettings(data);
+      await updateSettings(data);
     }
   };
 
-  // When the shared LLM model changes, sync it to label_model and filter_model too
   const handleLLMModelChange = (val: string) => {
     setValues(v => ({ ...v, reward_llm: val, label_model: val, filter_model: val }));
   };
@@ -76,13 +75,16 @@ export function SettingsView() {
 
   const handleGenerate = async () => {
     dispatch({ type: "PREDICTION_REQUESTED" });
-    await window.powernap.startInference();
-    await window.powernap.requestPrediction();
+    await startInference();
+    await requestPrediction();
   };
+
+  const modelType = values["model_type"] ?? "prompted";
+  const isTinker = modelType === "powernap";
 
   return (
     <div id="settings-view" className="view active">
-      <section className="glass-card">
+      <section className="glass-card" style={{ position: "relative", zIndex: 1 }}>
         <div className="card-header">
           <h2>Configuration</h2>
         </div>
@@ -112,45 +114,77 @@ export function SettingsView() {
             </div>
           </div>
 
-          <AdvancedLLMSection values={values} setValues={setValues} />
-
-          <div className="model-row">
-            <span className="model-row-label">Tinker <span className="optional-tag">optional</span></span>
-            <div className="model-row-fields">
-              <label className="field">
-                <span>Model</span>
-                <ModelDropdown
-                  value={values["model"] ?? ""}
-                  onChange={(val) => setValues(v => ({ ...v, model: val }))}
-                  options={TINKER_MODELS}
-                  placeholder="Select a model"
-                />
-              </label>
-              <label className="field">
-                <span>API Key</span>
-                <input
-                  type="text"
-                  placeholder="tml-..."
-                  value={values["tinker_api_key"] ?? ""}
-                  onChange={(e) => setValues(v => ({ ...v, tinker_api_key: e.target.value }))}
-                />
-              </label>
+          <AdvancedLLMSection values={values} setValues={setValues}>
+            {/* User model type */}
+            <div className="model-row" style={{ marginTop: 10 }}>
+              <span className="model-row-label">User Model</span>
+              <div style={{ display: "flex", gap: 4, background: "rgba(0,0,0,0.05)", borderRadius: 8, padding: 3, width: "fit-content" }}>
+                {(["prompted", "powernap"] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setValues(v => ({ ...v, model_type: type }))}
+                    style={{
+                      padding: "5px 14px",
+                      borderRadius: 6,
+                      border: "none",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      fontWeight: modelType === type ? 600 : 400,
+                      background: modelType === type ? "white" : "transparent",
+                      color: modelType === type ? "var(--text)" : "var(--text-tertiary)",
+                      boxShadow: modelType === type ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {type === "prompted" ? "Prompted" : "Tinker"}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div className="model-row">
-            <span className="model-row-label">W&amp;B <span className="optional-tag">optional</span></span>
-            <div className="model-row-fields">
-              <label className="field">
-                <span>API Key</span>
-                <input type="text" placeholder="wandb-..." value={values["wandb_api_key"] ?? ""} onChange={(e) => setValues(v => ({ ...v, wandb_api_key: e.target.value }))} />
-              </label>
-              <label className="field">
-                <span>HuggingFace Token</span>
-                <input type="text" placeholder="hf_..." value={values["hf_token"] ?? ""} onChange={(e) => setValues(v => ({ ...v, hf_token: e.target.value }))} />
-              </label>
-            </div>
-          </div>
+            {isTinker && (
+              <>
+                <div className="model-row">
+                  <span className="model-row-label">Tinker</span>
+                  <div className="model-row-fields">
+                    <label className="field">
+                      <span>Model</span>
+                      <ModelDropdown
+                        value={values["model"] ?? ""}
+                        onChange={(val) => setValues(v => ({ ...v, model: val }))}
+                        options={TINKER_MODELS}
+                        placeholder="Select a model"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>API Key</span>
+                      <input
+                        type="text"
+                        placeholder="tml-..."
+                        value={values["tinker_api_key"] ?? ""}
+                        onChange={(e) => setValues(v => ({ ...v, tinker_api_key: e.target.value }))}
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div className="model-row">
+                  <span className="model-row-label">W&amp;B <span className="optional-tag">optional</span></span>
+                  <div className="model-row-fields">
+                    <label className="field">
+                      <span>API Key</span>
+                      <input type="text" placeholder="wandb-..." value={values["wandb_api_key"] ?? ""} onChange={(e) => setValues(v => ({ ...v, wandb_api_key: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>HuggingFace Token</span>
+                      <input type="text" placeholder="hf_..." value={values["hf_token"] ?? ""} onChange={(e) => setValues(v => ({ ...v, hf_token: e.target.value }))} />
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
+          </AdvancedLLMSection>
         </div>
 
         <div className="settings-footer">
@@ -163,57 +197,52 @@ export function SettingsView() {
       <section className="glass-card">
         <button
           className="collapsible-header"
-          onClick={() => setTrainingOpen((o) => !o)}
-          aria-expanded={trainingOpen}
+          onClick={() => setUserModelOpen((o) => !o)}
+          aria-expanded={userModelOpen}
         >
-          <h2>Online Training</h2>
+          <h2>User Model</h2>
           <svg
             width="16"
             height="16"
             viewBox="0 0 16 16"
             fill="none"
-            style={{ transform: trainingOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
+            style={{ transform: userModelOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
           >
             <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
 
-        {trainingOpen && (
+        {userModelOpen && (
           <div className="training-section">
+
+            {/* Stats + controls */}
             <div className="status-bar" style={{ marginBottom: "16px" }}>
               <div className="stat-pill">
                 <span className="stat-label">Labels</span>
                 <span className="stat-value">{state.labels}</span>
               </div>
-              <div className="stat-pill">
-                <span className="stat-label">Queue</span>
-                <span className="stat-value">{state.queue}</span>
-              </div>
-              <div className="stat-pill">
-                <span className="stat-label">Step</span>
-                <span className="stat-value">{state.step}</span>
-              </div>
-              <div className="stat-pill">
-                <span className="stat-label">Buffer</span>
-                <span className="stat-value">{state.buffer}</span>
-              </div>
+              {isTinker && (
+                <div className="stat-pill">
+                  <span className="stat-label">Step</span>
+                  <span className="stat-value">{state.step}</span>
+                </div>
+              )}
             </div>
 
             <div className="controls-grid" style={{ marginBottom: "16px" }}>
-              <TrainingTile
-                state={training.state}
-                onStart={handleStartTraining}
-                onStop={handleStopTraining}
-              />
+              {isTinker && (
+                <TrainingTile
+                  state={training.state}
+                  onStart={handleStartTraining}
+                  onStop={handleStopTraining}
+                />
+              )}
               <InferenceTile
                 generating={state.generating}
                 onGenerate={handleGenerate}
               />
-            </div>
-
-            <div className="split-row" style={{ marginBottom: "16px" }}>
               <PredictionCard prediction={state.prediction} />
-              <RewardsChart data={state.rewardHistory} elboScore={state.elboScore} />
+              {isTinker && <RewardsChart data={state.rewardHistory} elboScore={state.elboScore} />}
             </div>
 
           </div>

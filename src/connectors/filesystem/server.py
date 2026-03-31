@@ -18,6 +18,8 @@ from pydantic import AnyUrl
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
+from connectors._notify import run_notify_loop
+
 logger = logging.getLogger(__name__)
 
 WATCH_DIRS = [
@@ -48,24 +50,15 @@ class _Handler(FileSystemEventHandler):
             _loop.call_soon_threadsafe(_notify_event.set)
 
 
-async def _notify_loop() -> None:
-    """Bridge task: wake on watchdog events, push MCP notification to subscribed client."""
-    while True:
-        await _notify_event.wait()  # type: ignore[union-attr]
-        _notify_event.clear()  # type: ignore[union-attr]
-        if _active_session is not None:
-            try:
-                await _active_session.send_resource_updated("filesystem://changes")
-            except Exception:
-                logger.exception("filesystem: failed to send resource updated notification")
-
-
 @asynccontextmanager
 async def lifespan(_server: FastMCP) -> AsyncIterator[None]:  # type: ignore[type-arg]
     global _observer, _loop, _notify_event
     _loop = asyncio.get_running_loop()
     _notify_event = asyncio.Event()
-    asyncio.create_task(_notify_loop(), name="filesystem-notifier")
+    asyncio.create_task(
+        run_notify_loop(_notify_event, lambda: _active_session, "filesystem://changes", logger),
+        name="filesystem-notifier",
+    )
     _observer = Observer()
     handler = _Handler()
     for d in WATCH_DIRS:

@@ -83,15 +83,20 @@ body {
 
 #root {
   height: 100vh;
+  padding-top: 36px;
   display: flex;
   flex-direction: column;
 }
 
 .drag-topbar {
-  width: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 36px;
-  flex-shrink: 0;
+  z-index: 9998;
   -webkit-app-region: drag;
+  user-select: none;
   background: rgba(0, 0, 0, 0.09);
   border-bottom: 1px solid rgba(var(--sage-rgb), 0.15);
 }
@@ -343,7 +348,6 @@ body {
   flex-direction: column;
   gap: 16px;
   animation: fadeSlideIn 0.25s ease;
-  -webkit-app-region: no-drag;
 }
 
 .view.active {
@@ -405,7 +409,7 @@ body {
 
 .controls-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
 
@@ -791,7 +795,7 @@ button, input, select, textarea, canvas, a, label,
 .settings-footer {
   margin-top: 18px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 /* Model rows */

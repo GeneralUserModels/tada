@@ -5,10 +5,11 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import os
 
 import requests
 from mcp.server.fastmcp import FastMCP
+
+from connectors._http import google_access_token, google_get
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +20,6 @@ MAX_WATCH = 50
 # Module-level state persists across tool calls for the lifetime of this process
 _unread_watch: list[str] = []
 _id_to_meta: dict[str, dict] = {}
-
-
-def _access_token() -> str:
-    return json.load(open(os.environ["GOOGLE_TOKEN_PATH"]))["access_token"]
 
 
 def _extract_body(payload: dict) -> str:
@@ -47,32 +44,21 @@ mcp = FastMCP("powernap-gmail")
 def fetch_emails(since: float | None = None) -> str:
     """Fetch new Gmail inbox messages and emit read events for previously-unread emails."""
     global _unread_watch, _id_to_meta
-    headers = {"Authorization": f"Bearer {_access_token()}"}
     results = []
 
     # 1. Fetch new emails
     q = "-category:promotions -category:social"
     if since:
         q += f" after:{int(since)}"
-    resp = requests.get(
+    data = google_get(
         f"{GMAIL_BASE}/messages",
-        headers=headers,
-        params={"maxResults": MAX_RESULTS, "labelIds": "INBOX", "q": q},
-        timeout=30,
+        {"maxResults": MAX_RESULTS, "labelIds": "INBOX", "q": q},
     )
-    resp.raise_for_status()
-    msg_ids = [m["id"] for m in resp.json().get("messages") or []]
+    msg_ids = [m["id"] for m in data.get("messages") or []]
     logger.info("gmail list returned %d message IDs", len(msg_ids))
 
     for msg_id in msg_ids:
-        msg_resp = requests.get(
-            f"{GMAIL_BASE}/messages/{msg_id}",
-            headers=headers,
-            params={"format": "FULL"},
-            timeout=30,
-        )
-        msg_resp.raise_for_status()
-        msg = msg_resp.json()
+        msg = google_get(f"{GMAIL_BASE}/messages/{msg_id}", {"format": "FULL"})
         header_map = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
         is_unread = "UNREAD" in msg.get("labelIds", [])
         subject = header_map.get("Subject", "")
@@ -96,6 +82,7 @@ def fetch_emails(since: float | None = None) -> str:
     _unread_watch = _unread_watch[-MAX_WATCH:]
 
     # 2. Check watched unread emails for read events
+    headers = {"Authorization": f"Bearer {google_access_token()}"}
     still_unread = []
     for msg_id in _unread_watch:
         msg_resp = requests.get(

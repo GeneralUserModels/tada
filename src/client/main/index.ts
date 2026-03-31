@@ -11,15 +11,13 @@ import * as path from "path";
 import { spawn, ChildProcess } from "child_process";
 import { IPC } from "./ipc";
 import * as api from "./api";
-import * as ws from "./ws";
-import * as recorder from "./recorder";
+import * as sse from "./sse";
+import * as recorder from "./features/recorder";
 import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogleTokenPath, getOutlookTokenPath } from "./paths";
-import * as bootstrap from "./bootstrap";
-import * as onboarding from "./onboarding";
-import { setupConnectorIpc } from "./connector-manager";
-import { initGoogleAuth } from "./google-auth";
-import { initOutlookAuth } from "./outlook-auth";
-import { initAutoUpdater, installNow, installOnNextLaunch, dismissUpdate, checkForUpdates } from "./updater";
+import * as bootstrap from "./features/bootstrap";
+import { runOnboarding } from "./features/onboarding";
+import { setupConnectorIpc } from "./connectors/manager";
+import { initAutoUpdater, installNow, installOnNextLaunch, dismissUpdate, checkForUpdates } from "./features/updater";
 
 let serverProc: ChildProcess | null = null;
 
@@ -209,7 +207,7 @@ function createOverlay() {
 
   // Click-through + visible on all workspaces
   overlayWindow.setIgnoreMouseEvents(true);
-  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
 
   if (isDev()) {
     overlayWindow.loadURL("http://localhost:5173/overlay.html");
@@ -230,7 +228,7 @@ function toggleOverlay() {
     overlayWindow.show();
     // Notify dashboard first (before overlay send which could fail)
     dashboardWindow?.webContents.send(IPC.PREDICTION_REQUESTED);
-    ws.send("request_prediction");
+    api.requestPrediction().catch((err) => console.error("[prediction]", err));
     overlayWindow.webContents.send(IPC.OVERLAY_WAITING);
   }
   overlayVisible = !overlayVisible;
@@ -250,41 +248,19 @@ function resizeOverlay(contentHeight: number) {
   });
 }
 
-// ── WebSocket event forwarding ───────────────────────────────
+// ── SSE event forwarding ─────────────────────────────────────
 
-function setupWsForwarding() {
-  ws.on("prediction", (data) => {
-    dashboardWindow?.webContents.send(IPC.PREDICTION, data);
+function setupSseForwarding() {
+  // Dashboard subscribes to SSE directly — only forward what it can't receive itself.
+
+  sse.on("prediction", (data) => {
+    // Overlay has no direct SSE connection; forward predictions to it via IPC.
     if (overlayVisible && overlayWindow) {
       overlayWindow.webContents.send(IPC.OVERLAY_PREDICTION, data);
     }
   });
 
-  ws.on("score", (data) => {
-    dashboardWindow?.webContents.send(IPC.SCORE, data);
-  });
-
-  ws.on("elbo_score", (data) => {
-    dashboardWindow?.webContents.send(IPC.ELBO_SCORE, data);
-  });
-
-  ws.on("training_step", (data) => {
-    dashboardWindow?.webContents.send(IPC.TRAINING_STEP, data);
-  });
-
-  ws.on("label", (data) => {
-    dashboardWindow?.webContents.send(IPC.LABEL, data);
-  });
-
-  ws.on("status", (data) => {
-    dashboardWindow?.webContents.send(IPC.STATUS_UPDATE, data);
-  });
-
-  ws.on("connectors", (data) => {
-    dashboardWindow?.webContents.send(IPC.CONNECTOR_STATUS_UPDATE, data);
-  });
-
-  ws.on("moment_completed", (data) => {
+  sse.on("moment_completed", (data) => {
     dashboardWindow?.webContents.send(IPC.MOMENT_COMPLETED, data);
   });
 }
@@ -292,19 +268,6 @@ function setupWsForwarding() {
 // ── IPC handlers ─────────────────────────────────────────────
 
 function setupIpc() {
-  ipcMain.handle(IPC.CONTROL_TRAINING_START, () => api.startTraining());
-  ipcMain.handle(IPC.CONTROL_TRAINING_STOP, () => api.stopTraining());
-  ipcMain.handle(IPC.CONTROL_INFERENCE_START, () => api.startInference());
-  ipcMain.handle(IPC.CONTROL_INFERENCE_STOP, () => api.stopInference());
-  ipcMain.handle(IPC.REQUEST_PREDICTION, () => {
-    ws.send("request_prediction");
-  });
-  ipcMain.handle(IPC.GET_STATUS, () => api.getStatus());
-  ipcMain.handle(IPC.GET_SETTINGS, () => api.getSettings());
-  ipcMain.handle(IPC.UPDATE_SETTINGS, (_e, data) => api.updateSettings(data));
-  ipcMain.handle(IPC.GET_TRAINING_HISTORY, () => api.getTrainingHistory());
-  ipcMain.handle(IPC.GET_LABEL_HISTORY, () => api.getLabelHistory());
-
   // Moments
   ipcMain.handle(IPC.MOMENTS_GET_TASKS, () => api.getMomentsTasks());
   ipcMain.handle(IPC.MOMENTS_GET_RESULTS, () => api.getMomentsResults());
@@ -360,35 +323,6 @@ async function runBootstrap(): Promise<void> {
   });
 }
 
-function launchApp(port: number) {
-  createDashboard();
-  createOverlay();
-  setupWsForwarding();
-
-  if (!isDev() && dashboardWindow) {
-    initAutoUpdater(dashboardWindow);
-  }
-
-  startServer(port);
-
-  // Re-send SERVER_READY whenever the WS (re)connects (covers sleep/wake).
-  ws.onConnected(() => {
-    dashboardWindow?.webContents.send(IPC.SERVER_READY);
-  });
-
-  // Re-send SERVER_READY on renderer reload if already connected (covers HMR).
-  dashboardWindow?.webContents.on("did-finish-load", () => {
-    if (ws.isConnected()) {
-      dashboardWindow?.webContents.send(IPC.SERVER_READY);
-    }
-  });
-
-  waitForServer(`http://127.0.0.1:${port}/api/status`).then(async () => {
-    ws.connect();
-  });
-
-  globalShortcut.register("Control+H", toggleOverlay);
-}
 
 // ── App lifecycle ────────────────────────────────────────────
 
@@ -396,22 +330,45 @@ app.whenReady().then(async () => {
   app.dock?.show();
   setupIpc();
   setupConnectorIpc();
-  initGoogleAuth();
-  initOutlookAuth();
 
   // In packaged mode, check if bootstrap is needed
   if (!isDev() && !bootstrap.isReady()) {
     await runBootstrap();
   }
 
-  // Onboarding: collect API keys and model on first launch
-  if (!onboarding.isComplete()) {
-    await onboarding.runOnboarding();
-  }
-
+  // Start server before onboarding so the onboarding window calls Python directly
   const port = await findFreePort();
   api.setServerUrl(`http://127.0.0.1:${port}`);
-  launchApp(port);
+  startServer(port);
+  await waitForServer(`http://127.0.0.1:${port}/api/status`);
+
+  const { complete } = await api.getOnboardingStatus() as { complete: boolean };
+  if (!complete) {
+    await runOnboarding();
+  }
+
+  createDashboard();
+  createOverlay();
+  setupSseForwarding();
+
+  if (!isDev() && dashboardWindow) {
+    initAutoUpdater(dashboardWindow);
+  }
+
+  // Re-send SERVER_READY whenever the SSE (re)connects (covers sleep/wake).
+  sse.onConnected(() => {
+    dashboardWindow?.webContents.send(IPC.SERVER_READY, { url: api.getServerUrl() });
+  });
+
+  // Re-send SERVER_READY on renderer reload if already connected (covers HMR).
+  dashboardWindow?.webContents.on("did-finish-load", () => {
+    if (sse.isConnected()) {
+      dashboardWindow?.webContents.send(IPC.SERVER_READY, { url: api.getServerUrl() });
+    }
+  });
+
+  sse.connect();
+  globalShortcut.register("Control+H", toggleOverlay);
 });
 
 app.on("before-quit", () => {
@@ -421,7 +378,7 @@ app.on("before-quit", () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     recorder.stopRecording();
-    ws.disconnect();
+    sse.disconnect();
     stopServer();
     app.quit();
   }
