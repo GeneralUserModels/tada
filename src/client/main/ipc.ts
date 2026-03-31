@@ -35,7 +35,7 @@ export const IPC = {
   // Moments (Ta-Da)
   MOMENTS_GET_TASKS: "moments:get-tasks",
   MOMENTS_GET_RESULTS: "moments:get-results",
-  MOMENTS_GET_RESULT_HTML: "moments:get-result-html",
+  GET_SERVER_URL: "get:server-url",
   MOMENT_COMPLETED: "moment:completed",
 
   // Auto-update

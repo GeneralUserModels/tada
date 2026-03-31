@@ -15,6 +15,9 @@ from agent.builder import build_agent, DEFAULT_MODEL
 INSTRUCTION_TEMPLATE = """\
 You are analyzing a user's digital activity logs to discover one-off tasks that an AI agent can help with RIGHT NOW.
 
+Your job is to predict WHAT to automate — not HOW. The executing agent is capable and will figure out \
+implementation details on its own.
+
 Unlike recurring automation tasks, these are situational — things the user is currently working on, researching, or planning where the agent can jump in and produce something useful in a single run. Tasks should be informational only (research, summaries, drafts, context) — never instrumental actions that change the user's state.
 
 The AI agent that will execute these tasks can:
@@ -48,6 +51,7 @@ Focus on what the user is CURRENTLY doing or interested in. Look for:
 - **Draft responses** — emails, Slack messages, or PR reviews the user needs to reply to. The agent can prepare draft responses the user can review and send in seconds instead of writing from scratch.
 - **Information the user needs** — based on upcoming calendar events, recent emails, or notifications, what context or preparation would be helpful?
 - **Content the user is consuming** — videos watched, articles read, threads followed. The agent can summarize, extract key points, or find related resources.
+- **Learning opportunities** — things the user is working with but could understand more deeply. The agent can teach concepts, explain techniques, surface relevant papers/talks, or create personalized explainers based on what the user is actually doing right now.
 
 ## Quality bar
 
@@ -55,7 +59,7 @@ Focus on what the user is CURRENTLY doing or interested in. Look for:
 - Each task should produce a concrete artifact (summary, analysis, draft, comparison, report).
 - Tasks should be specific enough that an agent can execute them without further clarification.
 - Do NOT produce fluffy or vague tasks. "Help user be more productive" is garbage. "Research the top 5 restaurants near [location from calendar event]" is good.
-- Do NOT produce tasks that are really recurring automations — those belong in moments.py.
+- Do NOT produce tasks that are really recurring automations — those belong in discover.py.
 
 ## How to work
 
@@ -67,7 +71,7 @@ Use your tools aggressively:
 
 ### Workflow
 
-1. **Plan**: Use TodoWrite to outline your steps.
+1. **Plan**: Use PlanWrite to outline your approach and steps.
 2. **Read & analyze**: Use subagents to read ALL session_*/labels.jsonl files in parallel. Also read email, calendar, notifications, and filesys logs.
 3. **Identify opportunities**: Based on what you find, identify specific one-off tasks where the agent can help right now.
 4. **Write tasks**: Write each task file using write_file.
@@ -89,8 +93,7 @@ usefulness: <1-10, how valuable the output would be>
 
 After the frontmatter, include:
 - What you observed in the logs that motivates this task
-- Detailed instructions for the agent to execute it
-- What the output artifact should look like
+- What the user needs and why — do NOT write implementation instructions for the executing agent, it will figure out how to do it
 
 ## Rules
 - Every task MUST cite specific activity from the logs

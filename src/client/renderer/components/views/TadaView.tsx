@@ -1,40 +1,30 @@
 import { useEffect, useState } from "react";
 import { useAppContext } from "../../context/AppContext";
+import { useMoments } from "../../hooks/useMoments";
+import { getServerUrl } from "../../api/client";
 
 export function TadaView() {
   const { state } = useAppContext();
-  const [results, setResults] = useState<MomentResult[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { results, loading, load } = useMoments();
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
-  const [resultHtml, setResultHtml] = useState<string | null>(null);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (state.connected) {
-      window.powernap.getMomentsResults().then((res) => {
-        setResults(res);
-        setLoading(false);
-      }).catch(() => setLoading(false));
-    }
-  }, [state.connected]);
+    if (state.connected) load();
+  }, [state.connected, load]);
 
-  // Keep in sync with live completions
-  useEffect(() => {
-    setResults(state.momentResults);
-  }, [state.momentResults]);
-
-  const handleCardClick = async (slug: string) => {
-    const html = await window.powernap.getMomentResultHtml(slug);
+  const handleCardClick = (slug: string) => {
     setSelectedSlug(slug);
-    setResultHtml(html);
+    setResultUrl(`${getServerUrl()}/api/moments/results/${slug}/index.html`);
   };
 
-  // Detail view: iframe showing agent-generated HTML via srcdoc
-  if (selectedSlug && resultHtml) {
+  // Detail view: iframe loading agent-generated HTML from server
+  if (selectedSlug && resultUrl) {
     const selected = results.find((r) => r.slug === selectedSlug);
     return (
       <div id="tada-view" className="view active">
         <div className="tada-detail-header">
-          <button className="tada-back-btn" onClick={() => { setSelectedSlug(null); setResultHtml(null); }}>
+          <button className="tada-back-btn" onClick={() => { setSelectedSlug(null); setResultUrl(null); }}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -44,7 +34,7 @@ export function TadaView() {
         </div>
         <div className="tada-detail glass-card">
           <iframe
-            srcDoc={resultHtml}
+            src={resultUrl}
             sandbox="allow-scripts"
             style={{ width: "100%", height: "100%", border: "none", borderRadius: "var(--r-md)" }}
           />
@@ -56,15 +46,6 @@ export function TadaView() {
   // List view
   return (
     <div id="tada-view" className="view active">
-      <section className="glass-card">
-        <div className="card-header">
-          <h2>Ta-Da</h2>
-          <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-            {results.length} completed
-          </span>
-        </div>
-      </section>
-
       {loading ? (
         <div style={{ color: "var(--text-tertiary)", fontSize: 12, padding: 12 }}>Loading...</div>
       ) : results.length === 0 ? (
@@ -76,13 +57,13 @@ export function TadaView() {
           <section key={r.slug} className="glass-card tada-card" onClick={() => handleCardClick(r.slug)}>
             <div className="tada-card-header">
               <h3 className="tada-card-title">{r.title}</h3>
-              <span className="tada-card-badge">{r.frequency}</span>
+            </div>
+            <div className="tada-card-schedule">
+              <span className="tada-card-frequency">{r.frequency}</span>
+              <span className="tada-card-time">{r.schedule}</span>
+              <span className="tada-card-date">{new Date(r.completed_at).toLocaleDateString()}</span>
             </div>
             <p className="tada-card-desc">{r.description}</p>
-            <div className="tada-card-meta">
-              <span>{r.schedule}</span>
-              <span>{new Date(r.completed_at).toLocaleDateString()}</span>
-            </div>
           </section>
         ))
       )}

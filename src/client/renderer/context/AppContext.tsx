@@ -31,7 +31,6 @@ export interface AppState {
   rewardHistory: RewardPoint[];
   elboScore: string | null;
   historyItems: HistoryItem[];
-  momentResults: MomentResult[];
   settings: Record<string, unknown>;
   updateVersion: string | null;
 }
@@ -51,9 +50,7 @@ type AppAction =
   | { type: "SEED_LABEL_HISTORY"; history: { text: string; timestamp: number }[] }
   | { type: "LOAD_SETTINGS"; settings: Record<string, unknown> }
   | { type: "UPDATE_DOWNLOADED"; version: string }
-  | { type: "UPDATE_DISMISSED" }
-  | { type: "LOAD_MOMENTS"; results: MomentResult[] }
-  | { type: "MOMENT_COMPLETED"; result: MomentResult };
+  | { type: "UPDATE_DISMISSED" };
 
 let historyCounter = 0;
 
@@ -78,7 +75,6 @@ const initialState: AppState = {
   rewardHistory: [],
   elboScore: null,
   historyItems: [],
-  momentResults: [],
   settings: {},
   updateVersion: null,
 };
@@ -189,12 +185,6 @@ function reducer(state: AppState, action: AppAction): AppState {
     case "UPDATE_DISMISSED":
       return { ...state, updateVersion: null };
 
-    case "LOAD_MOMENTS":
-      return { ...state, momentResults: action.results };
-
-    case "MOMENT_COMPLETED":
-      return { ...state, momentResults: [action.result, ...state.momentResults] };
-
     default:
       return state;
   }
@@ -267,10 +257,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // IPC events — native OS operations that can only come from main
     window.powernap.onPredictionRequested(() => {
       dispatch({ type: "PREDICTION_REQUESTED" });
-    });
-
-    window.powernap.onMomentCompleted((data) => {
-      dispatch({ type: "MOMENT_COMPLETED", result: data as MomentResult });
     });
 
     window.powernap.onUpdateDownloaded((data) => {

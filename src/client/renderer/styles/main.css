@@ -327,6 +327,8 @@ body {
   overflow-x: hidden;
   padding: 24px 24px 28px;
   user-select: none;
+  display: flex;
+  flex-direction: column;
 }
 
 #content::-webkit-scrollbar {
@@ -347,6 +349,8 @@ body {
   display: none;
   flex-direction: column;
   gap: 16px;
+  flex: 1;
+  min-height: 0;
   animation: fadeSlideIn 0.25s ease;
 }
 
@@ -859,6 +863,51 @@ button, input, select, textarea, canvas, a, label,
   font-size: 12.5px;
 }
 
+/* ── Toggle Switch ────────────────────────────────────────── */
+
+.toggle-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-switch-slider {
+  position: absolute;
+  inset: 0;
+  background: rgba(132, 177, 121, 0.15);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.toggle-switch-slider::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 14px;
+  height: 14px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.toggle-switch input:checked + .toggle-switch-slider {
+  background: var(--sage);
+}
+
+.toggle-switch input:checked + .toggle-switch-slider::before {
+  transform: translateX(16px);
+}
+
 /* ── Collapsible section ───────────────────────────────────── */
 
 .collapsible-header {
@@ -936,29 +985,40 @@ button, input, select, textarea, canvas, a, label,
   letter-spacing: -0.01em;
 }
 
-.tada-card-badge {
-  font-size: 9px;
+.tada-card-schedule {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tada-card-frequency {
+  font-size: 11px;
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 20px;
   color: var(--sage);
   background: rgba(var(--sage-rgb), 0.12);
+}
+
+.tada-card-time {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tada-card-date {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-left: auto;
 }
 
 .tada-card-desc {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.45;
-  margin-bottom: 10px;
-}
-
-.tada-card-meta {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10.5px;
-  color: var(--text-tertiary);
 }
 
 .tada-detail-header {

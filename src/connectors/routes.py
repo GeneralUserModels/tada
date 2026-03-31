@@ -70,7 +70,7 @@ async def get_label_history(request: Request, limit: int = 50):
     for jsonl_path in log_dir.glob("*/filtered.jsonl"):
         for line in jsonl_path.read_text().splitlines():
             entry = json.loads(line)
-            text = entry["text"] if entry["prediction_event"] else f"[{entry['source_name']}] {entry['text']}"
+            text = entry["text"] if entry.get("prediction_event") else f"[{entry.get('source_name', '')}] {entry['text']}"
             entries.append({"text": text, "timestamp": entry["timestamp"]})
     entries.sort(key=lambda e: e["timestamp"])
     return entries[-limit:]

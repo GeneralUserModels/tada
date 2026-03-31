@@ -38,6 +38,11 @@ export const disconnectGoogle = () => request("DELETE", "/api/auth/google");
 export const startOutlookAuth = () => request("POST", "/api/auth/outlook/start");
 export const disconnectOutlook = () => request("DELETE", "/api/auth/outlook");
 
+// ── Moments ─────────────────────────────────────────────
+export const getMomentsTasks = () => request("GET", "/api/moments/tasks");
+export const getMomentsResults = () =>
+  request("GET", "/api/moments/results") as Promise<MomentResult[]>;
+
 // ── Onboarding ───────────────────────────────────────────────
 export const getOnboardingStatus = () =>
   request("GET", "/api/onboarding/status") as Promise<{ complete: boolean }>;

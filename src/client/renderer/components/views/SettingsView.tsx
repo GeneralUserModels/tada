@@ -6,7 +6,7 @@ import { TrainingTile, InferenceTile } from "../dashboard/PipelineTile";
 import { PredictionCard } from "../dashboard/PredictionCard";
 import { RewardsChart } from "../dashboard/RewardsChart";
 import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
-import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
+import { ModelDropdown, LLM_MODELS, TINKER_MODELS, TADA_MODELS } from "../shared/ModelDropdown";
 
 // All keys used across all sections
 function allKeys(): string[] {
@@ -21,6 +21,8 @@ function allKeys(): string[] {
   keys.add("tinker_api_key");
   keys.add("hf_token");
   keys.add("wandb_api_key");
+  keys.add("moments_agent_model");
+  keys.add("moments_agent_model_api_key");
   return Array.from(keys);
 }
 
@@ -114,7 +116,59 @@ export function SettingsView() {
             </div>
           </div>
 
+          <div className="model-row">
+            <span className="model-row-label">Ta-Da</span>
+            <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={state.settings.moments_enabled !== false}
+                style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
+                onChange={async () => {
+                  const enabled = state.settings.moments_enabled === false;
+                  await updateSettings({ moments_enabled: enabled } as Record<string, unknown>);
+                  dispatch({ type: "LOAD_SETTINGS", settings: { ...state.settings, moments_enabled: enabled } });
+                }}
+              />
+              <span style={{
+                position: "absolute", inset: 0,
+                background: state.settings.moments_enabled !== false ? "#84B179" : "rgba(132,177,121,0.15)",
+                borderRadius: 20, transition: "background 0.2s",
+              }} />
+              <span style={{
+                position: "absolute", height: 14, width: 14, left: 3, bottom: 3,
+                background: "#fff", borderRadius: "50%", transition: "transform 0.2s",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                transform: state.settings.moments_enabled !== false ? "translateX(16px)" : "translateX(0)",
+              }} />
+            </label>
+          </div>
+
           <AdvancedLLMSection values={values} setValues={setValues}>
+            {/* Ta-Da LM */}
+            <div className="model-row">
+              <span className="model-row-label">Ta-Da LM</span>
+              <div className="model-row-fields">
+                <label className="field">
+                  <span>Model</span>
+                  <ModelDropdown
+                    value={values["moments_agent_model"] ?? ""}
+                    onChange={(val) => setValues(v => ({ ...v, moments_agent_model: val }))}
+                    options={TADA_MODELS}
+                    placeholder="Select a model"
+                  />
+                </label>
+                <label className="field">
+                  <span>API Key</span>
+                  <input
+                    type="text"
+                    placeholder="Leave blank to use shared key"
+                    value={values["moments_agent_model_api_key"] ?? ""}
+                    onChange={(e) => setValues(v => ({ ...v, moments_agent_model_api_key: e.target.value }))}
+                  />
+                </label>
+              </div>
+            </div>
+
             {/* User model type */}
             <div className="model-row" style={{ marginTop: 10 }}>
               <span className="model-row-label">User Model</span>
