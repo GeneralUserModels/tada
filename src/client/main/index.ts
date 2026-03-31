@@ -271,7 +271,7 @@ function setupIpc() {
   // Moments
   ipcMain.handle(IPC.MOMENTS_GET_TASKS, () => api.getMomentsTasks());
   ipcMain.handle(IPC.MOMENTS_GET_RESULTS, () => api.getMomentsResults());
-  ipcMain.handle(IPC.MOMENTS_GET_RESULT_HTML, (_e, slug: string) => api.getMomentResultHtml(slug));
+  ipcMain.handle(IPC.GET_SERVER_URL, () => api.getServerUrl());
 
   // Overlay resize
   ipcMain.on("overlay:resize", (_e, height: number) => {

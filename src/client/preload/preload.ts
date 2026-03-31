@@ -62,7 +62,7 @@ contextBridge.exposeInMainWorld("powernap", {
   // Moments (Ta-Da)
   getMomentsTasks: () => ipcRenderer.invoke("moments:get-tasks"),
   getMomentsResults: () => ipcRenderer.invoke("moments:get-results"),
-  getMomentResultHtml: (slug: string) => ipcRenderer.invoke("moments:get-result-html", slug),
+  getServerUrl: () => ipcRenderer.invoke("get:server-url"),
   onMomentCompleted: (cb: (data: unknown) => void) =>
     ipcRenderer.on("moment:completed", (_e, data) => cb(data)),
 

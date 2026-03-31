@@ -11,7 +11,6 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from server.services.moments_executor import execute_moment, parse_frontmatter
-from server.ws.handler import broadcast
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +125,11 @@ def should_run(slug: str, frequency: str, schedule: str, run_history: dict[str, 
 async def run_moments_scheduler(state) -> None:
     """Background task: scan logs-tada/ and execute due moments."""
     logger.info("Moments scheduler started")
+
+    # Initialize sandbox in the event loop (signal handlers require main thread)
+    from agent.builder import _ensure_sandbox_async
+    await _ensure_sandbox_async()
+
     executor_lock = state.moments_executor_lock
     model = state.config.moments_agent_model
     logs_dir = str(Path(state.config.log_dir).resolve())
@@ -133,6 +137,9 @@ async def run_moments_scheduler(state) -> None:
     while True:
         try:
             await asyncio.sleep(SCAN_INTERVAL)
+
+            if not state.config.moments_enabled:
+                continue
 
             tada_dir = Path(state.config.tada_dir).resolve()
             if not tada_dir.exists():
@@ -168,7 +175,7 @@ async def run_moments_scheduler(state) -> None:
                     if success:
                         meta_path = Path(output_dir) / "meta.json"
                         meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-                        await broadcast(state, "moment_completed", {
+                        await state.broadcast("moment_completed", {
                             "slug": slug,
                             "title": meta.get("title", fm.get("title", slug)),
                             "description": meta.get("description", fm.get("description", "")),

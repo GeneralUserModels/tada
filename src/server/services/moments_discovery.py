@@ -20,7 +20,7 @@ class MomentsDiscovery:
 
     def run(self) -> str:
         """Analyze logs and write task files. Blocking."""
-        from apps.moments.moments import run as moments_run
+        from apps.moments.discover import run as moments_run
         return moments_run(self.logs_dir, model=self.model)
 
 
@@ -46,8 +46,8 @@ class TaskFilter:
 
     def run(self) -> str:
         """Filter tasks through tada. Blocking."""
-        from apps.moments.tada import run as tada_run
-        return tada_run(self.logs_dir, model=self.model)
+        from apps.moments.filter import run as filter_run
+        return filter_run(self.logs_dir, model=self.model)
 
 
 async def run_moments_discovery(state) -> None:
@@ -58,6 +58,9 @@ async def run_moments_discovery(state) -> None:
         try:
             interval = getattr(state.config, "moments_discovery_interval", DEFAULT_INTERVAL)
             await asyncio.sleep(interval)
+
+            if not state.config.moments_enabled:
+                continue
 
             logs_dir = str(Path(state.config.log_dir).resolve())
             model = state.config.moments_agent_model

@@ -12,6 +12,14 @@ export const LLM_MODELS: ModelOption[] = [
   { value: "gemini/gemini-3-flash-preview",       label: "Gemini Flash 3.0 Preview" },
 ];
 
+export const TADA_MODELS: ModelOption[] = [
+  { value: "gemini/gemini-3.1-flash-preview",       label: "Gemini Flash 3.1 Preview" },
+  { value: "gemini/gemini-3-flash-preview",          label: "Gemini Flash 3.0 Preview" },
+  { value: "anthropic/claude-haiku-4-5-20251001",    label: "Claude Haiku 4.5" },
+  { value: "anthropic/claude-sonnet-4-6",            label: "Claude Sonnet 4.6" },
+  { value: "anthropic/claude-opus-4-6",              label: "Claude Opus 4.6" },
+];
+
 export const TINKER_MODELS: ModelOption[] = [
   { value: "Qwen/Qwen3-VL-30B-A3B-Instruct", label: "Qwen3-VL-30B-A3B" },
 ];

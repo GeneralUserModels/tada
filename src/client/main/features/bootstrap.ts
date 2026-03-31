@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from "path";
 import * as https from "https";
-import { getDataDir, getUvPath, getRgPath, getPythonPath, getPythonSrcDir } from "./paths";
+import { getDataDir, getUvPath, getRgPath, getPythonPath, getPythonSrcDir } from "../paths";
 
 type ProgressCallback = (msg: string, pct: number) => void;
 type LogCallback = (line: string) => void;

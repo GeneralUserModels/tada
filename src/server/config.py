@@ -21,7 +21,7 @@ _PERSISTED_FIELDS = {
     "model_type", "prompted_model",
     "disabled_connectors", "connector_errors", "mcp_connectors",
     "onboarding_complete",
-    "tada_dir", "moments_agent_model", "moments_discovery_interval",
+    "tada_dir", "moments_agent_model", "moments_agent_model_api_key", "moments_discovery_interval", "moments_enabled",
 }
 
 
@@ -125,8 +125,10 @@ class ServerConfig(BaseModel):
 
     # Moments
     tada_dir: str = Field(default_factory=lambda: os.getenv("POWERNAP_TADA_DIR", "./logs-tada"))
-    moments_agent_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_AGENT_MODEL", "anthropic/claude-sonnet-4-20250514"))
+    moments_agent_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_AGENT_MODEL", "gemini/gemini-3.1-flash-preview"))
     moments_discovery_interval: int = 43200  # 12 hours
+    moments_agent_model_api_key: str = ""
+    moments_enabled: bool = True
 
     # Connectors: names of connectors that are disabled (paused)
     disabled_connectors: list[str] = Field(default_factory=list)

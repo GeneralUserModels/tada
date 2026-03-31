@@ -14,9 +14,7 @@ function loadConfig(): Record<string, string> {
 }
 
 const _config = loadConfig();
-
 export const GOOGLE_CLIENT_ID = _config.google_client_id ?? "892882352791-i0nh6262vjj6lvg26h94j2shfmodbkfu.apps.googleusercontent.com";
 export const GOOGLE_CLIENT_SECRET = _config.google_client_secret ?? "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";
 export const SUPABASE_URL = _config.supabase_url ?? "https://gicxeybsowfhdanooxdc.supabase.co";
-export const SUPABASE_ANON_KEY = _config.supabase_anon_key ?? "sb_publishable_YRwmpMcJTFAlz7tfiMbwYw_pMfFmx4X";
-export const MICROSOFT_CLIENT_ID = _config.microsoft_client_id ?? "";
+export const SUPABASE_ANON_KEY = _config.supabase_anon_key ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdpY3hleWJzb3dmaGRhbm9veGRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNjU4ODEsImV4cCI6MjA4ODk0MTg4MX0.MW3S4rCAfQYiTuYvM1MJPL23mr191MPsZe8f6oFMM0I";

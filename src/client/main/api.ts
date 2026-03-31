@@ -14,3 +14,7 @@ export const getMomentsTasks = () => request("GET", "/api/moments/tasks");
 export const getMomentsResults = () => request("GET", "/api/moments/results");
 export const getMomentResultHtml = (slug: string) =>
   fetch(`${getServerUrl()}/api/moments/results/${slug}/index.html`).then((r) => r.text());
+
+// ── Recordings ───────────────────────────────────────────────
+export const postAggregation = (data: unknown) =>
+  request("POST", "/api/recordings/aggregation", data);

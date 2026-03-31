@@ -103,7 +103,7 @@ interface PowerNapAPI {
   // Moments (Ta-Da)
   getMomentsTasks: () => Promise<MomentTask[]>;
   getMomentsResults: () => Promise<MomentResult[]>;
-  getMomentResultHtml: (slug: string) => Promise<string>;
+  getServerUrl: () => Promise<string>;
   onMomentCompleted: (cb: (data: MomentResult) => void) => void;
 
   // Auto-update

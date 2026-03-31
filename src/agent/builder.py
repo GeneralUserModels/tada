@@ -33,10 +33,11 @@ You can read any file on the system. You can write files to:
 
 You can browse the web using the browser_navigate, browser_read_text, browser_click, browser_type, and browser_screenshot tools. These use the user's Chrome cookies, so you can access authenticated pages (Twitter, Gmail, etc.). Use browser_read_text with a CSS selector to narrow down content on large pages.
 
-Before doing any work, always plan first:
-1. Read relevant files to understand the current state
-2. Use TodoWrite to break the task into steps and track progress
-3. Only then start making changes, updating todos as you go
+Plan iteratively:
+- Start by understanding the task, then use PlanWrite to outline your approach and steps.
+- As you work, keep your plan current. Use PlanUpdate to add new steps you discover, remove steps that become unnecessary, and mark steps complete.
+- If your approach changes significantly, use PlanWrite to revise the summary.
+- The plan is a living document — update it as you learn more.
 
 Use the task tool to spawn subagents for isolated exploration.
 Be concise. Use tools proactively.
@@ -53,6 +54,17 @@ def _ensure_sandbox():
         network={},
         filesystem={"allow_write": [POWERNAP_DATA, POWERNAP_REPO]},
     )))
+    _sandbox_initialized = True
+
+
+async def _ensure_sandbox_async():
+    global _sandbox_initialized
+    if _sandbox_initialized:
+        return
+    await SandboxManager.initialize(SandboxRuntimeConfig(
+        network={},
+        filesystem={"allow_write": [POWERNAP_DATA, POWERNAP_REPO]},
+    ))
     _sandbox_initialized = True
 
 
@@ -76,7 +88,7 @@ def _make_child_agent(model: str, system_prompt: str):
 def build_agent(model: str = DEFAULT_MODEL):
     """Build a fully configured Agent with all tools. Initializes sandbox on first call."""
     _ensure_sandbox()
-    compact_tool = CompactTool(TRANSCRIPT_DIR, _make_summarizer(model))
+    compact_tool = CompactTool(TRANSCRIPT_DIR, _make_summarizer(model), model=model)
     subagent_tool = SubAgentTool(_make_child_agent(model, SYSTEM_PROMPT), ALL_TOOLS)
     all_tools = ALL_TOOLS + [compact_tool, subagent_tool]
     agent = Agent(
