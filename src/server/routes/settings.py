@@ -1,9 +1,13 @@
 """GET/PUT /api/settings — API keys and model config."""
 
+import logging
 import os
+import sys
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["settings"])
 
@@ -27,7 +31,7 @@ class SettingsUpdate(BaseModel):
     past_len: int | None = None
     future_len: int | None = None
     loss_mode: str | None = None
-    tabracadabra_hold_threshold: float | None = None
+    tabracadabra_enabled: bool | None = None
     tabracadabra_model: str | None = None
     tabracadabra_api_key: str | None = None
 
@@ -55,7 +59,7 @@ async def get_settings(request: Request):
         "past_len": cfg.past_len,
         "future_len": cfg.future_len,
         "loss_mode": cfg.loss_mode,
-        "tabracadabra_hold_threshold": cfg.tabracadabra_hold_threshold,
+        "tabracadabra_enabled": cfg.tabracadabra_enabled,
         "tabracadabra_model": cfg.tabracadabra_model,
         "tabracadabra_api_key": cfg.tabracadabra_api_key,
     }
@@ -82,4 +86,34 @@ async def update_settings(update: SettingsUpdate, request: Request):
             os.environ[env_map[field_name]] = value
 
     cfg.save()
+
+    # Live stop/start tabracadabra service when toggled
+    if "tabracadabra_enabled" in updated and sys.platform == "darwin":
+        if cfg.tabracadabra_enabled:
+            # Start if not already running
+            if state.tabracadabra_service is None:
+                try:
+                    from apps.tabracadabra.main import TabracadabraService, load_prompt
+
+                    tab_config = {
+                        "model": cfg.tabracadabra_model,
+                        "api_key": cfg.tabracadabra_api_key or cfg.default_llm_api_key,
+                        "powernap_base_url": f"http://localhost:{os.environ.get('POWERNAP_PORT', '8000')}",
+                    }
+                    service = TabracadabraService(config=tab_config, prompt_text=load_prompt())
+                    service.start()
+                    state.tabracadabra_service = service
+                    logger.info("Tabracadabra service started via settings")
+                except Exception:
+                    logger.warning("Failed to start Tabracadabra service", exc_info=True)
+        else:
+            # Stop if running
+            if state.tabracadabra_service is not None:
+                try:
+                    state.tabracadabra_service.stop()
+                    logger.info("Tabracadabra service stopped via settings")
+                except Exception:
+                    logger.warning("Error stopping Tabracadabra service", exc_info=True)
+                state.tabracadabra_service = None
+
     return {"status": "ok", "updated": updated}
