@@ -12,9 +12,9 @@ dependencies = [
     "accelerate",
     "datasets",
     "fastapi",
-    "litellm==1.81.3",
+    "litellm==1.82.6",
     "numpy",
-    "napsack",
+    "napsack>=0.1.2",
     "pandas",
     "peft",
     "pillow",
@@ -36,6 +36,10 @@ dependencies = [
     "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",
     "pyobjc-framework-ApplicationServices>=10.0; sys_platform == 'darwin'",
     "mss>=9.0",
+    "tenacity",
+    "sandbox-runtime",
+    "playwright",
+    "pycookiecheat",
 ]
 
 [tool.uv.sources]
