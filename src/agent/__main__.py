@@ -13,12 +13,23 @@ from dotenv import load_dotenv
 import litellm
 from sandbox_runtime import SandboxManager, SandboxRuntimeConfig
 
+from server.config import ServerConfig
+
 from .agent import Agent
 from .tools import ALL_TOOLS, TOOL_MAP, _bg_manager, _task_manager
 from .tools.compact import CompactTool
 from .tools.subagent import SubAgentTool
 
 load_dotenv()
+
+# Load the same persisted config (powernap-config.json) as the main server.
+# This sets API keys as env vars so litellm and other tools can pick them up.
+_config = ServerConfig()
+_config.load_persisted()
+
+# Set the agent API key so litellm can pick it up
+if _config.agent_api_key:
+    os.environ.setdefault("ANTHROPIC_API_KEY", _config.agent_api_key)
 
 POWERNAP_DATA = str(Path.home() / "Library" / "Application Support" / "PowerNap")
 POWERNAP_REPO = str(Path.home() / "Documents" / "NAP" / "powernap")
@@ -28,7 +39,7 @@ asyncio.run(SandboxManager.initialize(SandboxRuntimeConfig(
     filesystem={"allow_write": [POWERNAP_DATA, POWERNAP_REPO]},
 )))
 
-DEFAULT_MODEL = "anthropic/claude-sonnet-4-20250514"
+DEFAULT_MODEL = _config.agent_model
 TRANSCRIPT_DIR = Path("/tmp/powernap_transcripts")
 
 SYSTEM_PROMPT = f"""\
