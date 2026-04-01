@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -14,6 +16,8 @@ from server.routes.onboarding import router as onboarding_router
 from connectors.routes import router as connectors_router
 from user_models.routes import router as user_models_router
 from connectors.service import run_context_logging_service
+from user_models.training import init_model, run_training_service
+from apps.tabracadabra.prediction_loop import run_prediction_loop
 
 logger = logging.getLogger(__name__)
 
@@ -39,20 +43,52 @@ async def lifespan(app: FastAPI):
     state.google_refresh_task = asyncio.create_task(refresh_google_tokens(state.config))
     state.outlook_refresh_task = asyncio.create_task(refresh_outlook_tokens(state.config))
 
+    # Initialize predictor (and trainer for powernap) before starting loops
+    await init_model(state)
+    state.model.training_task = asyncio.create_task(run_training_service(state))
+    logger.info("Training service started (%s mode)", state.config.model_type)
+
+    # Background prediction loop (keeps tabracadabra context cache warm)
+    state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
+
+    # Start Tabracadabra event tap service (macOS only)
+    if sys.platform == "darwin" and state.config.tabracadabra_enabled:
+        try:
+            from apps.tabracadabra.main import TabracadabraService, load_prompt
+
+            config = {
+                "model": state.config.tabracadabra_model,
+                "api_key": state.config.tabracadabra_api_key or state.config.default_llm_api_key,
+                "powernap_base_url": f"http://localhost:{os.environ.get('POWERNAP_PORT', '8000')}",
+            }
+            service = TabracadabraService(config=config, prompt_text=load_prompt())
+            service.start()
+            state.tabracadabra_service = service
+        except Exception:
+            logger.warning("Tabracadabra service failed to start", exc_info=True)
+
     app.state.server = state
     logger.info("PowerNap server started")
     yield
 
-    # Graceful shutdown: cancel running services
+    # Graceful shutdown
     state = app.state.server
+
+    # Stop Tabracadabra first (synchronous, quick)
+    if state.tabracadabra_service is not None:
+        try:
+            state.tabracadabra_service.stop()
+        except Exception:
+            logger.warning("Error stopping Tabracadabra service", exc_info=True)
+
     state.model.training_resumed.clear()
-    state.model.inference_active = False
 
     all_tasks = [
         state.model.training_task,
         state.context_logging_task,
         state.google_refresh_task,
         state.outlook_refresh_task,
+        state.prediction_loop_task,
     ]
     for task in all_tasks:
         if task and not task.done():

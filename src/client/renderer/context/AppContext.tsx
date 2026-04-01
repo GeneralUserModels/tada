@@ -4,7 +4,7 @@ import * as sse from "../api/sse";
 
 // ── Types ─────────────────────────────────────────────────────
 
-export type ActiveView = "connectors" | "settings";
+export type ActiveView = "connectors" | "usermodel" | "settings";
 
 export interface HistoryItem {
   id: number;

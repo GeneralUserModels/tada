@@ -6,8 +6,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-_default_config_path = str(Path.home() / ".config" / "powernap" / "powernap-config.json")
-CONFIG_PATH = Path(os.environ.get("POWERNAP_CONFIG_PATH", _default_config_path))
+CONFIG_PATH = Path(os.environ.get("POWERNAP_CONFIG_PATH", "powernap-config.json"))
 
 # Fields that are user-settable via the API and persisted to disk.
 # CLI-arg fields (log_dir, token paths, etc.) are excluded — they always win.
@@ -21,6 +20,7 @@ _PERSISTED_FIELDS = {
     "model_type", "prompted_model",
     "disabled_connectors", "connector_errors", "mcp_connectors",
     "onboarding_complete",
+    "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
 }
 
 
@@ -91,7 +91,7 @@ class ServerConfig(BaseModel):
     num_generations: int = 4
     learning_rate: float = 5e-5
     max_completion_length: int = 512
-    num_imgs_per_sample: int | None = None
+    num_imgs_per_sample: int | None = 3
     loss_mode: str = Field(default_factory=lambda: os.getenv("POWERNAP_LOSS_MODE", "llm_judge"))
     eval_with_llm_judge: bool = False
     batch_size: int = 8
@@ -100,6 +100,11 @@ class ServerConfig(BaseModel):
 
     # Inference
     predict_every_n_seconds: int = 10
+
+    # Tabracadabra
+    tabracadabra_enabled: bool = True
+    tabracadabra_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_PROMPTED_MODEL", "gemini/gemini-3-flash-preview"))
+    tabracadabra_api_key: str = ""
 
     # Logging
     log_dir: str = Field(default_factory=lambda: os.getenv("POWERNAP_LOG_DIR", "./logs"))

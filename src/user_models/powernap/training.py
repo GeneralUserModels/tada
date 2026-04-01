@@ -101,7 +101,6 @@ async def run_training_loop(state):
             await state.broadcast("status", {
                 "recording_active": screen is not None and not screen.paused,
                 "training_active": state.model.training_active,
-                "inference_active": state.model.inference_active,
                 "labels_processed": data_manager.labels_processed,
             })
 

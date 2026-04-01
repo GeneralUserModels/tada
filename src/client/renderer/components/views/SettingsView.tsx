@@ -1,12 +1,9 @@
 import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
-import { useTraining } from "../../hooks/useTraining";
-import { updateSettings, startInference, requestPrediction } from "../../api/client";
-import { TrainingTile, InferenceTile } from "../dashboard/PipelineTile";
-import { PredictionCard } from "../dashboard/PredictionCard";
-import { RewardsChart } from "../dashboard/RewardsChart";
+import { updateSettings } from "../../api/client";
 import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
+
 
 // All keys used across all sections
 function allKeys(): string[] {
@@ -21,15 +18,14 @@ function allKeys(): string[] {
   keys.add("tinker_api_key");
   keys.add("hf_token");
   keys.add("wandb_api_key");
+  keys.add("tabracadabra_enabled");
   return Array.from(keys);
 }
 
 
 export function SettingsView() {
-  const { state, dispatch } = useAppContext();
+  const { state } = useAppContext();
   const [values, setValues] = useState<Record<string, string>>({});
-  const [userModelOpen, setUserModelOpen] = useState(false);
-  const training = useTraining();
 
   useEffect(() => {
     const populated: Record<string, string> = {};
@@ -42,10 +38,6 @@ export function SettingsView() {
     setValues(populated);
   }, [state.settings]);
 
-  useEffect(() => {
-    training.syncFromServer(state.trainingActive);
-  }, [state.trainingActive]);
-
   const handleSave = async () => {
     const data: Record<string, unknown> = {};
     for (const key of allKeys()) {
@@ -54,29 +46,15 @@ export function SettingsView() {
         data[key] = val;
       }
     }
+    // tabracadabra_enabled is a boolean
+    data["tabracadabra_enabled"] = values["tabracadabra_enabled"] === "true";
     if (Object.keys(data).length > 0) {
       await updateSettings(data);
     }
   };
 
   const handleLLMModelChange = (val: string) => {
-    setValues(v => ({ ...v, reward_llm: val, label_model: val, filter_model: val }));
-  };
-
-  const handleStartTraining = async () => {
-    dispatch({ type: "SET_TRAINING_ACTIVE", active: true });
-    await training.startTraining();
-  };
-
-  const handleStopTraining = async () => {
-    await training.stopTraining();
-    dispatch({ type: "SET_TRAINING_ACTIVE", active: false });
-  };
-
-  const handleGenerate = async () => {
-    dispatch({ type: "PREDICTION_REQUESTED" });
-    await startInference();
-    await requestPrediction();
+    setValues(v => ({ ...v, reward_llm: val, label_model: val, filter_model: val, tabracadabra_model: val }));
   };
 
   const modelType = values["model_type"] ?? "prompted";
@@ -111,6 +89,37 @@ export function SettingsView() {
                   onChange={(e) => setValues(v => ({ ...v, default_llm_api_key: e.target.value }))}
                 />
               </label>
+            </div>
+          </div>
+
+          <div className="model-row" style={{ marginTop: 10 }}>
+            <span className="model-row-label">Tabracadabra</span>
+            <div style={{ display: "flex", gap: 4, background: "rgba(0,0,0,0.05)", borderRadius: 8, padding: 3, width: "fit-content" }}>
+              {(["true", "false"] as const).map((val) => {
+                const active = (values["tabracadabra_enabled"] ?? "true") === val;
+                return (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setValues(v => ({ ...v, tabracadabra_enabled: val }))}
+                    style={{
+                      padding: "5px 14px",
+                      borderRadius: 6,
+                      border: "none",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      fontWeight: active ? 600 : 400,
+                      background: active ? "white" : "transparent",
+                      color: active ? "var(--text)" : "var(--text-tertiary)",
+                      boxShadow: active ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {val === "true" ? "Enabled" : "Disabled"}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -194,60 +203,7 @@ export function SettingsView() {
         </div>
       </section>
 
-      <section className="glass-card">
-        <button
-          className="collapsible-header"
-          onClick={() => setUserModelOpen((o) => !o)}
-          aria-expanded={userModelOpen}
-        >
-          <h2>User Model</h2>
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            style={{ transform: userModelOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
-          >
-            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-
-        {userModelOpen && (
-          <div className="training-section">
-
-            {/* Stats + controls */}
-            <div className="status-bar" style={{ marginBottom: "16px" }}>
-              <div className="stat-pill">
-                <span className="stat-label">Labels</span>
-                <span className="stat-value">{state.labels}</span>
-              </div>
-              {isTinker && (
-                <div className="stat-pill">
-                  <span className="stat-label">Step</span>
-                  <span className="stat-value">{state.step}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="controls-grid" style={{ marginBottom: "16px" }}>
-              {isTinker && (
-                <TrainingTile
-                  state={training.state}
-                  onStart={handleStartTraining}
-                  onStop={handleStopTraining}
-                />
-              )}
-              <InferenceTile
-                generating={state.generating}
-                onGenerate={handleGenerate}
-              />
-              <PredictionCard prediction={state.prediction} />
-              {isTinker && <RewardsChart data={state.rewardHistory} elboScore={state.elboScore} />}
-            </div>
-
-          </div>
-        )}
-      </section>
     </div>
   );
 }
+
