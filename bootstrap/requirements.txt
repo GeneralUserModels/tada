@@ -99,7 +99,7 @@ kiwisolver==1.4.9
 latex2sympy2-extended==1.11.0
 lazy-loader==0.4
 linkify-it-py==2.0.3
-litellm==1.81.3
+litellm==1.82.6
 lxml==6.0.2
 markdown-it-py==4.0.0
 markupsafe==3.0.3
@@ -130,6 +130,7 @@ pathlib-abc==0.5.2
 peft==0.18.1
 pexpect==4.9.0
 pillow==12.1.0
+playwright==1.58.0
 platformdirs==4.5.1
 plotly==6.5.2
 pluggy==1.6.0
@@ -144,6 +145,7 @@ pure-eval==0.2.3
 pyarrow==23.0.0
 pyasn1==0.6.2
 pyasn1-modules==0.4.2
+pycookiecheat==0.8.0
 pycparser==3.0
 pycryptodomex==3.23.0
 pydantic==2.12.5

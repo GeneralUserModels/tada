@@ -36,6 +36,12 @@ export function getPythonSrcDir(): string {
     : path.join(process.resourcesPath!, "python-src");
 }
 
+export function getRgPath(): string {
+  return isDev()
+    ? "rg"
+    : path.join(getDataDir(), "rg");
+}
+
 export function getOutlookTokenPath(): string {
   return path.join(os.homedir(), ".config", "powernap", "outlook-token.json");
 }
