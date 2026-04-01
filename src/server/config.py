@@ -21,6 +21,7 @@ _PERSISTED_FIELDS = {
     "disabled_connectors", "connector_errors", "mcp_connectors",
     "onboarding_complete",
     "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
+    "agent_model", "agent_api_key",
 }
 
 
@@ -105,6 +106,10 @@ class ServerConfig(BaseModel):
     tabracadabra_enabled: bool = True
     tabracadabra_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_PROMPTED_MODEL", "gemini/gemini-3-flash-preview"))
     tabracadabra_api_key: str = ""
+
+    # Agent
+    agent_model: str = "anthropic/claude-sonnet-4-6"
+    agent_api_key: str = ""
 
     # Logging
     log_dir: str = Field(default_factory=lambda: os.getenv("POWERNAP_LOG_DIR", "./logs"))
