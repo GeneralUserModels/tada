@@ -3,7 +3,7 @@ import { useAppContext } from "../../context/AppContext";
 import { updateSettings } from "../../api/client";
 import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
-import { CollapsibleSection } from "../shared/CollapsibleSection";
+
 
 // All keys used across all sections
 function allKeys(): string[] {
@@ -18,9 +18,7 @@ function allKeys(): string[] {
   keys.add("tinker_api_key");
   keys.add("hf_token");
   keys.add("wandb_api_key");
-  keys.add("tabracadabra_hold_threshold");
-  keys.add("tabracadabra_model");
-  keys.add("tabracadabra_api_key");
+  keys.add("tabracadabra_enabled");
   return Array.from(keys);
 }
 
@@ -48,9 +46,8 @@ export function SettingsView() {
         data[key] = val;
       }
     }
-    if ("tabracadabra_hold_threshold" in data) {
-      data["tabracadabra_hold_threshold"] = parseFloat(data["tabracadabra_hold_threshold"] as string) || 1.0;
-    }
+    // tabracadabra_enabled is a boolean
+    data["tabracadabra_enabled"] = values["tabracadabra_enabled"] === "true";
     if (Object.keys(data).length > 0) {
       await updateSettings(data);
     }
@@ -92,6 +89,37 @@ export function SettingsView() {
                   onChange={(e) => setValues(v => ({ ...v, default_llm_api_key: e.target.value }))}
                 />
               </label>
+            </div>
+          </div>
+
+          <div className="model-row" style={{ marginTop: 10 }}>
+            <span className="model-row-label">Tabracadabra</span>
+            <div style={{ display: "flex", gap: 4, background: "rgba(0,0,0,0.05)", borderRadius: 8, padding: 3, width: "fit-content" }}>
+              {(["true", "false"] as const).map((val) => {
+                const active = (values["tabracadabra_enabled"] ?? "true") === val;
+                return (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setValues(v => ({ ...v, tabracadabra_enabled: val }))}
+                    style={{
+                      padding: "5px 14px",
+                      borderRadius: 6,
+                      border: "none",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      fontWeight: active ? 600 : 400,
+                      background: active ? "white" : "transparent",
+                      color: active ? "var(--text)" : "var(--text-tertiary)",
+                      boxShadow: active ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {val === "true" ? "Enabled" : "Disabled"}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -175,25 +203,6 @@ export function SettingsView() {
         </div>
       </section>
 
-      <CollapsibleSection title="Tabracadabra">
-        <div className="settings-group">
-          <div className="model-row">
-            <span className="model-row-label">Hold Threshold (s)</span>
-            <div className="model-row-fields">
-              <label className="field">
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0.1"
-                  placeholder="1.0"
-                  value={values["tabracadabra_hold_threshold"] ?? ""}
-                  onChange={(e) => setValues(v => ({ ...v, tabracadabra_hold_threshold: e.target.value }))}
-                />
-              </label>
-            </div>
-          </div>
-        </div>
-      </CollapsibleSection>
     </div>
   );
 }

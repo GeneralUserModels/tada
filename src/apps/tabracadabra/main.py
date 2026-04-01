@@ -428,6 +428,11 @@ class TabracadabraService:
                 if not first_piece_seen_local:
                     first_piece_seen_local = True
                     first_piece_event.set()
+                    # Wait for spinner thread to fully stop before cleaning up,
+                    # otherwise spinner can backspace between our count read and delete
+                    t = self._spinner_thread
+                    if t and t.is_alive():
+                        t.join(timeout=0.5)
                     self._cleanup_spinner_if_present()
                     self._content_started = True
                 self._safe_type_piece(piece)
@@ -442,6 +447,9 @@ class TabracadabraService:
             first_piece_event.set()
             return
         first_piece_event.set()
+        t = self._spinner_thread
+        if t and t.is_alive():
+            t.join(timeout=0.5)
         self._cleanup_spinner_if_present()
         self._content_started = True
         for word in "Lorem ipsum dolor sit amet, consectetur adipiscing elit.".split(" "):

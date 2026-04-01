@@ -52,14 +52,13 @@ async def lifespan(app: FastAPI):
     state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
 
     # Start Tabracadabra event tap service (macOS only)
-    if sys.platform == "darwin":
+    if sys.platform == "darwin" and state.config.tabracadabra_enabled:
         try:
             from apps.tabracadabra.main import TabracadabraService, load_prompt
 
             config = {
                 "model": state.config.tabracadabra_model,
                 "api_key": state.config.tabracadabra_api_key or state.config.default_llm_api_key,
-                "hold_threshold": state.config.tabracadabra_hold_threshold,
                 "powernap_base_url": f"http://localhost:{os.environ.get('POWERNAP_PORT', '8000')}",
             }
             service = TabracadabraService(config=config, prompt_text=load_prompt())
