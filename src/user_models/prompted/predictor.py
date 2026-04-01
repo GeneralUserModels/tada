@@ -60,6 +60,26 @@ class PromptedPredictor(BasePredictor):
             Path(__file__).resolve().parents[1] / "powernap" / "longnap" / "verifiers" / "accuracy.txt"
         )
 
+    @staticmethod
+    def _ensure_cache_control(msg: dict) -> dict:
+        """Ensure a message has cache_control so LiteLLM treats it as part of a cached block."""
+        content = msg.get("content")
+        if isinstance(content, str):
+            return {**msg, "content": [
+                {"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}
+            ]}
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("cache_control"):
+                    return msg
+            # Add cache_control to the last text part
+            parts = list(content)
+            for i in range(len(parts) - 1, -1, -1):
+                if isinstance(parts[i], dict) and parts[i].get("type") == "text":
+                    parts[i] = {**parts[i], "cache_control": {"type": "ephemeral"}}
+                    return {**msg, "content": parts}
+        return msg
+
     def _sample(self, messages: list, stop: list) -> str:
         response = litellm_completion(
             model=self.model,
@@ -75,10 +95,12 @@ class PromptedPredictor(BasePredictor):
         """Run the Think → Retrieve → Revise → Actions flow using LiteLLM."""
         messages = copy.deepcopy(messages)
 
-        # 1) Think — append think instruction as a new user message (plain string content)
+        # 1) Think
         messages.append(build_think_user_message())
         think_text = self._sample(messages, stop=["</rationale>"])
-        messages.append({"role": "assistant", "content": think_text})
+        messages.append({"role": "assistant", "content": [
+            {"type": "text", "text": think_text, "cache_control": {"type": "ephemeral"}}
+        ]})
 
         # 2) Retrieve using think output + past actions as query
         query = think_text
@@ -95,15 +117,23 @@ class PromptedPredictor(BasePredictor):
             hits = [it[2] for it in selected]
         retrieved_text = "\n\n".join(h["text"] for h in hits)
 
-        # 3) Revise — provide retrieved context and ask for revised rationale
+        # 3) Revise
         messages.append(build_revise_user_message(retrieved_text))
         revise_text = self._sample(messages, stop=["</revise>"])
-        messages.append({"role": "assistant", "content": revise_text})
+        messages.append({"role": "assistant", "content": [
+            {"type": "text", "text": revise_text, "cache_control": {"type": "ephemeral"}}
+        ]})
 
         # 4) Actions — predict the next N actions
         messages.append(build_actions_user_message(future_len))
         actions_text = self._sample(messages, stop=["</actions>"])
-        messages.append({"role": "assistant", "content": actions_text})
+        messages.append({"role": "assistant", "content": [
+            {"type": "text", "text": actions_text, "cache_control": {"type": "ephemeral"}}
+        ]})
+
+        # Mark every message for caching so tabracadabra can reuse the
+        # cached prefix via LiteLLM's Gemini context caching.
+        messages = [self._ensure_cache_control(m) for m in messages]
 
         result = {
             "think": think_text,
