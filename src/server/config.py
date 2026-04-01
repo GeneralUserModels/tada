@@ -63,11 +63,11 @@ class MCPConnectorDef(BaseModel):
 
 
 class ServerConfig(BaseModel):
-    # API keys (populated via settings endpoint or env)
-    default_llm_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
-    tinker_api_key: str = Field(default_factory=lambda: os.getenv("TINKER_API_KEY", ""))
-    hf_token: str = Field(default_factory=lambda: os.getenv("HF_TOKEN", ""))
-    wandb_api_key: str = Field(default_factory=lambda: os.getenv("WANDB_API_KEY", ""))
+    # API keys (populated via settings endpoint or persisted config)
+    default_llm_api_key: str = ""
+    tinker_api_key: str = ""
+    hf_token: str = ""
+    wandb_api_key: str = ""
 
     # Recorder
     fps: int = 5
@@ -82,18 +82,18 @@ class ServerConfig(BaseModel):
     chunk_workers: int = 4
 
     # Model selection
-    model_type: str = Field(default_factory=lambda: os.getenv("POWERNAP_MODEL_TYPE", "prompted"))
-    prompted_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_PROMPTED_MODEL", "gemini/gemini-3-flash-preview"))
+    model_type: str = "prompted"
+    prompted_model: str = "gemini/gemini-3-flash-preview"
 
     # Trainer
-    model: str = Field(default_factory=lambda: os.getenv("POWERNAP_MODEL", "Qwen/Qwen3-VL-30B-A3B-Instruct"))
+    model: str = "Qwen/Qwen3-VL-30B-A3B-Instruct"
     reward_llm: str = "gemini/gemini-3-flash-preview"
     reward_llm_api_key: str = ""
     num_generations: int = 4
     learning_rate: float = 5e-5
     max_completion_length: int = 512
     num_imgs_per_sample: int | None = 3
-    loss_mode: str = Field(default_factory=lambda: os.getenv("POWERNAP_LOSS_MODE", "llm_judge"))
+    loss_mode: str = "llm_judge"
     eval_with_llm_judge: bool = False
     batch_size: int = 8
     past_len: int = 16
@@ -104,7 +104,7 @@ class ServerConfig(BaseModel):
 
     # Tabracadabra
     tabracadabra_enabled: bool = True
-    tabracadabra_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_PROMPTED_MODEL", "gemini/gemini-3-flash-preview"))
+    tabracadabra_model: str = "gemini/gemini-3-flash-preview"
     tabracadabra_api_key: str = ""
 
     # Agent
