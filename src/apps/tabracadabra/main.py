@@ -19,6 +19,11 @@ from PIL import Image, ImageDraw
 
 import Quartz
 
+from screeninfo import get_monitors
+
+from connectors.screen.napsack.recorder import DEFAULT_TARGET_DPI
+from napsack.record.__main__ import get_monitor_dpis, calculate_monitor_scales
+
 load_dotenv()
 
 # ------------- Constants -------------
@@ -93,7 +98,18 @@ def _annotate_with_cursor(img: Image.Image, mon: dict, mx: int, my: int) -> Imag
     return img
 
 
-def capture_active_monitor_as_data_url(max_width=1600, jpeg_quality=85):
+def _get_dpi_scale(mon: dict, target_dpi: int) -> float | None:
+    """Get DPI-based scale factor for a monitor, using napsack's DPI detection."""
+    monitor_dpis = get_monitor_dpis()
+    scales = calculate_monitor_scales(target_dpi, monitor_dpis) if monitor_dpis else {}
+    # Match mss monitor to screeninfo monitor by position and size
+    for i, sm in enumerate(get_monitors()):
+        if sm.x == mon["left"] and sm.y == mon["top"] and sm.width == mon["width"] and sm.height == mon["height"]:
+            return scales.get(i)
+    return None
+
+
+def capture_active_monitor_as_data_url(target_dpi=DEFAULT_TARGET_DPI):
     with mss.mss() as sct:
         mx, my = _get_cursor_point()
         mon = _find_monitor_for_point(sct.monitors, mx, my)
@@ -103,13 +119,15 @@ def capture_active_monitor_as_data_url(max_width=1600, jpeg_quality=85):
         img = _annotate_with_cursor(img, mon, mx, my)
 
         out_img = img
-        if out_img.width > max_width:
-            ratio = max_width / out_img.width
-            out_img = out_img.resize((max_width, int(out_img.height * ratio)), Image.LANCZOS)
+        scale = _get_dpi_scale(mon, target_dpi)
+        if scale is not None and scale < 1.0:
+            new_w = int(out_img.width * scale)
+            new_h = int(out_img.height * scale)
+            out_img = out_img.resize((new_w, new_h), Image.LANCZOS)
         buf = io.BytesIO()
-        out_img.save(buf, format="JPEG", quality=jpeg_quality, optimize=True)
+        out_img.save(buf, format="PNG")
         b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-        data_url = f"data:image/jpeg;base64,{b64}"
+        data_url = f"data:image/png;base64,{b64}"
         return data_url, None
 
 
@@ -130,7 +148,7 @@ def _fetch_powernap_config(base_url: str = "http://localhost:8000") -> dict:
     defaults = {
         "model": os.getenv("MODEL", "gemini/gemini-3-flash-preview"),
         "api_key": os.getenv("LLM_API_KEY", ""),
-        "hold_threshold": float(os.getenv("HOLD_THRESHOLD", "1.0")),
+        "hold_threshold": float(os.getenv("HOLD_THRESHOLD", "0.35")),
         "powernap_base_url": base_url,
     }
     try:
@@ -157,12 +175,13 @@ def _fetch_powernap_config(base_url: str = "http://localhost:8000") -> dict:
 class TabracadabraService:
     """Manages the Tab-key event tap lifecycle in a dedicated thread."""
 
-    def __init__(self, config: dict, prompt_text: str):
+    def __init__(self, config: dict, prompt_text: str, placeholder: bool = False):
         self._model = config["model"]
         self._api_key = config.get("api_key", "")
         self._hold_threshold = float(config.get("hold_threshold", 1.0))
         self._powernap_base_url = config.get("powernap_base_url", "http://localhost:8000")
         self._prompt_text = prompt_text
+        self._placeholder = placeholder
 
         # Thread & lifecycle
         self._thread: threading.Thread | None = None
@@ -191,8 +210,7 @@ class TabracadabraService:
         self._first_piece_event: threading.Event | None = None
         self._spinner_thread: threading.Thread | None = None
         self._spinner_active = False
-        self._last_other_key_down_t = 0.0  # timestamp of last non-tab keydown
-        self._combo_window = 0.5  # 0.5s window to detect key combos
+        self._watching = False  # True after tab released while stream is active
 
     # ------------- Lifecycle -------------
     def start(self):
@@ -229,7 +247,10 @@ class TabracadabraService:
     def _run_event_tap(self):
         """Create the event tap and run the CFRunLoop (blocks until stopped)."""
         mask = (Quartz.CGEventMaskBit(Quartz.kCGEventKeyDown) |
-                Quartz.CGEventMaskBit(Quartz.kCGEventKeyUp))
+                Quartz.CGEventMaskBit(Quartz.kCGEventKeyUp) |
+                Quartz.CGEventMaskBit(Quartz.kCGEventLeftMouseDown) |
+                Quartz.CGEventMaskBit(Quartz.kCGEventRightMouseDown) |
+                Quartz.CGEventMaskBit(Quartz.kCGEventOtherMouseDown))
         self._tap_ref = Quartz.CGEventTapCreate(
             Quartz.kCGSessionEventTap,
             Quartz.kCGHeadInsertEventTap,
@@ -320,34 +341,35 @@ class TabracadabraService:
         ]}
 
         if predictor_messages:
+            print(f"[tabracadabra] Using predictor context ({len(predictor_messages)} messages)", flush=True)
             return predictor_messages + [tabracadabra_turn]
         else:
+            print("[tabracadabra] No predictor context available, using standalone prompt", flush=True)
             return [tabracadabra_turn]
 
     # ------------- Loading animation (spinner) -------------
     def _loading_spinner(self, first_piece_event: threading.Event, cancel_event: threading.Event):
         try:
-            FRAMES = ["◐", "◓", "◑", "◒"]
+            FRAMES_HOLDING = ["◐", "◓", "◑", "◒"]
+            FRAMES_LOCKED = ["◼", "◻", "◼", "◻"]
             INTERVAL = 0.12
 
-            self._type_text(JOINER + FRAMES[0])
+            frames = FRAMES_HOLDING
+            self._type_text(JOINER + frames[0])
             self._inserted_len += 2
             self._spinner_count = 2
             self._last_char_space = False
 
             idx = 0
 
-            def wait_with_checks(seconds: float) -> bool:
-                deadline = time.monotonic() + seconds
-                while time.monotonic() < deadline:
-                    if first_piece_event.is_set() or cancel_event.is_set():
-                        return True
-                    time.sleep(0.02)
-                return False
-
             while not first_piece_event.is_set() and not cancel_event.is_set():
-                if wait_with_checks(INTERVAL):
+                # OS-level block — zero CPU while waiting
+                cancel_event.wait(timeout=INTERVAL)
+                if first_piece_event.is_set() or cancel_event.is_set():
                     break
+
+                # Switch frames when locked in
+                frames = FRAMES_LOCKED if self._activated else FRAMES_HOLDING
 
                 self._press_backspace(1)
                 self._inserted_len -= 1
@@ -356,12 +378,12 @@ class TabracadabraService:
                 if first_piece_event.is_set() or cancel_event.is_set():
                     break
 
-                next_frame = FRAMES[(idx + 1) % len(FRAMES)]
+                next_frame = frames[(idx + 1) % len(frames)]
                 self._type_text(next_frame)
                 self._inserted_len += 1
                 self._spinner_count += 1
 
-                idx = (idx + 1) % len(FRAMES)
+                idx = (idx + 1) % len(frames)
         finally:
             self._spinner_active = False
 
@@ -374,20 +396,33 @@ class TabracadabraService:
             self._spinner_count = 0
             self._last_char_space = False
 
+    @staticmethod
+    def _log_usage(usage):
+        details = getattr(usage, "prompt_tokens_details", None)
+        cached = getattr(details, "cached_tokens", None) if details else None
+        print(f"[tabracadabra] prompt={usage.prompt_tokens} cached={cached}", flush=True)
+
     def _stream_worker(self, cancel_event: threading.Event, first_piece_event: threading.Event):
+        if self._placeholder:
+            self._placeholder_worker(cancel_event, first_piece_event)
+            return
         messages = self._build_messages()
         first_piece_seen_local = False
         stream = litellm_completion(
             model=self._model,
             messages=messages,
             stream=True,
+            stream_options={"include_usage": True},
             api_key=self._api_key or None,
         )
         try:
             for chunk in stream:
                 if cancel_event.is_set():
                     break
-                piece = chunk.choices[0].delta.content or ""
+                usage = getattr(chunk, "usage", None)
+                if usage is not None:
+                    self._log_usage(usage)
+                piece = chunk.choices[0].delta.content or "" if chunk.choices else ""
                 if not piece:
                     continue
                 if not first_piece_seen_local:
@@ -398,6 +433,33 @@ class TabracadabraService:
                 self._safe_type_piece(piece)
         finally:
             first_piece_event.set()
+            self._finish_session()
+
+    def _placeholder_worker(self, cancel_event: threading.Event, first_piece_event: threading.Event):
+        """Fake LLM call: wait 2s then type placeholder text."""
+        cancel_event.wait(timeout=2.0)
+        if cancel_event.is_set():
+            first_piece_event.set()
+            return
+        first_piece_event.set()
+        self._cleanup_spinner_if_present()
+        self._content_started = True
+        for word in "Lorem ipsum dolor sit amet, consectetur adipiscing elit.".split(" "):
+            if cancel_event.is_set():
+                break
+            self._safe_type_piece(word + " ")
+            cancel_event.wait(timeout=0.05)
+        self._finish_session()
+
+    def _finish_session(self):
+        """Auto-accept: stream finished naturally, clean up session state."""
+        self._watching = False
+        self._clear_suppress_flag()
+        self._first_piece_event = None
+        self._content_started = False
+        self._inserted_len = 0
+        self._last_char_space = False
+        self._cancel_event = None
 
     # ------------- Tab-based control -------------
     def _start_spinner(self, cancel_event: threading.Event, first_piece_event: threading.Event):
@@ -427,15 +489,15 @@ class TabracadabraService:
         t.start()
 
     def _activation_timer_body(self, start_t: float, cancel_event: threading.Event):
-        while True:
-            if cancel_event.is_set() or not self._tab_down:
-                return
-            if time.monotonic() - start_t >= self._hold_threshold:
-                if not self._activated:
-                    self._activated = True
-                    self._start_stream()
-                return
-            time.sleep(0.01)
+        """Wait for hold threshold using Event.wait instead of busy-polling."""
+        remaining = self._hold_threshold - (time.monotonic() - start_t)
+        if remaining > 0:
+            cancel_event.wait(timeout=remaining)
+        if cancel_event.is_set() or not self._tab_down:
+            return
+        if not self._activated:
+            self._activated = True
+            self._start_stream()
 
     def _handle_tab_down(self):
         if self._tab_down:
@@ -495,14 +557,33 @@ class TabracadabraService:
             self._stop_spinner_and_cleanup()
             self._clear_suppress_flag()
             self._synthesize_tab_keypress()
+            self._activation_timer = None
+            self._first_piece_event = None
+            self._content_started = False
+            self._inserted_len = 0
+            self._last_char_space = False
+            self._cancel_event = None
+            print("[tabracadabra] Tab up: quick tap, synthesized normal tab", flush=True)
         else:
-            self._keep_contents = True
-            self._stop_stream(join=False)
-            self._clear_suppress_flag()
-            if not self._content_started:
-                self._stop_spinner_and_cleanup()
+            # Stream is running — enter watching mode (stream continues hands-free)
+            self._watching = True
+            self._activation_timer = None
+            print("[tabracadabra] Tab up: entering watching mode", flush=True)
 
-        self._activation_timer = None
+    def _handle_cancel(self):
+        """Cancel an active watching session. Delete if spinner, interrupt if content."""
+        if not self._watching:
+            return
+        print(f"[tabracadabra] Cancel: content_started={self._content_started}", flush=True)
+        self._watching = False
+        if not self._content_started:
+            # Still in spinner phase — delete everything
+            self._stop_stream(join=False)
+            self._stop_spinner_and_cleanup()
+        else:
+            # Content already streaming — just stop, keep what's there
+            self._stop_stream(join=False)
+        self._clear_suppress_flag()
         self._first_piece_event = None
         self._content_started = False
         self._inserted_len = 0
@@ -524,6 +605,12 @@ class TabracadabraService:
             return event
 
         try:
+            # Mouse clicks cancel any active watching session
+            if event_type in (Quartz.kCGEventLeftMouseDown, Quartz.kCGEventRightMouseDown, Quartz.kCGEventOtherMouseDown):
+                if self._watching:
+                    self._handle_cancel()
+                return event
+
             if event_type in (Quartz.kCGEventKeyDown, Quartz.kCGEventKeyUp):
                 tag = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGEventSourceUserData)
                 is_ours = (tag == OUR_EVENT_TAG)
@@ -537,9 +624,20 @@ class TabracadabraService:
                     if event_type == Quartz.kCGEventKeyDown:
                         autorepeat = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventAutorepeat)
                         if not autorepeat and not self._tab_down:
-                            # If another key was pressed very recently, this is a combo (x + tab)
-                            if (time.monotonic() - self._last_other_key_down_t) < self._combo_window:
+                            # If a modifier key is held, this is a combo (e.g. Cmd+Tab, Alt+Tab)
+                            flags = Quartz.CGEventGetFlags(event)
+                            modifier_mask = (
+                                Quartz.kCGEventFlagMaskCommand |
+                                Quartz.kCGEventFlagMaskAlternate |
+                                Quartz.kCGEventFlagMaskControl |
+                                Quartz.kCGEventFlagMaskShift
+                            )
+                            if flags & modifier_mask:
                                 return event
+                            # Tab during watching = cancel (same as any other key)
+                            if self._watching:
+                                self._handle_cancel()
+                                return None
                             self._handle_tab_down()
                         return None
                     else:
@@ -548,9 +646,16 @@ class TabracadabraService:
 
                 # Non-tab key handling
                 if event_type == Quartz.kCGEventKeyDown:
-                    self._last_other_key_down_t = time.monotonic()
+                    # Cancel watching session on any key
+                    if self._watching:
+                        print(f"[tabracadabra] Key during watching: keycode={keycode}", flush=True)
+                        self._handle_cancel()
+                        return event
+
                     # If tab is held but not yet activated, this is a combo (tab + y)
                     if self._tab_down and not self._activated:
+                        if self._cancel_event:
+                            self._cancel_event.set()
                         self._stop_spinner_and_cleanup()
                         self._clear_suppress_flag()
                         self._tab_down = False
@@ -571,10 +676,15 @@ class TabracadabraService:
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--placeholder", action="store_true", help="Use fake LLM responses instead of real calls")
+    args = parser.parse_args()
+
     base_url = os.getenv("POWERNAP_BASE_URL", "http://localhost:8000")
     config = _fetch_powernap_config(base_url)
     prompt_text = load_prompt()
-    service = TabracadabraService(config=config, prompt_text=prompt_text)
+    service = TabracadabraService(config=config, prompt_text=prompt_text, placeholder=args.placeholder)
     service.start()
     try:
         # Keep main thread alive

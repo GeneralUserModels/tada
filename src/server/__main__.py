@@ -53,6 +53,7 @@ def main():
         os.environ["POWERNAP_LOG_TO_WANDB"] = "1"
     os.environ["POWERNAP_WANDB_PROJECT"] = args.wandb_project
     os.environ["POWERNAP_WANDB_RUN_NAME"] = args.wandb_run_name
+    os.environ["POWERNAP_PORT"] = str(args.port)
 
     uvicorn.run(
         "server.app:create_app",
