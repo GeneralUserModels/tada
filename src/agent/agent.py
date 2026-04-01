@@ -43,6 +43,8 @@ class Agent:
             {"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.input_schema}}
             for t in tools
         ]
+        if self._tool_schemas:
+            self._tool_schemas[-1]["cache_control"] = {"type": "ephemeral"}
         plan_tools = [t for t in tools if isinstance(t, (PlanWriteTool, PlanUpdateTool))]
         self._plan_state = plan_tools[0]._state if plan_tools else None
 
@@ -73,6 +75,12 @@ class Agent:
             # LLM call
             print(f"  [round {round_num+1}/{self.max_rounds}] calling {self.model}...")
             response = self._call_llm(messages)
+            usage = getattr(response, "usage", None)
+            if usage:
+                cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+                cache_creation = getattr(usage, "cache_creation_input_tokens", 0) or 0
+                if cache_read or cache_creation:
+                    print(f"  [cache] read={cache_read} creation={cache_creation}")
             choice = response.choices[0]
             assistant_msg = choice.message
             messages.append(assistant_msg.model_dump())
@@ -198,12 +206,21 @@ class Agent:
         retry=retry_if_exception_type((litellm.RateLimitError, litellm.APIConnectionError, litellm.InternalServerError, litellm.Timeout, httpx.ReadTimeout)),
     )
     def _call_llm(self, messages: list):
-        system = self.system_prompt
+        system_blocks = [
+            {"type": "text", "text": self.system_prompt, "cache_control": {"type": "ephemeral"}},
+        ]
         if self._plan_state and self._plan_state.items:
-            system += f"\n\n<current-plan>\n{self._plan_state.render()}\n</current-plan>"
+            system_blocks.append({"type": "text", "text": f"\n\n<current-plan>\n{self._plan_state.render()}\n</current-plan>"})
+        # Cache the first user message (task instruction) — it stays constant across rounds
+        conv_messages = list(messages)
+        if conv_messages and conv_messages[0].get("role") == "user":
+            first = conv_messages[0]
+            content = first.get("content", "")
+            if isinstance(content, str):
+                conv_messages[0] = {**first, "content": [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}]}
         kwargs = dict(
             model=self.model,
-            messages=[{"role": "system", "content": system}] + messages,
+            messages=[{"role": "system", "content": system_blocks}] + conv_messages,
             tools=self._tool_schemas if self._tool_schemas else None,
             max_tokens=16000,
         )
