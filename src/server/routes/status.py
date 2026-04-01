@@ -13,7 +13,6 @@ async def get_status(request: Request):
     status = {
         "recording_active": screen is not None and not screen.paused,
         "training_active": model.training_active,
-        "inference_active": model.inference_active,
         "latest_scores": model.latest_scores,
         "sse_connections": len(state.sse_queues),
     }

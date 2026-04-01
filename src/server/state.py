@@ -16,10 +16,14 @@ class ServerState:
     context_logging_task: asyncio.Task | None = None
     google_refresh_task: asyncio.Task | None = None
     outlook_refresh_task: asyncio.Task | None = None
+    prediction_loop_task: asyncio.Task | None = None
 
     # Connector instances (populated by connectors service on startup)
     connectors: dict = field(default_factory=dict)
     connector_auth: dict = field(default_factory=dict)  # name → requires_auth value
+
+    # Tabracadabra event tap service (macOS only)
+    tabracadabra_service: object | None = None
 
     # SSE client queues
     sse_queues: set = field(default_factory=set)

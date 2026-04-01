@@ -6,7 +6,6 @@ import { request } from "../../shared/api-core";
 // ── User model control ────────────────────────────────────────
 export const startTraining = () => request("POST", "/api/user_models/training/start");
 export const stopTraining = () => request("POST", "/api/user_models/training/stop");
-export const startInference = () => request("POST", "/api/user_models/inference/start");
 
 // ── Status / Settings ────────────────────────────────────────
 export const getStatus = () => request("GET", "/api/status");

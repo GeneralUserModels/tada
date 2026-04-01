@@ -11,6 +11,8 @@ import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import anyio
+
 from mcp.server.fastmcp import FastMCP
 from mcp.server.session import ServerSession
 from pydantic import AnyUrl
@@ -46,16 +48,17 @@ async def lifespan(_server: FastMCP) -> AsyncIterator[None]:  # type: ignore[typ
     global _observer, _loop, _notify_event
     _loop = asyncio.get_running_loop()
     _notify_event = asyncio.Event()
-    asyncio.create_task(
-        run_notify_loop(_notify_event, lambda: _active_session, "notifications://activity", logger),
-        name="notifications-notifier",
-    )
     db_dir = os.path.dirname(DB_PATH)
     if os.path.isdir(db_dir):
         _observer = Observer()
         _observer.schedule(_DBHandler(), db_dir, recursive=False)
         _observer.start()
-    yield
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(
+            run_notify_loop, _notify_event, lambda: _active_session, "notifications://activity", logger
+        )
+        yield
+        tg.cancel_scope.cancel()
     if _observer is not None:
         _observer.stop()
         _observer.join()
