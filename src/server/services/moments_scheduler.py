@@ -160,6 +160,8 @@ async def run_moments_scheduler(state) -> None:
 
                 slug = md_file.stem
                 slug_state = moment_state.get(slug, {})
+                if slug_state.get("dismissed"):
+                    continue
                 effective_frequency = slug_state.get("frequency_override") or frequency
                 effective_schedule = slug_state.get("schedule_override") or schedule
                 if not should_run(slug, effective_frequency, effective_schedule, run_history):
