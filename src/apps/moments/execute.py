@@ -146,11 +146,21 @@ def _parse_frontmatter(content: str) -> dict:
     return result
 
 
-def run(task_path: str, output_dir: str, logs_dir: str, model: str = DEFAULT_MODEL) -> bool:
+def run(
+    task_path: str,
+    output_dir: str,
+    logs_dir: str,
+    model: str = DEFAULT_MODEL,
+    frequency_override: str | None = None,
+    schedule_override: str | None = None,
+) -> bool:
     """Execute a moment task. Returns True if index.html was produced."""
     task_content = Path(task_path).read_text()
     fm = _parse_frontmatter(task_content)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    effective_frequency = frequency_override or fm.get("frequency", "")
+    effective_schedule = schedule_override or fm.get("schedule", "")
 
     template = STYLE_TEMPLATE_PATH.read_text() if STYLE_TEMPLATE_PATH.exists() else ""
 
@@ -158,8 +168,8 @@ def run(task_path: str, output_dir: str, logs_dir: str, model: str = DEFAULT_MOD
         task_content=task_content,
         output_dir=output_dir,
         logs_dir=logs_dir,
-        frequency=fm.get("frequency", ""),
-        schedule=fm.get("schedule", ""),
+        frequency=effective_frequency,
+        schedule=effective_schedule,
         template=template,
     )
 
@@ -174,8 +184,8 @@ def run(task_path: str, output_dir: str, logs_dir: str, model: str = DEFAULT_MOD
             "title": fm.get("title", Path(task_path).stem),
             "description": fm.get("description", ""),
             "completed_at": datetime.now(timezone.utc).isoformat(),
-            "frequency": fm.get("frequency", ""),
-            "schedule": fm.get("schedule", ""),
+            "frequency": effective_frequency,
+            "schedule": effective_schedule,
         }, indent=2))
 
     return (Path(output_dir) / "index.html").exists()
