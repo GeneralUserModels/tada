@@ -74,6 +74,13 @@ interface MomentResult {
   completed_at: string;
   frequency: string;
   schedule: string;
+  dismissed: boolean;
+  pinned: boolean;
+  view_count: number;
+  time_spent_ms: number;
+  last_viewed: string | null;
+  schedule_override: string | null;
+  frequency_override: string | null;
 }
 
 interface PowerNapAPI {

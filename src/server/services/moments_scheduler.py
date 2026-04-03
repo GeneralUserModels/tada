@@ -11,6 +11,7 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from server.services.moments_executor import execute_moment, parse_frontmatter
+from server.services.moment_state import load_state
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +149,7 @@ async def run_moments_scheduler(state) -> None:
             results_dir = tada_dir / "results"
             results_dir.mkdir(parents=True, exist_ok=True)
             run_history = load_run_history(results_dir)
+            moment_state = load_state(tada_dir)
 
             for md_file in sorted(tada_dir.glob("*.md")):
                 fm = parse_frontmatter(md_file.read_text())
@@ -157,7 +159,10 @@ async def run_moments_scheduler(state) -> None:
                     continue
 
                 slug = md_file.stem
-                if not should_run(slug, frequency, schedule, run_history):
+                slug_state = moment_state.get(slug, {})
+                effective_frequency = slug_state.get("frequency_override") or frequency
+                effective_schedule = slug_state.get("schedule_override") or schedule
+                if not should_run(slug, effective_frequency, effective_schedule, run_history):
                     continue
                 if executor_lock.locked():
                     logger.debug(f"Executor busy, skipping {slug} this cycle")
@@ -167,7 +172,12 @@ async def run_moments_scheduler(state) -> None:
                     started_at = _time.time()
                     output_dir = str(results_dir / slug)
                     logger.info(f"Executing moment: {slug}")
-                    success = await asyncio.to_thread(execute_moment, str(md_file), output_dir, logs_dir, model)
+                    freq_override = slug_state.get("frequency_override") or None
+                    sched_override = slug_state.get("schedule_override") or None
+                    success = await asyncio.to_thread(
+                        execute_moment, str(md_file), output_dir, logs_dir, model,
+                        frequency_override=freq_override, schedule_override=sched_override,
+                    )
                     completed_at = _time.time()
                     save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")
                     run_history[slug] = completed_at
@@ -180,8 +190,8 @@ async def run_moments_scheduler(state) -> None:
                             "title": meta.get("title", fm.get("title", slug)),
                             "description": meta.get("description", fm.get("description", "")),
                             "completed_at": meta.get("completed_at", datetime.now().isoformat()),
-                            "frequency": frequency,
-                            "schedule": schedule,
+                            "frequency": effective_frequency,
+                            "schedule": effective_schedule,
                         })
                         logger.info(f"Moment completed: {slug}")
                     else:
