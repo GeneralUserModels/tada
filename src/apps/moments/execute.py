@@ -14,7 +14,7 @@ load_dotenv()
 
 from agent.builder import build_agent, DEFAULT_MODEL
 
-STYLE_TEMPLATE_PATH = Path(__file__).resolve().parent / "style_template.html"
+TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
 MAX_FILE_CHARS = 50_000
 OUTPUT_FILES = ["index.html", "styles.css", "app.js", "data.js", "meta.json"]
@@ -29,9 +29,7 @@ INSTRUCTION_TEMPLATE = """You are a powerful AI agent executing a moment task fo
 - Spawn subagents to parallelize work across different data sources
 
 Execute the task below by reading the relevant data, doing the actual work, and building \
-an interface to present the results. You have complete creative freedom over the interface — \
-use interactive JavaScript, charts, animations, tabs, accordions, whatever best serves the task. \
-The only constraint is that the output must be a self-contained HTML file (all CSS/JS inline).
+an interface to present the results.
 
 ## Task
 
@@ -73,21 +71,40 @@ Put your data as a JSON object at the top of this file (e.g. `const DATA = [...]
 rendering logic below it.
 
 4. **`{output_dir}/meta.json`** — Metadata:
+```json
+{{"title": "...", "description": "...", "completed_at": "<ISO 8601>", "frequency": "{frequency}", "schedule": "{schedule}"}}
+```
 
 **IMPORTANT: Split your output across these files.** Do NOT put everything in one giant index.html. \
 Each file should be small enough to write in a single tool call. If your JS data is large, split \
 it further (e.g. `data.js` for the data, `app.js` for the logic).
 
-Be creative with the interface: interactive elements, visualizations, collapsible sections, \
-search/filter, action buttons, tabs — whatever makes the result most useful. The reference \
-palette below shows the app's colors — use as a starting point, not a cage.
-```json
-{{"title": "...", "description": "...", "completed_at": "<ISO 8601>", "frequency": "{frequency}", "schedule": "{schedule}"}}
-```
+## Templates
 
-## Reference Palette
+Pre-built templates are available at `{templates_dir}/`. Each template is a complete working \
+app (index.html + styles.css + app.js) with placeholder data. Read the one that best fits \
+your task using `cat {templates_dir}/<name>/app.js` etc.
 
-{template}
+Available templates:
+- **feed** — Tabbed content stream with scrollable cards, tags, scores. Good for: lists of items \
+to browse (articles, alerts, notifications, updates, research papers).
+- **dashboard** — Stats row + filterable/searchable card grid. Good for: metrics, tracking, \
+status overviews, anything with numbers + detail cards.
+- **report** — Linear sections with collapsible content, timeline, action items, status badges. \
+Good for: summaries, recaps, advisories, analysis, structured narratives.
+- **table** — Sortable, filterable data table with expandable rows. Good for: structured data, \
+comparisons, logs, inventories.
+- **blank** — Minimal scaffold with just the design system (colors, typography, glass cards, \
+buttons). Good for: anything that doesn't fit the other patterns.
+
+Use a template as your starting point — copy its files to your output dir, replace the DATA \
+object with your real data, and customize the rendering, layout, and styles as needed.
+
+You have full creative freedom to modify the template, combine elements from multiple templates, \
+or build something entirely new if none of the templates fit. The only requirement is that your \
+output uses the same design language (colors, glass cards, typography, radii) so it feels native \
+to the PowerNap app. Use the blank template's styles.css as a reference for the design system \
+if building from scratch.
 
 ## Writable directories
 
@@ -127,9 +144,10 @@ more detailed data that isn't in the logs.
 ## Execution
 
 1. Plan with PlanWrite — break the task into steps.
-2. Read the data sources relevant to this task, process them, and produce the result. Use subagents to parallelize.
-3. Once the task is complete, design an interface that presents the result clearly.
-4. Write index.html and meta.json to `{output_dir}/`.
+2. Read the template that best fits your task from `{templates_dir}/`.
+3. Read the data sources relevant to this task, process them, and produce the result. Use subagents to parallelize.
+4. Build the interface by customizing the template with your real data.
+5. Write your output files to `{output_dir}/`.
 """
 
 
@@ -196,10 +214,6 @@ Keep the rendering logic unless there's a bug to fix or a clear improvement.
 **IMPORTANT: Split your output across these files.** Do NOT put everything in one giant index.html. \
 Each file should be small enough to write in a single tool call. If your JS data is large, split \
 it further (e.g. `data.js` for the data, `app.js` for the logic).
-
-## Reference Palette
-
-{template}
 
 ## Writable directories
 
@@ -299,8 +313,6 @@ def run(
     effective_frequency = frequency_override or fm.get("frequency", "")
     effective_schedule = schedule_override or fm.get("schedule", "")
 
-    template = STYLE_TEMPLATE_PATH.read_text() if STYLE_TEMPLATE_PATH.exists() else ""
-
     existing_index = Path(output_dir) / "index.html"
     if existing_index.exists():
         existing_files = _read_existing_output(output_dir)
@@ -310,7 +322,6 @@ def run(
             logs_dir=logs_dir,
             frequency=effective_frequency,
             schedule=effective_schedule,
-            template=template,
             existing_files=_format_existing_files(existing_files),
         )
     else:
@@ -320,7 +331,7 @@ def run(
             logs_dir=logs_dir,
             frequency=effective_frequency,
             schedule=effective_schedule,
-            template=template,
+            templates_dir=str(TEMPLATES_DIR),
         )
 
     agent, _ = build_agent(model)
