@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
 from agent.builder import build_agent, DEFAULT_MODEL
+from apps.moments._incremental import read_checkpoint, write_checkpoint, classify_sessions
 
 INSTRUCTION_TEMPLATE = """\
 You are analyzing a user's digital activity logs to discover opportunities for an AI agent to augment their workflow.
@@ -113,12 +115,71 @@ When you are done, run `ls -la {logs_dir}/tasks/` to verify all task files exist
 """
 
 
+INCREMENTAL_SECTION = """\
+
+## Incremental Discovery — Prioritize New Activity
+
+This is a RE-RUN. The last discovery was on **{last_discovery_date}**. You should still read all sessions, \
+but prioritize finding new patterns from recent activity.
+
+### New sessions since last discovery (prioritize these):
+{new_sessions_list}
+
+### Previously analyzed sessions:
+{old_sessions_list}
+
+Read all sessions, but weight your analysis toward the new ones. Old sessions have already been mined \
+for tasks — look for patterns there only if they weren't caught before or if they combine with new activity \
+to reveal something new.
+
+### Non-session logs (email, calendar, notifications, filesystem):
+These files may contain both old and new entries. Prioritize entries dated AFTER {last_discovery_date}, \
+but don't ignore older entries — they can still reveal patterns.
+
+### Existing tasks:
+Read ALL existing task files in {logs_dir}/tasks/ — you must not duplicate any existing task. Your job \
+is to find NEW tasks that aren't already covered. If a new session reveals a variation or extension \
+of an existing task, note that in a new task file rather than modifying the existing one.
+"""
+
+
 def run(logs_dir: str, model: str = DEFAULT_MODEL) -> str:
+    logs_path = Path(logs_dir).resolve()
+    logs_dir = str(logs_path)
+    checkpoint_path = logs_path / "tasks" / ".last_discovery"
+
+    last_discovery = read_checkpoint(checkpoint_path)
+    new_sessions, old_sessions = classify_sessions(logs_dir, last_discovery)
+
+    instruction = INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir)
+
+    if last_discovery is not None and new_sessions:
+        new_list = "\n".join(f"- {s}/labels.jsonl" for s in new_sessions)
+        old_list = "\n".join(f"- {s}/labels.jsonl" for s in old_sessions) if old_sessions else "- (none)"
+        instruction += INCREMENTAL_SECTION.format(
+            last_discovery_date=last_discovery.strftime("%Y-%m-%d %H:%M"),
+            new_sessions_list=new_list,
+            old_sessions_list=old_list,
+            logs_dir=logs_dir,
+        )
+    elif last_discovery is not None and not new_sessions:
+        instruction += (
+            f"\n\n## Note\n\nThe last discovery was on "
+            f"**{last_discovery.strftime('%Y-%m-%d %H:%M')}** and there are NO new session "
+            f"directories since then. Check existing non-session logs (email, calendar, "
+            f"notifications, filesystem) for new entries since that date. If nothing "
+            f"substantial is new, it's fine to produce no new tasks — just verify existing "
+            f"tasks are still relevant and exit."
+        )
+
     agent, _ = build_agent(model)
     agent.max_rounds = 200
-    instruction = INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir)
     messages = [{"role": "user", "content": instruction}]
-    return agent.run(messages)
+    result = agent.run(messages)
+
+    write_checkpoint(checkpoint_path)
+
+    return result
 
 
 if __name__ == "__main__":

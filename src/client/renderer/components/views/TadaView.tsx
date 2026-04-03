@@ -148,7 +148,7 @@ export function TadaView() {
   const { state } = useAppContext();
   const {
     results, loading, load, showDismissed, toggleShowDismissed,
-    dismiss, pin, unpin, editSchedule, startView, endView,
+    dismiss, restore, pin, unpin, editSchedule, startView, endView,
   } = useMoments();
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
@@ -220,25 +220,40 @@ export function TadaView() {
             <>
               <span className="tada-detail-title">{selected.title}</span>
               <div className="tada-card-actions">
-                <button
-                  className={`tada-card-action-btn${selected.pinned ? " active" : ""}`}
-                  title={selected.pinned ? "Unpin" : "Pin"}
-                  onClick={() => selected.pinned ? unpin(selected.slug) : pin(selected.slug)}
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M7.5 1.5L10.5 4.5L9 8L10.5 12.5L7 9L3.5 12.5L5 8L3.5 4.5L6.5 1.5L7.5 1.5Z"
-                      stroke="currentColor" fill={selected.pinned ? "currentColor" : "none"} strokeWidth="1" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                <button
-                  className="tada-card-action-btn"
-                  title="Dismiss"
-                  onClick={() => { dismiss(selected.slug); setSelectedSlug(null); setResultUrl(null); }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                </button>
+                {selected.dismissed ? (
+                  <button
+                    className="tada-card-action-btn"
+                    title="Restore"
+                    onClick={() => restore(selected.slug)}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M3 8.5V11h2.5M3 11l3.5-3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M6.5 3H11v4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      className={`tada-card-action-btn${selected.pinned ? " active" : ""}`}
+                      title={selected.pinned ? "Unpin" : "Pin"}
+                      onClick={() => selected.pinned ? unpin(selected.slug) : pin(selected.slug)}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M7.5 1.5L10.5 4.5L9 8L10.5 12.5L7 9L3.5 12.5L5 8L3.5 4.5L6.5 1.5L7.5 1.5Z"
+                          stroke="currentColor" fill={selected.pinned ? "currentColor" : "none"} strokeWidth="1" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                    <button
+                      className="tada-card-action-btn"
+                      title="Dismiss"
+                      onClick={() => { dismiss(selected.slug); setSelectedSlug(null); setResultUrl(null); }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    </button>
+                  </>
+                )}
               </div>
             </>
           )}
@@ -278,7 +293,7 @@ export function TadaView() {
           <span className="tada-empty-hint">Completed moments will appear here as they run on schedule.</span>
         </div>
       ) : (
-        results.map((r, i) => (
+        results.filter((r) => showDismissed ? r.dismissed : !r.dismissed).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)).map((r, i) => (
           <section
             key={r.slug}
             className={`glass-card tada-card${r.pinned ? " tada-card--pinned" : ""}${r.dismissed ? " tada-card--dismissed" : ""}`}
@@ -294,27 +309,43 @@ export function TadaView() {
                   </svg>
                 )}
                 {r.title}
+                {r.dismissed && <span className="tada-dismissed-badge">Dismissed</span>}
               </h3>
               <div className="tada-card-actions" onClick={(e) => e.stopPropagation()}>
-                <button
-                  className={`tada-card-action-btn${r.pinned ? " active" : ""}`}
-                  title={r.pinned ? "Unpin" : "Pin"}
-                  onClick={() => r.pinned ? unpin(r.slug) : pin(r.slug)}
-                >
-                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                    <path d="M7.5 1.5L10.5 4.5L9 8L10.5 12.5L7 9L3.5 12.5L5 8L3.5 4.5L6.5 1.5L7.5 1.5Z"
-                      stroke="currentColor" fill={r.pinned ? "currentColor" : "none"} strokeWidth="1" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                <button
-                  className="tada-card-action-btn"
-                  title="Dismiss"
-                  onClick={() => dismiss(r.slug)}
-                >
-                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                    <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                </button>
+                {r.dismissed ? (
+                  <button
+                    className="tada-card-action-btn"
+                    title="Restore"
+                    onClick={() => restore(r.slug)}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                      <path d="M3 8.5V11h2.5M3 11l3.5-3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M6.5 3H11v4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      className={`tada-card-action-btn${r.pinned ? " active" : ""}`}
+                      title={r.pinned ? "Unpin" : "Pin"}
+                      onClick={() => r.pinned ? unpin(r.slug) : pin(r.slug)}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                        <path d="M7.5 1.5L10.5 4.5L9 8L10.5 12.5L7 9L3.5 12.5L5 8L3.5 4.5L6.5 1.5L7.5 1.5Z"
+                          stroke="currentColor" fill={r.pinned ? "currentColor" : "none"} strokeWidth="1" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                    <button
+                      className="tada-card-action-btn"
+                      title="Dismiss"
+                      onClick={() => dismiss(r.slug)}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                        <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
             <div className="tada-card-schedule tada-card-schedule--clickable" onClick={(e) => openScheduleEditor(e, r)}>

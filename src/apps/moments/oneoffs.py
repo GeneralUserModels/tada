@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.builder import build_agent, DEFAULT_MODEL
+from apps.moments._incremental import read_checkpoint, write_checkpoint, classify_sessions
 
 INSTRUCTION_TEMPLATE = """\
 You are analyzing a user's digital activity logs to discover one-off tasks that an AI agent can help with RIGHT NOW.
@@ -106,14 +107,66 @@ When you are done, run `ls -la {logs_dir}/oneoffs/` to verify all task files exi
 """
 
 
+INCREMENTAL_SECTION = """\
+
+## Incremental Discovery — Prioritize Recent Activity
+
+This is a RE-RUN. The last one-off discovery was on **{last_discovery_date}**. You should still read all \
+sessions, but prioritize finding new opportunities from recent activity.
+
+### New sessions since last discovery (prioritize these):
+{new_sessions_list}
+
+### Previously analyzed sessions:
+{old_sessions_list}
+
+Read all sessions, but weight your analysis toward the new ones — one-off tasks are most valuable when \
+they reflect what the user is doing NOW. Old sessions may still have useful context.
+
+### Non-session logs (email, calendar, notifications, filesystem):
+Prioritize entries dated AFTER {last_discovery_date}, but don't ignore older entries if they provide useful context.
+
+### Existing one-off tasks:
+Read files in {logs_dir}/oneoffs/ to see what was already proposed. Do not duplicate these — find NEW \
+situational opportunities.
+"""
+
+
 def run(logs_dir: str, model: str = DEFAULT_MODEL) -> str:
     logs_dir = str(Path(logs_dir).resolve())
     Path(logs_dir, "oneoffs").mkdir(parents=True, exist_ok=True)
+    checkpoint_path = Path(logs_dir) / "oneoffs" / ".last_discovery"
+
+    last_discovery = read_checkpoint(checkpoint_path)
+    new_sessions, old_sessions = classify_sessions(logs_dir, last_discovery)
+
+    instruction = INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir)
+
+    if last_discovery is not None and new_sessions:
+        new_list = "\n".join(f"- {s}/labels.jsonl" for s in new_sessions)
+        old_list = "\n".join(f"- {s}/labels.jsonl" for s in old_sessions) if old_sessions else "- (none)"
+        instruction += INCREMENTAL_SECTION.format(
+            last_discovery_date=last_discovery.strftime("%Y-%m-%d %H:%M"),
+            new_sessions_list=new_list,
+            old_sessions_list=old_list,
+            logs_dir=logs_dir,
+        )
+    elif last_discovery is not None and not new_sessions:
+        instruction += (
+            f"\n\n## Note\n\nThe last one-off discovery was on "
+            f"**{last_discovery.strftime('%Y-%m-%d %H:%M')}** and there are NO new session "
+            f"directories since then. Check non-session logs for recent entries. If nothing "
+            f"substantial is new, it's fine to produce no new tasks."
+        )
+
     agent, _ = build_agent(model)
     agent.max_rounds = 200
-    instruction = INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir)
     messages = [{"role": "user", "content": instruction}]
-    return agent.run(messages)
+    result = agent.run(messages)
+
+    write_checkpoint(checkpoint_path)
+
+    return result
 
 
 if __name__ == "__main__":

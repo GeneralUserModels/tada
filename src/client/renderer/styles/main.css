@@ -1179,6 +1179,30 @@ button, input, select, textarea, canvas, a, label,
   color: var(--text-tertiary);
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
+  position: relative;
+}
+
+.tada-card-action-btn::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--bg-warm);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-sm);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.tada-card-action-btn:hover::after {
+  opacity: 1;
 }
 
 .tada-card-action-btn:hover {
@@ -1198,12 +1222,37 @@ button, input, select, textarea, canvas, a, label,
 }
 
 .tada-card--dismissed {
-  opacity: 0.5;
+  opacity: 0.45;
+  padding: 8px 14px;
+  min-height: 0;
+  gap: 0;
+}
+
+.tada-card--dismissed .tada-card-header {
+  margin-bottom: 0;
 }
 
 .tada-card--dismissed .tada-card-title {
-  text-decoration: line-through;
-  text-decoration-color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tada-card--dismissed .tada-card-schedule,
+.tada-card--dismissed .tada-card-desc {
+  display: none;
+}
+
+.tada-dismissed-badge {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  background: rgba(var(--sage-rgb), 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  flex-shrink: 0;
 }
 
 /* ── Schedule Editor ───────────────────────────────────── */

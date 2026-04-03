@@ -30,6 +30,13 @@ export function useMoments() {
     await updateMomentState(slug, { dismissed: true });
   }, []);
 
+  const restore = useCallback(async (slug: string) => {
+    setResults((prev) =>
+      prev.map((r) => (r.slug === slug ? { ...r, dismissed: false } : r))
+    );
+    await updateMomentState(slug, { dismissed: false });
+  }, []);
+
   const pin = useCallback(async (slug: string) => {
     setResults((prev) =>
       prev.map((r) => (r.slug === slug ? { ...r, pinned: true, dismissed: false } : r))
@@ -85,6 +92,7 @@ export function useMoments() {
     showDismissed,
     toggleShowDismissed,
     dismiss,
+    restore,
     pin,
     unpin,
     editSchedule,
