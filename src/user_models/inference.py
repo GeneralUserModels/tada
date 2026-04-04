@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
+from user_models.powernap.longnap.trainer_utils import build_actions_block
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +19,6 @@ async def handle_prediction_request(state: Any):
     
 
     model = state.model
-
-    if not model.inference_active:
-        await state.broadcast("prediction", {"error": "inference not active"})
-        return
 
     if model.predictor is None:
         await state.broadcast("prediction", {"error": "predictor not initialized (start training first)"})
@@ -71,6 +68,8 @@ async def handle_prediction_request(state: Any):
         await state.broadcast("prediction", {"error": str(e)})
         return
 
+    state.model.latest_prediction = result
+
     await state.broadcast("prediction", {
         "actions": result["actions"],
         "think": result["think"],
@@ -79,15 +78,13 @@ async def handle_prediction_request(state: Any):
     })
 
     actions_parsed = bool(re.search(r"<action>", result["actions"]))
-    if actions_parsed:
+    if actions_parsed and predictor.should_score_prediction:
         asyncio.create_task(_score_prediction(state, result, cutoff_ts, future_len))
 
 
 async def _score_prediction(state: Any, result: dict, cutoff_ts: float, future_len: int):
     """Background task: wait for enough ground truth, then score the prediction."""
     
-    from user_models.powernap.longnap.trainer_utils import build_actions_block
-
     data_manager = state.model.data_manager
 
     for _ in range(120):

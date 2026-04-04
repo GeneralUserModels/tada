@@ -6,8 +6,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-_default_config_path = str(Path.home() / ".config" / "powernap" / "powernap-config.json")
-CONFIG_PATH = Path(os.environ.get("POWERNAP_CONFIG_PATH", _default_config_path))
+CONFIG_PATH = Path(os.environ.get("POWERNAP_CONFIG_PATH", "powernap-config.json"))
 
 # Fields that are user-settable via the API and persisted to disk.
 # CLI-arg fields (log_dir, token paths, etc.) are excluded — they always win.
@@ -22,6 +21,8 @@ _PERSISTED_FIELDS = {
     "disabled_connectors", "connector_errors", "mcp_connectors",
     "onboarding_complete",
     "tada_dir", "moments_agent_model", "moments_agent_model_api_key", "moments_discovery_interval", "moments_enabled",
+    "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
+    "agent_model", "agent_api_key",
 }
 
 
@@ -63,11 +64,11 @@ class MCPConnectorDef(BaseModel):
 
 
 class ServerConfig(BaseModel):
-    # API keys (populated via settings endpoint or env)
-    default_llm_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
-    tinker_api_key: str = Field(default_factory=lambda: os.getenv("TINKER_API_KEY", ""))
-    hf_token: str = Field(default_factory=lambda: os.getenv("HF_TOKEN", ""))
-    wandb_api_key: str = Field(default_factory=lambda: os.getenv("WANDB_API_KEY", ""))
+    # API keys (populated via settings endpoint or persisted config)
+    default_llm_api_key: str = ""
+    tinker_api_key: str = ""
+    hf_token: str = ""
+    wandb_api_key: str = ""
 
     # Recorder
     fps: int = 5
@@ -82,18 +83,18 @@ class ServerConfig(BaseModel):
     chunk_workers: int = 4
 
     # Model selection
-    model_type: str = Field(default_factory=lambda: os.getenv("POWERNAP_MODEL_TYPE", "prompted"))
-    prompted_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_PROMPTED_MODEL", "gemini/gemini-3-flash-preview"))
+    model_type: str = "prompted"
+    prompted_model: str = "gemini/gemini-3-flash-preview"
 
     # Trainer
-    model: str = Field(default_factory=lambda: os.getenv("POWERNAP_MODEL", "Qwen/Qwen3-VL-30B-A3B-Instruct"))
+    model: str = "Qwen/Qwen3-VL-30B-A3B-Instruct"
     reward_llm: str = "gemini/gemini-3-flash-preview"
     reward_llm_api_key: str = ""
     num_generations: int = 4
     learning_rate: float = 5e-5
     max_completion_length: int = 512
-    num_imgs_per_sample: int | None = None
-    loss_mode: str = Field(default_factory=lambda: os.getenv("POWERNAP_LOSS_MODE", "llm_judge"))
+    num_imgs_per_sample: int | None = 3
+    loss_mode: str = "llm_judge"
     eval_with_llm_judge: bool = False
     batch_size: int = 8
     past_len: int = 16
@@ -101,6 +102,15 @@ class ServerConfig(BaseModel):
 
     # Inference
     predict_every_n_seconds: int = 10
+
+    # Tabracadabra
+    tabracadabra_enabled: bool = True
+    tabracadabra_model: str = "gemini/gemini-3-flash-preview"
+    tabracadabra_api_key: str = ""
+
+    # Agent
+    agent_model: str = "anthropic/claude-sonnet-4-6"
+    agent_api_key: str = ""
 
     # Logging
     log_dir: str = Field(default_factory=lambda: os.getenv("POWERNAP_LOG_DIR", "./logs"))

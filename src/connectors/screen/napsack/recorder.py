@@ -1,4 +1,6 @@
+import os
 import sys
+import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from datetime import datetime
@@ -10,6 +12,9 @@ from napsack.record.__main__ import ScreenRecorder, get_monitor_dpis, calculate_
 
 # Default DPI for screenshot rescaling (lower = smaller images, fewer tokens)
 DEFAULT_TARGET_DPI = 100
+
+# Flag file created by tabracadabra to suppress aggregation during active streaming
+TABRACADABRA_SUPPRESS_FLAG = os.path.join(tempfile.gettempdir(), "powernap_tab_active")
 
 # Default event types to disable for online recording (mouse move is too noisy)
 DEFAULT_DISABLE = ["move"]
@@ -78,6 +83,9 @@ class OnlineRecorder(ScreenRecorder):
 
     def _on_aggregation_request(self, request):
         if not request:
+            return
+
+        if os.path.exists(TABRACADABRA_SUPPRESS_FLAG):
             return
 
         processed = self.aggregation_worker.process_aggregation(request)

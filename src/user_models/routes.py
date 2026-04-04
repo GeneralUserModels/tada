@@ -3,7 +3,6 @@
 Registered by server/app.py under /api/user_models.
 """
 
-import asyncio
 import json
 import logging
 from pathlib import Path
@@ -19,21 +18,12 @@ router = APIRouter(prefix="/api/user_models", tags=["user_models"])
 
 @router.post("/training/start")
 async def start_training(request: Request):
-    state = request.app.state.server
-    model = state.model
+    model = request.app.state.server.model
 
     if model.training_active:
         return {"status": "already_active"}
 
     model.training_resumed.set()
-
-    if model.training_task is None or model.training_task.done():
-        from user_models.training import run_training_service
-        model.training_task = asyncio.create_task(run_training_service(state))
-        model.training_task.add_done_callback(
-            lambda t: logger.error("Training task crashed: %s", t.exception()) if not t.cancelled() and t.exception() else None
-        )
-
     logger.info("Training started")
     return {"status": "ok"}
 
@@ -51,44 +41,6 @@ async def stop_training(request: Request):
     return {"status": "ok"}
 
 
-# ── Inference ──────────────────────────────────────────────────
-
-@router.post("/inference/start")
-async def start_inference(request: Request):
-    state = request.app.state.server
-    model = state.model
-
-    if model.inference_active:
-        return {"status": "already_active"}
-
-    model.inference_active = True
-
-    # For prompted mode, auto-initialize predictor and start label watcher
-    if state.config.model_type != "powernap":
-        model.training_resumed.set()
-        if model.training_task is None or model.training_task.done():
-            from user_models.training import run_training_service
-            model.training_task = asyncio.create_task(run_training_service(state))
-            model.training_task.add_done_callback(
-                lambda t: logger.error("Label watcher crashed: %s", t.exception()) if not t.cancelled() and t.exception() else None
-            )
-
-    logger.info("Inference enabled")
-    return {"status": "ok"}
-
-
-@router.post("/inference/stop")
-async def stop_inference(request: Request):
-    model = request.app.state.server.model
-
-    if not model.inference_active:
-        return {"status": "not_active"}
-
-    model.inference_active = False
-    logger.info("Inference disabled")
-    return {"status": "ok"}
-
-
 # ── Prediction ─────────────────────────────────────────────────
 
 @router.post("/prediction")
@@ -97,6 +49,14 @@ async def request_prediction(request: Request):
     from user_models.inference import handle_prediction_request
     await handle_prediction_request(state)
     return {"status": "ok"}
+
+
+@router.get("/latest_prediction")
+async def get_latest_prediction(request: Request):
+    model = request.app.state.server.model
+    if model.latest_prediction is None:
+        return {"available": False}
+    return {"available": True, **model.latest_prediction}
 
 
 # ── History ────────────────────────────────────────────────────
