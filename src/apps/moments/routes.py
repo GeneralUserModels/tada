@@ -9,8 +9,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from server.services.moments_executor import parse_frontmatter
-from server.services.moment_state import (
+from apps.moments.execute import _parse_frontmatter as parse_frontmatter
+from apps.moments.state import (
     load_state,
     save_state,
     DEFAULT_SLUG_STATE,

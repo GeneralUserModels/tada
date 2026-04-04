@@ -10,8 +10,8 @@ import time as _time
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
-from server.services.moments_executor import execute_moment, parse_frontmatter
-from server.services.moment_state import load_state
+from apps.moments.execute import run as execute_moment, _parse_frontmatter as parse_frontmatter
+from apps.moments.state import load_state
 
 logger = logging.getLogger(__name__)
 
