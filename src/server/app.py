@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.state import ServerState
-from server.routes import settings, status, events, moments
+from server.routes import settings, status, events
 from server.routes.auth import router as auth_router, refresh_google_tokens, refresh_outlook_tokens
 from server.routes.onboarding import router as onboarding_router
 from connectors.routes import router as connectors_router
@@ -40,8 +40,8 @@ async def lifespan(app: FastAPI):
     state.outlook_refresh_task = asyncio.create_task(refresh_outlook_tokens(state.config))
 
     # Start moments services (scheduler + periodic discovery)
-    from server.services.moments_scheduler import run_moments_scheduler
-    from server.services.moments_discovery import run_moments_discovery
+    from apps.moments.scheduler import run_moments_scheduler
+    from apps.moments.discovery import run_moments_discovery
     state.moments_scheduler_task = asyncio.create_task(run_moments_scheduler(state))
     state.moments_discovery_task = asyncio.create_task(run_moments_discovery(state))
 
@@ -99,7 +99,8 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(onboarding_router)
     app.include_router(connectors_router)
-    app.include_router(moments.router)
+    from apps.moments.routes import router as moments_router
+    app.include_router(moments_router)
     app.include_router(settings.router)
     app.include_router(status.router)
     app.include_router(user_models_router)
