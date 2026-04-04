@@ -28,8 +28,8 @@ class DataManager:
     """Loads and watches log_dir/*/filtered.jsonl, maintaining a unified in-memory buffer.
 
     Canonical buffer item schema:
-        {"timestamp": float, "text": str, "source_name": str,
-         "prediction_event": bool, "img_path": str | None}
+        {"timestamp": float, "text": str, "dense_caption": str,
+         "source_name": str, "prediction_event": bool, "img_path": str | None}
     """
 
     def __init__(self, log_dir: str):
@@ -96,6 +96,7 @@ class DataManager:
                     entries.append({
                         "timestamp": raw["timestamp"],
                         "text": raw.get("text", ""),
+                        "dense_caption": raw.get("dense_caption", ""),
                         "source_name": raw.get("source_name", ""),
                         "prediction_event": bool(raw.get("prediction_event", False)),
                         "img_path": raw.get("img_path"),

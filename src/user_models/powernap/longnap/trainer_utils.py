@@ -55,6 +55,18 @@ def build_context_block(events: List[Dict[str, Any]]) -> str:
 def fmt_action(text: str) -> str:
     return f"<action>{text}</action>"
 
+def collect_dense_captions(events: List[Dict[str, Any]]) -> str:
+    """Collect unique dense captions from a list of events, preserving order."""
+    seen = set()
+    captions = []
+    for e in events:
+        dc = e.get("dense_caption", "")
+        if dc and dc not in seen:
+            seen.add(dc)
+            captions.append(dc)
+    return "\n".join(captions)
+
+
 def build_actions_block(records: List[Dict[str, Any]]) -> str:
     lines = [fmt_action(r["text"]) for r in records]
     return "<actions>\n" + "\n".join("    " + a for a in lines) + "\n</actions>"

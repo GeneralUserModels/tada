@@ -13,6 +13,7 @@ from user_models.base import BasePredictor
 from user_models.powernap.longnap.trainer_utils import (
     TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block,
     build_think_user_message, build_revise_user_message, build_actions_user_message,
+    collect_dense_captions,
 )
 from retrievers import InMemoryBM25Temporal, jaccard_ngrams, mmr_select
 
@@ -91,7 +92,7 @@ class PromptedPredictor(BasePredictor):
         )
         return response.choices[0].message.content or ""
 
-    def predict(self, messages: list, ts, future_len: int = 4, past_actions: str = "") -> dict:
+    def predict(self, messages: list, ts, future_len: int = 4, past_actions: str = "", dense_caption: str = "") -> dict:
         """Run the Think → Retrieve → Revise → Actions flow using LiteLLM."""
         messages = copy.deepcopy(messages)
 
@@ -102,10 +103,12 @@ class PromptedPredictor(BasePredictor):
             {"type": "text", "text": think_text, "cache_control": {"type": "ephemeral"}}
         ]})
 
-        # 2) Retrieve using think output + past actions as query
+        # 2) Retrieve using think output + past actions + dense caption as query
         query = think_text
         if past_actions:
             query = query + "\n\n" + past_actions
+        if dense_caption:
+            query = query + "\n\n" + dense_caption
 
         hits = self.retriever.query(
             query, k=self.top_k, cutoff_ts=int(ts),
@@ -158,7 +161,10 @@ class PromptedPredictor(BasePredictor):
             return
         new_events = self.data_manager.buffer[self._indexed_context_count:]
         for event in new_events:
-            text = event.get("text")
+            text = event.get("text", "")
+            dense_caption = event.get("dense_caption", "")
+            if dense_caption:
+                text = dense_caption.strip() + "\n" + text if text else dense_caption
             if text:
                 self.retriever.add(
                     text,
@@ -200,4 +206,6 @@ class PromptedPredictor(BasePredictor):
 
         messages = [{"role": "user", "content": content}]
         ts = past[0]["timestamp"]
-        return self.predict(messages, ts, future_len=future_len, past_actions=past_actions_block)
+
+        dense_caption = collect_dense_captions(past)
+        return self.predict(messages, ts, future_len=future_len, past_actions=past_actions_block, dense_caption=dense_caption)

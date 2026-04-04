@@ -12,6 +12,7 @@ from user_models.base import BasePredictor
 from user_models.powernap.longnap.trainer_utils import (
     TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block,
     build_think_user_message, build_revise_user_message, build_actions_user_message,
+    collect_dense_captions,
 )
 from retrievers import InMemoryBM25Temporal, jaccard_ngrams, mmr_select
 
@@ -69,7 +70,7 @@ class FinetunedPredictor(BasePredictor):
         tokens = sample_result.sequences[0].tokens
         return self.tokenizer.decode(tokens, skip_special_tokens=True)
 
-    def predict(self, messages, ts, future_len=4, past_actions=""):
+    def predict(self, messages, ts, future_len=4, past_actions="", dense_caption=""):
         """Run the Think → Retrieve → Revise → Actions flow."""
         # 1) Think - merge think instruction into last user message, then sample
         #    Content is always a list (built by predict_from_snapshot), so just append a TextPart.
@@ -82,10 +83,12 @@ class FinetunedPredictor(BasePredictor):
         think_text = self._sample(messages, stop=["</rationale>"])
         messages.append({"role": "assistant", "content": think_text})
 
-        # 2) Retrieve using think output
+        # 2) Retrieve using think output + past actions + dense caption
         query = think_text
         if past_actions:
             query = query + "\n\n" + past_actions
+        if dense_caption:
+            query = query + "\n\n" + dense_caption
 
         hits = self.retriever.query(
             query, k=self.top_k, cutoff_ts=int(ts),
@@ -142,4 +145,5 @@ class FinetunedPredictor(BasePredictor):
         messages = [{"role": "user", "content": content}]
         ts = past[0]["timestamp"]
 
-        return self.predict(messages, ts, future_len=future_len, past_actions=past_actions_block)
+        dense_caption = collect_dense_captions(past)
+        return self.predict(messages, ts, future_len=future_len, past_actions=past_actions_block, dense_caption=dense_caption)
