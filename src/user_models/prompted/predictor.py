@@ -12,18 +12,16 @@ from litellm import completion as litellm_completion
 from user_models.base import BasePredictor
 from user_models.powernap.longnap.trainer_utils import (
     TASK_DESCRIPTION, TASK_DESCRIPTION_WITH_IMAGES, build_actions_block,
-    build_think_user_message, build_revise_user_message, build_actions_user_message,
-    collect_dense_captions,
+    build_actions_user_message, collect_dense_captions,
 )
 from retrievers import InMemoryBM25Temporal, jaccard_ngrams, mmr_select
 
 
 class PromptedPredictor(BasePredictor):
-    """Retrieval-augmented next-action predictor using a prompted LLM (no Tinker required).
+    """Retrieval-augmented next-action predictor using a prompted LLM.
 
-    Runs the same Think → Retrieve → Revise → Actions multi-turn pipeline as
-    FinetunedPredictor, but samples from any LiteLLM-compatible model using plain
-    text messages (no Qwen-specific multipart format).
+    Retrieves relevant context via BM25, then predicts next actions in a
+    single LLM call.  Compatible with any LiteLLM-supported model.
     """
 
     def __init__(self, data_manager=None, model: str = "", api_key: str = "",
@@ -93,20 +91,11 @@ class PromptedPredictor(BasePredictor):
         return response.choices[0].message.content or ""
 
     def predict(self, messages: list, ts, future_len: int = 4, past_actions: str = "", dense_caption: str = "") -> dict:
-        """Run the Think → Retrieve → Revise → Actions flow using LiteLLM."""
+        """Retrieve context, then predict next actions in a single LLM call."""
         messages = copy.deepcopy(messages)
 
-        # 1) Think
-        messages.append(build_think_user_message())
-        think_text = self._sample(messages, stop=["</rationale>"])
-        messages.append({"role": "assistant", "content": [
-            {"type": "text", "text": think_text, "cache_control": {"type": "ephemeral"}}
-        ]})
-
-        # 2) Retrieve using think output + past actions + dense caption as query
-        query = think_text
-        if past_actions:
-            query = query + "\n\n" + past_actions
+        # 1) Retrieve using past actions + dense caption as query
+        query = past_actions
         if dense_caption:
             query = query + "\n\n" + dense_caption
 
@@ -120,28 +109,27 @@ class PromptedPredictor(BasePredictor):
             hits = [it[2] for it in selected]
         retrieved_text = "\n\n".join(h["text"] for h in hits)
 
-        # 3) Revise
-        messages.append(build_revise_user_message(retrieved_text))
-        revise_text = self._sample(messages, stop=["</revise>"])
-        messages.append({"role": "assistant", "content": [
-            {"type": "text", "text": revise_text, "cache_control": {"type": "ephemeral"}}
-        ]})
+        # 2) Inject retrieved context and ask for actions in one shot
+        if retrieved_text:
+            context_block = f"<context>\n{retrieved_text}\n</context>\n\n"
+            messages.append({"role": "user", "content": [
+                {"type": "text",
+                 "text": f"Here is some relevant context about this user:\n{context_block}"
+                         f"Predict the next {future_len} actions the user will take.",
+                 "cache_control": {"type": "ephemeral"}}
+            ]})
+        else:
+            messages.append(build_actions_user_message(future_len))
 
-        # 4) Actions — predict the next N actions
-        messages.append(build_actions_user_message(future_len))
         actions_text = self._sample(messages, stop=["</actions>"])
         messages.append({"role": "assistant", "content": [
             {"type": "text", "text": actions_text, "cache_control": {"type": "ephemeral"}}
         ]})
 
-        # Mark every message for caching so tabracadabra can reuse the
-        # cached prefix via LiteLLM's Gemini context caching.
         messages = [self._ensure_cache_control(m) for m in messages]
 
         result = {
-            "think": think_text,
             "retrieved": retrieved_text,
-            "revise": revise_text,
             "actions": actions_text,
             "messages": messages,
             "timestamp": datetime.now().isoformat(),

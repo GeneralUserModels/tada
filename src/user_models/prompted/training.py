@@ -10,13 +10,16 @@ logger = logging.getLogger(__name__)
 
 async def init_predictor(state, config, loop):
     def _init():
-        return PromptedPredictor(
+        predictor = PromptedPredictor(
             data_manager=state.model.data_manager,
             model=config.prompted_model,
             api_key=config.default_llm_api_key,
             max_tokens=config.max_completion_length,
             log_dir=config.log_dir,
+            retriever_checkpoint=config.retriever_checkpoint,
         )
+        predictor.index_context()
+        return predictor
 
     state.model.predictor = await loop.run_in_executor(None, _init)
     logger.info(f"Prompted predictor initialized (model={config.prompted_model})")

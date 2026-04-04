@@ -15,7 +15,8 @@ class BasePredictor(ABC):
     def predict_from_snapshot(self, past: list, future_len: int, **kwargs) -> dict:
         """Run prediction from a pre-sliced list of past actions.
 
-        Returns a dict with keys: think, retrieved, revise, actions, timestamp.
+        Returns a dict with at least: retrieved, actions, timestamp.
+        Finetuned predictors may also include: think, revise.
         """
 
     def score_prediction(
