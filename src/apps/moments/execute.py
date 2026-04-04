@@ -12,12 +12,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from agent.builder import build_agent, DEFAULT_MODEL
+from agent.builder import build_agent
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
-MAX_FILE_CHARS = 50_000
-OUTPUT_FILES = ["index.html", "styles.css", "app.js", "data.js", "meta.json"]
+OUTPUT_FILES = ["index.html", "styles.css", "app.js", "data.js", "base.css", "components.js", "meta.json"]
 
 INSTRUCTION_TEMPLATE = """You are a powerful AI agent executing a moment task for the user. You can:
 - Search the web, fetch live data, and browse authenticated websites (Youtube, Google, Twitter/X, etc.)
@@ -79,32 +78,59 @@ rendering logic below it.
 Each file should be small enough to write in a single tool call. If your JS data is large, split \
 it further (e.g. `data.js` for the data, `app.js` for the logic).
 
-## Templates
+## Templates & Component Library
 
-Pre-built templates are available at `{templates_dir}/`. Each template is a complete working \
-app (index.html + styles.css + app.js) with placeholder data. Read the one that best fits \
-your task using `cat {templates_dir}/<name>/app.js` etc.
+Templates are at `{templates_dir}/`. Each template is a React 18 app (index.html + styles.css + \
+app.js) with placeholder data. Each template has a **README.md** documenting its DATA schema, \
+components used, and template-specific components. Read the README first with \
+`cat {templates_dir}/<name>/README.md`.
 
-Available templates:
-- **feed** — Tabbed content stream with scrollable cards, tags, scores. Good for: lists of items \
-to browse (articles, alerts, notifications, updates, research papers).
-- **dashboard** — Stats row + filterable/searchable card grid. Good for: metrics, tracking, \
-status overviews, anything with numbers + detail cards.
-- **report** — Linear sections with collapsible content, timeline, action items, status badges. \
-Good for: summaries, recaps, advisories, analysis, structured narratives.
-- **table** — Sortable, filterable data table with expandable rows. Good for: structured data, \
-comparisons, logs, inventories.
-- **blank** — Minimal scaffold with just the design system (colors, typography, glass cards, \
-buttons). Good for: anything that doesn't fit the other patterns.
+**Shared resources** at `{templates_dir}/shared/`:
+- **base.css** — Full design system (colors, glass cards, badges, stats, typography, animations)
+- **components.js** — Reusable React component library on the `PN` namespace
+- **README.md** — Full API docs for all shared components
 
-Use a template as your starting point — copy its files to your output dir, replace the DATA \
-object with your real data, and customize the rendering, layout, and styles as needed.
+**Available `PN.*` components** (from components.js):
+- `PN.PageHeader` — title, subtitle, optional badges and status badge
+- `PN.GlassCard` — frosted glass container with optional animation delay
+- `PN.Badge` / `PN.BadgeRow` — pill labels (success/warning/danger variants)
+- `PN.StatRow` — horizontal metrics row with stat pills
+- `PN.SearchInput` — controlled search input field
+- `PN.FilterBar` — pill-style filter buttons with active state
+- `PN.TabBar` — tab navigation with optional counts
+- `PN.ItemCard` — content card with title, description, badges, meta
+- `PN.EmptyState` — placeholder message
+- `PN.ResultCount` — item/row count display
+- `PN.useFilter` / `PN.useSearch` — filtering and search hooks
 
-You have full creative freedom to modify the template, combine elements from multiple templates, \
-or build something entirely new if none of the templates fit. The only requirement is that your \
-output uses the same design language (colors, glass cards, typography, radii) so it feels native \
-to the PowerNap app. Use the blank template's styles.css as a reference for the design system \
-if building from scratch.
+**Available templates:**
+- **dashboard** — Stats + filterable/searchable card grid. For: metrics, tracking, status overviews.
+- **feed** — Tabbed content stream with scores. For: articles, alerts, research papers.
+- **report** — Collapsible sections, timeline, action items. For: summaries, recaps, advisories.
+- **table** — Sortable/filterable data table with expandable rows. For: structured data, logs.
+- **blank** — Minimal scaffold. For: anything custom.
+
+**How to use templates:**
+1. Read the template's README.md and app.js to understand the DATA schema and components.
+2. Copy the template files to your output dir: index.html, styles.css, app.js.
+3. Also copy `{templates_dir}/shared/base.css` and `{templates_dir}/shared/components.js` \
+to `{output_dir}/` as sibling files.
+4. Update the paths in index.html: change `../shared/base.css` to `base.css` and \
+`../shared/components.js` to `components.js`.
+5. Replace the DATA object with your real data.
+
+**Reuse from existing moments:** Browse `{output_dir}/../` to see previously generated moments. \
+If another moment has a useful component (chart, timeline, custom card layout), copy and adapt it \
+into your output. The component ecosystem grows over time.
+
+**Create new reusable components:** When building something novel, implement clean React components \
+with clear props (using `React.createElement`, no JSX). Define them at the top of app.js so they \
+can be borrowed by future moments. Think of each new component as a potential addition to the library.
+
+You have full creative freedom to modify templates, combine elements from multiple templates, \
+or build entirely new interfaces. The only requirement is that your output uses the same design \
+language (colors, glass cards, typography, radii) so it feels native to PowerNap. Use \
+`{templates_dir}/shared/base.css` as the canonical design system reference.
 
 ## Writable directories
 
@@ -144,10 +170,12 @@ more detailed data that isn't in the logs.
 ## Execution
 
 1. Plan with PlanWrite — break the task into steps.
-2. Read the template that best fits your task from `{templates_dir}/`.
+2. Read `{templates_dir}/shared/README.md` to understand the shared component API, then read \
+the README.md of the template that best fits your task.
 3. Read the data sources relevant to this task, process them, and produce the result. Use subagents to parallelize.
-4. Build the interface by customizing the template with your real data.
-5. Write your output files to `{output_dir}/`.
+4. Build the interface by composing from shared `PN.*` components and template-specific components. \
+Also browse `{output_dir}/../` for reusable components from other moments.
+5. Write your output files to `{output_dir}/` (including base.css and components.js).
 """
 
 
@@ -174,12 +202,11 @@ do not present or reproduce them in your output.
 
 ## Existing Output
 
-Here are the current files in the output directory. Preserve the interface design — update the \
+The current interface files are at `{output_dir}/`. Read them with your tools to understand \
+the existing design, layout, and data structure. Preserve the interface design — update the \
 data and content while keeping the same structure, styles, and interaction patterns. If the \
 existing interface has issues or could be meaningfully improved, you may make targeted improvements, \
 but do not redesign from scratch.
-
-{existing_files}
 
 ## Available Data
 
@@ -260,26 +287,6 @@ more detailed data that isn't in the logs.
 """
 
 
-def _read_existing_output(output_dir: str) -> dict[str, str]:
-    """Read existing output files from a moment's output directory."""
-    files = {}
-    for name in OUTPUT_FILES:
-        path = Path(output_dir) / name
-        if path.exists():
-            content = path.read_text()
-            if len(content) > MAX_FILE_CHARS:
-                content = content[:MAX_FILE_CHARS] + f"\n[... truncated, {len(content)} chars total ...]"
-            files[name] = content
-    return files
-
-
-def _format_existing_files(files: dict[str, str]) -> str:
-    """Format existing output files as a prompt section."""
-    sections = []
-    for name, content in files.items():
-        sections.append(f"### `{name}`\n```\n{content}\n```")
-    return "\n\n".join(sections)
-
 
 def _parse_frontmatter(content: str) -> dict:
     """Extract YAML frontmatter from markdown content."""
@@ -301,7 +308,7 @@ def run(
     task_path: str,
     output_dir: str,
     logs_dir: str,
-    model: str = DEFAULT_MODEL,
+    model: str,
     frequency_override: str | None = None,
     schedule_override: str | None = None,
 ) -> bool:
@@ -315,14 +322,12 @@ def run(
 
     existing_index = Path(output_dir) / "index.html"
     if existing_index.exists():
-        existing_files = _read_existing_output(output_dir)
         instruction = UPDATE_INSTRUCTION_TEMPLATE.format(
             task_content=task_content,
             output_dir=output_dir,
             logs_dir=logs_dir,
             frequency=effective_frequency,
             schedule=effective_schedule,
-            existing_files=_format_existing_files(existing_files),
         )
     else:
         instruction = INSTRUCTION_TEMPLATE.format(
@@ -334,7 +339,7 @@ def run(
             templates_dir=str(TEMPLATES_DIR),
         )
 
-    agent, _ = build_agent(model)
+    agent, _ = build_agent(model, logs_dir)
     agent.max_rounds = 100
     agent.run([{"role": "user", "content": instruction}])
 
@@ -357,7 +362,7 @@ if __name__ == "__main__":
     parser.add_argument("task_path", help="Path to the task .md file")
     parser.add_argument("output_dir", help="Directory to write HTML output")
     parser.add_argument("logs_dir", help="Path to the logs directory")
-    parser.add_argument("-m", "--model", default=os.environ.get("POWERNAP_AGENT_MODEL", DEFAULT_MODEL))
+    parser.add_argument("-m", "--model", default=os.environ["POWERNAP_AGENT_MODEL"])
     args = parser.parse_args()
 
     success = run(args.task_path, args.output_dir, args.logs_dir, model=args.model)

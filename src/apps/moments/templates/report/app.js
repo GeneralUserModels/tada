@@ -33,72 +33,86 @@ const DATA = {
   ],
 };
 
-// ── Render ───────────────────────────────────────────────
-function render() {
-  // Header
-  document.getElementById("header").innerHTML = `
-    <div class="report-header">
-      <div class="header-row">
-        <h1>${DATA.title}</h1>
-        ${DATA.status ? `<span class="status-badge ${DATA.status.type}">${DATA.status.text}</span>` : ""}
-      </div>
-      <p class="meta">${DATA.subtitle}</p>
-    </div>
-  `;
+// ── App ─────────────────────────────────────────────────
+const h = React.createElement;
+const { useState } = React;
+const { PageHeader, GlassCard } = PN;
 
-  // Sections
-  document.getElementById("sections").innerHTML = DATA.sections.map((s, i) => `
-    <div class="glass-card" style="animation-delay: ${i * 0.04}s">
-      <button class="collapsible-toggle" aria-expanded="${!s.collapsed}" onclick="toggleSection(this)">
-        <span class="section-title">${s.title}</span>
-        <span class="chevron">${s.collapsed ? "\u25B6" : "\u25BC"}</span>
-      </button>
-      <div class="collapsible-body" style="${s.collapsed ? "display:none" : ""}">
-        <div class="section-content">${s.content}</div>
-      </div>
-    </div>
-  `).join("");
+/** Collapsible section with toggle (template-specific) */
+function CollapsibleSection({ title, content, initialCollapsed, delay }) {
+  var [collapsed, setCollapsed] = useState(initialCollapsed);
 
-  // Actions
-  if (DATA.actions?.length) {
-    const done = DATA.actions.filter(a => a.done).length;
-    document.getElementById("actions").innerHTML = `
-      <h2 class="actions-header">Action Items (${done}/${DATA.actions.length})</h2>
-      ${DATA.actions.map(a => `
-        <div class="action-item">
-          <div class="action-check${a.done ? " done" : ""}">${a.done ? "\u2713" : ""}</div>
-          <div>
-            <div class="action-title" style="${a.done ? "text-decoration: line-through; opacity: 0.6" : ""}">${a.title}</div>
-            ${a.description ? `<div class="action-desc">${a.description}</div>` : ""}
-          </div>
-        </div>
-      `).join("")}
-    `;
-  }
-
-  // Timeline
-  if (DATA.timeline?.length) {
-    document.getElementById("timeline").innerHTML = `
-      <h2 class="timeline-header">Timeline</h2>
-      <div class="timeline">
-        ${DATA.timeline.map(t => `
-          <div class="timeline-item">
-            <div class="timeline-dot"></div>
-            <div class="timeline-date">${t.date}</div>
-            <div class="timeline-title">${t.title}</div>
-            ${t.description ? `<div class="timeline-desc">${t.description}</div>` : ""}
-          </div>
-        `).join("")}
-      </div>
-    `;
-  }
+  return h(GlassCard, { delay: delay },
+    h("button", {
+      className: "collapsible-toggle",
+      onClick: function() { setCollapsed(!collapsed); }
+    },
+      h("span", { className: "section-title" }, title),
+      h("span", { className: "chevron" }, collapsed ? "\u25B6" : "\u25BC")
+    ),
+    collapsed ? null : h("div", { style: { marginTop: "10px" } },
+      h("div", { className: "section-content", dangerouslySetInnerHTML: { __html: content } })
+    )
+  );
 }
 
-function toggleSection(btn) {
-  const expanded = btn.getAttribute("aria-expanded") === "true";
-  btn.setAttribute("aria-expanded", !expanded);
-  btn.querySelector(".chevron").textContent = expanded ? "\u25B6" : "\u25BC";
-  btn.nextElementSibling.style.display = expanded ? "none" : "";
+/** Action item with checkbox (template-specific) */
+function ActionItem({ title, description, done }) {
+  return h("div", { className: "action-item" },
+    h("div", { className: "action-check" + (done ? " done" : "") }, done ? "\u2713" : ""),
+    h("div", null,
+      h("div", { className: "action-title", style: done ? { textDecoration: "line-through", opacity: 0.6 } : {} }, title),
+      description ? h("div", { className: "action-desc" }, description) : null
+    )
+  );
 }
 
-render();
+/** Timeline with dots and dates (template-specific) */
+function Timeline({ items }) {
+  if (!items || !items.length) return null;
+  return h("div", null,
+    h("h2", { className: "timeline-header" }, "Timeline"),
+    h("div", { className: "timeline" },
+      items.map(function(t, i) {
+        return h("div", { key: i, className: "timeline-item" },
+          h("div", { className: "timeline-dot" }),
+          h("div", { className: "timeline-date" }, t.date),
+          h("div", { className: "timeline-title" }, t.title),
+          t.description ? h("div", { className: "timeline-desc" }, t.description) : null
+        );
+      })
+    )
+  );
+}
+
+function ReportApp() {
+  var done = DATA.actions ? DATA.actions.filter(function(a) { return a.done; }).length : 0;
+
+  return h("div", { className: "container" },
+    h(PageHeader, { title: DATA.title, subtitle: DATA.subtitle, status: DATA.status }),
+
+    // Sections
+    DATA.sections.map(function(s, i) {
+      return h(CollapsibleSection, {
+        key: i,
+        title: s.title,
+        content: s.content,
+        initialCollapsed: s.collapsed,
+        delay: i * 0.04
+      });
+    }),
+
+    // Actions
+    DATA.actions && DATA.actions.length ? h("div", null,
+      h("h2", { className: "actions-header" }, "Action Items (" + done + "/" + DATA.actions.length + ")"),
+      DATA.actions.map(function(a, i) {
+        return h(ActionItem, { key: i, title: a.title, description: a.description, done: a.done });
+      })
+    ) : null,
+
+    // Timeline
+    h(Timeline, { items: DATA.timeline })
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(h(ReportApp));

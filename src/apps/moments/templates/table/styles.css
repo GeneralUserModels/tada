@@ -1,82 +1,11 @@
-/* PowerNap Moments — Table Template */
+/* PowerNap Moments — Table Template (overrides only) */
 
-:root {
-  --sage: #84B179; --fern: #A2CB8B; --mint: #C7EABB; --cream: #E8F5BD;
-  --sage-rgb: 132,177,121; --fern-rgb: 162,203,139;
-  --mint-rgb: 199,234,187; --cream-rgb: 232,245,189;
-  --bg: #F4F2EE; --bg-warm: #EBE8E2;
-  --glass: rgba(255,255,255,0.55);
-  --glass-border: rgba(var(--sage-rgb), 0.18);
-  --glass-hover: rgba(255,255,255,0.72);
-  --glass-shadow: rgba(var(--sage-rgb), 0.08);
-  --text: #2C3A28; --text-secondary: #6B7A65; --text-tertiary: #9BA896;
-  --active-green: #5DA34E; --danger: #C9594B; --danger-soft: rgba(201,89,75,0.12);
-  --r-sm: 8px; --r-md: 14px; --r-lg: 20px; --r-xl: 26px;
-}
-
-*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
-body {
-  font-family: 'Tahoe', -apple-system, BlinkMacSystemFont, system-ui, 'Helvetica Neue', sans-serif;
-  background: var(--bg); color: var(--text);
-  font-size: 13px; line-height: 1.5; padding: 24px;
-  -webkit-font-smoothing: antialiased;
-}
-
-.container { max-width: 900px; margin: 0 auto; }
-h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; }
-a { color: var(--sage); text-decoration: none; }
-a:hover { text-decoration: underline; }
-.meta { font-size: 10.5px; color: var(--text-tertiary); margin-bottom: 16px; }
-
-/* Stats */
-.stat-row { display: flex; gap: 12px; margin-bottom: 16px; }
-.stat-pill {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 14px; text-align: center;
-  background: rgba(255,255,255,0.5); border: 1px solid rgba(var(--sage-rgb), 0.1);
-  border-radius: var(--r-md);
-}
-.stat-value {
-  font-size: 22px; font-weight: 700; color: var(--sage);
-  font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
-}
-.stat-label {
-  font-size: 10px; color: var(--text-secondary); text-transform: uppercase;
-  letter-spacing: 0.05em; font-weight: 600;
-}
-
-/* Controls */
+.container { max-width: 900px; }
 .controls { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.search-input {
-  padding: 6px 14px; width: 260px;
-  background: rgba(255,255,255,0.6); border: 1px solid rgba(var(--sage-rgb), 0.12);
-  border-radius: var(--r-sm); color: var(--text);
-  font-size: 12px; font-family: inherit;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.search-input::placeholder { color: var(--text-tertiary); }
-.search-input:focus {
-  outline: none; border-color: rgba(var(--sage-rgb), 0.4);
-  box-shadow: 0 0 0 3px rgba(var(--sage-rgb), 0.08);
-}
+.search-input { width: 260px; }
 
-/* Glass card for table */
-.glass-card {
-  background: var(--glass);
-  backdrop-filter: blur(30px) saturate(1.3);
-  -webkit-backdrop-filter: blur(30px) saturate(1.3);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--r-lg);
-  padding: 4px 0;
-  margin-bottom: 8px;
-  box-shadow:
-    0 1px 3px var(--glass-shadow),
-    0 8px 24px rgba(var(--sage-rgb), 0.04),
-    inset 0 1px 0 rgba(255,255,255,0.5);
-  overflow: hidden;
-}
-
+/* Glass card override for table wrapper */
+.glass-card.table-wrap { padding: 4px 0; overflow: hidden; }
 .table-wrap { overflow-x: auto; }
 
 /* Table */
@@ -109,25 +38,4 @@ tr.detail-row td {
 .row-detail {
   font-size: 12px; color: var(--text-secondary); line-height: 1.55;
   padding: 8px 0;
-}
-
-/* Badges in cells */
-.badge {
-  font-size: 9px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em;
-  padding: 2px 8px; border-radius: 20px; display: inline-block;
-  color: var(--sage); background: rgba(var(--sage-rgb), 0.12);
-}
-.badge.warning { color: #D4A843; background: rgba(212,168,67,0.12); }
-.badge.danger { color: var(--danger); background: var(--danger-soft); }
-.badge.success { color: var(--active-green); background: rgba(93,163,78,0.1); }
-
-.result-count { font-size: 11px; color: var(--text-tertiary); font-weight: 550; }
-
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(var(--sage-rgb), 0.2); border-radius: 3px; }
-
-@keyframes fadeSlideIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
 }

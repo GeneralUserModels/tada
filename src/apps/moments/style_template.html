@@ -1,11 +1,29 @@
 <!--
   PowerNap Moments — HTML Style Guide Template
 
-  This file is loaded by the moment executor and embedded in the agent's prompt
-  as a style reference. The agent has full freedom to modify, extend, or restructure.
+  This file is a quick-reference for the design system. The canonical source is
+  templates/shared/base.css (design system) and templates/shared/components.js
+  (React component library on the PN.* namespace).
 
   Design tokens are pulled from the app's main.css (src/client/renderer/styles/main.css).
-  If the app palette changes, update the :root variables here to match.
+  If the app palette changes, update the :root variables in shared/base.css to match.
+
+  React Component Library (PN.*):
+    PN.PageHeader   — title, subtitle, optional badges and status
+    PN.GlassCard    — frosted glass container with animation delay
+    PN.Badge        — pill label (success/warning/danger)
+    PN.BadgeRow     — flex row of badges
+    PN.StatRow      — horizontal stat pills
+    PN.SearchInput  — controlled search field
+    PN.FilterBar    — pill-style filter buttons
+    PN.TabBar       — tab navigation
+    PN.ItemCard     — content card with title, badges, meta
+    PN.EmptyState   — empty placeholder
+    PN.ResultCount  — count display
+    PN.useFilter    — filter hook
+    PN.useSearch    — search hook
+
+  See templates/shared/README.md for full API documentation.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -35,12 +53,15 @@
     --text-tertiary: #9BA896;
 
     /* Accents */
+    --active-green: #5DA34E;
     --danger: #C9594B;
+    --danger-soft: rgba(201,89,75,0.12);
 
     /* Radii */
     --r-sm: 8px;
     --r-md: 14px;
     --r-lg: 20px;
+    --r-xl: 26px;
   }
 
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -60,8 +81,8 @@
   h2 { font-size: 14px; font-weight: 650; margin-bottom: 12px; }
   h3 { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
 
-  /* Glass card — primary container */
-  .card {
+  /* Glass card — primary container (use PN.GlassCard in React) */
+  .card, .glass-card {
     background: var(--glass);
     border: 1px solid var(--glass-border);
     border-radius: var(--r-lg);
@@ -70,19 +91,22 @@
     box-shadow: 0 1px 3px var(--glass-shadow), 0 8px 24px rgba(var(--sage-rgb), 0.04);
   }
 
-  /* Badge / pill label */
+  /* Badge / pill label (use PN.Badge in React) */
   .badge {
     font-size: 9px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em;
     padding: 2px 8px; border-radius: 20px;
     color: var(--sage); background: rgba(var(--sage-rgb), 0.12); display: inline-block;
   }
+  .badge.warning { color: #D4A843; background: rgba(212,168,67,0.12); }
+  .badge.danger { color: var(--danger); background: var(--danger-soft); }
+  .badge.success { color: var(--active-green); background: rgba(93,163,78,0.1); }
 
   /* Metadata line */
   .meta { font-size: 10.5px; color: var(--text-tertiary); margin-bottom: 16px; }
 
-  /* Stats row */
+  /* Stats row (use PN.StatRow in React) */
   .stat-row { display: flex; gap: 12px; margin-bottom: 16px; }
-  .stat-box {
+  .stat-box, .stat-pill {
     flex: 1; background: rgba(255,255,255,0.5); border: 1px solid rgba(var(--sage-rgb), 0.1);
     border-radius: var(--r-md); padding: 14px; text-align: center;
   }
@@ -108,14 +132,15 @@
   pre { background: rgba(255,255,255,0.6); border: 1px solid var(--glass-border); border-radius: var(--r-sm); padding: 12px 14px; overflow-x: auto; margin-bottom: 12px; }
 
   /* Semantic colors */
-  .success { color: var(--sage); }
+  .success { color: var(--active-green); }
   .warning { color: #D4A843; }
   .danger { color: var(--danger); }
 </style>
 </head>
 <body>
   <!-- Agent: Replace this body with your content.
-       Use .card for sections, .stat-row + .stat-box for metrics,
+       Prefer using PN.* React components (see templates/shared/README.md).
+       Use .glass-card for sections, .stat-row + .stat-pill for metrics,
        table for data, .badge for labels. -->
 </body>
 </html>

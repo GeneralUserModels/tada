@@ -8,13 +8,10 @@ import sys
 
 from dotenv import load_dotenv
 
-from .builder import build_agent, DEFAULT_MODEL, SYSTEM_PROMPT, TRANSCRIPT_DIR
+from .builder import build_agent
 from .tools import _task_manager
 
 load_dotenv()
-
-# Re-export for any existing callers
-_build_agent = build_agent
 
 SLASH_COMMANDS = {
     "/compact": "Compress conversation history",
@@ -28,11 +25,12 @@ SLASH_COMMANDS = {
 def main():
     parser = argparse.ArgumentParser(description="PowerNap agent")
     parser.add_argument("query", nargs="*", help="One-shot query (omit for REPL)")
-    parser.add_argument("-m", "--model", default=os.environ.get("POWERNAP_AGENT_MODEL", DEFAULT_MODEL))
+    parser.add_argument("-m", "--model", default=os.environ["POWERNAP_AGENT_MODEL"])
+    parser.add_argument("--data-dir", default=os.environ.get("POWERNAP_DATA_DIR", "."))
     args = parser.parse_args()
 
     model = args.model
-    agent, compact_tool = build_agent(model)
+    agent, compact_tool = build_agent(model, args.data_dir)
     history: list = []
 
     # one-shot mode

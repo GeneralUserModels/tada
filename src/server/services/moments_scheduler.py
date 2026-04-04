@@ -129,11 +129,11 @@ async def run_moments_scheduler(state) -> None:
 
     # Initialize sandbox in the event loop (signal handlers require main thread)
     from agent.builder import _ensure_sandbox_async
-    await _ensure_sandbox_async()
+    logs_dir = str(Path(state.config.log_dir).resolve())
+    await _ensure_sandbox_async(logs_dir)
 
     executor_lock = state.moments_executor_lock
     model = state.config.moments_agent_model
-    logs_dir = str(Path(state.config.log_dir).resolve())
 
     while True:
         try:

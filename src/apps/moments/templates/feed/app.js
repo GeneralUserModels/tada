@@ -47,62 +47,58 @@ const DATA = {
   ],
 };
 
-// ── Render ───────────────────────────────────────────────
-let activeTab = DATA.tabs[0]?.id;
+// ── App ─────────────────────────────────────────────────
+const h = React.createElement;
+const { useState } = React;
+const { PageHeader, StatRow, TabBar, GlassCard, EmptyState } = PN;
 
-function render() {
-  document.getElementById("title").textContent = DATA.title;
-  document.getElementById("subtitle").textContent = DATA.subtitle;
-
-  // Tags
-  document.getElementById("tags").innerHTML =
-    (DATA.tags || []).map(t => `<span class="badge">${t}</span>`).join("");
-
-  // Stats
-  document.getElementById("stats").innerHTML =
-    (DATA.stats || []).map(s => `
-      <div class="stat-pill">
-        <div class="stat-value">${s.value}</div>
-        <div class="stat-label">${s.label}</div>
-      </div>
-    `).join("");
-
-  // Tabs
-  document.getElementById("tab-bar").innerHTML =
-    DATA.tabs.map(t => `
-      <button class="tab-btn${t.id === activeTab ? " active" : ""}" data-tab="${t.id}">
-        ${t.label} (${t.items.length})
-      </button>
-    `).join("");
-
-  // Content
-  const tab = DATA.tabs.find(t => t.id === activeTab);
-  if (!tab || tab.items.length === 0) {
-    document.getElementById("tab-content").innerHTML = '<div class="empty">No items yet.</div>';
-    return;
-  }
-
-  document.getElementById("tab-content").innerHTML = tab.items.map((item, i) => `
-    <div class="glass-card" style="animation-delay: ${i * 0.04}s">
-      <div class="card-header">
-        <div>
-          <div class="card-title">${item.url ? `<a href="${item.url}" target="_blank">${item.title}</a>` : item.title}</div>
-          <div class="card-meta">${item.meta || ""}</div>
-        </div>
-        ${item.score != null ? `<div class="score${item.score >= 8 ? " high" : ""}">${item.score}</div>` : ""}
-      </div>
-      ${item.summary ? `<div class="card-summary">${item.summary}</div>` : ""}
-      ${item.tags?.length ? `<div class="card-tags">${item.tags.map(t => `<span class="card-tag">${t}</span>`).join("")}</div>` : ""}
-    </div>
-  `).join("");
+/** Score circle indicator (template-specific component) */
+function ScoreCircle({ score }) {
+  if (score == null) return null;
+  return h("div", { className: "score" + (score >= 8 ? " high" : "") }, score);
 }
 
-// Tab switching
-document.getElementById("tab-bar").addEventListener("click", e => {
-  const btn = e.target.closest(".tab-btn");
-  if (!btn) return;
-  activeTab = btn.dataset.tab;
-  render();
-});
+/** Feed item card with score and tags */
+function FeedCard({ item, delay }) {
+  return h(GlassCard, { delay: delay },
+    h("div", { className: "card-header" },
+      h("div", null,
+        h("div", { className: "card-title" },
+          item.url ? h("a", { href: item.url, target: "_blank" }, item.title) : item.title
+        ),
+        h("div", { className: "card-meta" }, item.meta || "")
+      ),
+      h(ScoreCircle, { score: item.score })
+    ),
+    item.summary ? h("div", { className: "card-summary" }, item.summary) : null,
+    item.tags && item.tags.length ? h("div", { className: "card-tags" },
+      item.tags.map(function(t, i) {
+        return h("span", { key: i, className: "card-tag" }, t);
+      })
+    ) : null
+  );
+}
 
-render();
+function FeedApp() {
+  var [activeTab, setActiveTab] = useState(DATA.tabs[0] ? DATA.tabs[0].id : null);
+
+  var tabs = DATA.tabs.map(function(t) {
+    return { id: t.id, label: t.label, count: t.items.length };
+  });
+
+  var currentTab = DATA.tabs.find(function(t) { return t.id === activeTab; });
+  var items = currentTab ? currentTab.items : [];
+
+  return h("div", { className: "container" },
+    h(PageHeader, { title: DATA.title, subtitle: DATA.subtitle, badges: DATA.tags }),
+    h(StatRow, { stats: DATA.stats }),
+    h(TabBar, { tabs: tabs, active: activeTab, onChange: setActiveTab }),
+    items.length === 0
+      ? h(EmptyState, { message: "No items yet." })
+      : items.map(function(item, i) {
+          return h(FeedCard, { key: i, item: item, delay: i * 0.04 });
+        })
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(h(FeedApp));
