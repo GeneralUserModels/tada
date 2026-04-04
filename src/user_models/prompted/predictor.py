@@ -25,7 +25,7 @@ class PromptedPredictor(BasePredictor):
     """
 
     def __init__(self, data_manager=None, model: str = "", api_key: str = "",
-                 max_tokens: int = 512, temperature: float = 1.0, retriever=None,
+                 max_tokens: int = 2048, temperature: float = 1.0, retriever=None,
                  retriever_checkpoint=None, log_dir=None, top_k: int = 20,
                  mmr_k: int = 10, mmr_alpha: float = 0.5, time_decay_lambda: float = 0.5):
         self.data_manager = data_manager
@@ -150,15 +150,15 @@ class PromptedPredictor(BasePredictor):
 
         actions_text = self._sample(messages, stop=["</actions>"])
         messages.append({"role": "assistant", "content": [
-            {"type": "text", "text": actions_text, "cache_control": {"type": "ephemeral"}}
+            {"type": "text", "text": actions_text}
         ]})
 
-        messages = [self._ensure_cache_control(m) for m in messages]
+        cached_messages = [self._ensure_cache_control(m) for m in messages]
 
         result = {
             "retrieved": retrieved_text,
             "actions": actions_text,
-            "messages": messages,
+            "messages": cached_messages,
             "timestamp": datetime.now().isoformat(),
             "model": self.model,
         }
@@ -227,13 +227,11 @@ class PromptedPredictor(BasePredictor):
         task_desc = TASK_DESCRIPTION_WITH_IMAGES if image_parts else TASK_DESCRIPTION
         if image_parts:
             content = image_parts + [
-                {"type": "text", "text": task_desc + "\n\n" + past_actions_block,
-                 "cache_control": {"type": "ephemeral"}}
+                {"type": "text", "text": task_desc + "\n\n" + past_actions_block}
             ]
         else:
             content = [
-                {"type": "text", "text": task_desc + "\n\n" + past_actions_block,
-                 "cache_control": {"type": "ephemeral"}}
+                {"type": "text", "text": task_desc + "\n\n" + past_actions_block}
             ]
 
         messages = [{"role": "user", "content": content}]
