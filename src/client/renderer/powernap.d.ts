@@ -57,6 +57,32 @@ interface ConnectorPermissionInfo {
   hasRequest: boolean;
 }
 
+interface MomentTask {
+  slug: string;
+  title: string;
+  description: string;
+  frequency: string;
+  schedule: string;
+  confidence: number;
+  usefulness: number;
+}
+
+interface MomentResult {
+  slug: string;
+  title: string;
+  description: string;
+  completed_at: string;
+  frequency: string;
+  schedule: string;
+  dismissed: boolean;
+  pinned: boolean;
+  view_count: number;
+  time_spent_ms: number;
+  last_viewed: string | null;
+  schedule_override: string | null;
+  frequency_override: string | null;
+}
+
 interface PowerNapAPI {
   // App lifecycle
   onServerReady: (cb: (data: { url: string }) => void) => void;
@@ -80,6 +106,12 @@ interface PowerNapAPI {
   getConnectorPermissionInfo: (name: string) => Promise<ConnectorPermissionInfo | null>;
   requestConnectorPermission: (name: string) => Promise<boolean>;
   checkConnectorPermission: (name: string) => Promise<boolean>;
+
+  // Moments (Ta-Da)
+  getMomentsTasks: () => Promise<MomentTask[]>;
+  getMomentsResults: () => Promise<MomentResult[]>;
+  getServerUrl: () => Promise<string>;
+  onMomentCompleted: (cb: (data: MomentResult) => void) => void;
 
   // Auto-update
   onUpdateDownloaded: (cb: (data: UpdateData) => void) => void;

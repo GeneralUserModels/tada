@@ -259,11 +259,20 @@ function setupSseForwarding() {
       overlayWindow.webContents.send(IPC.OVERLAY_PREDICTION, data);
     }
   });
+
+  sse.on("moment_completed", (data) => {
+    dashboardWindow?.webContents.send(IPC.MOMENT_COMPLETED, data);
+  });
 }
 
 // ── IPC handlers ─────────────────────────────────────────────
 
 function setupIpc() {
+  // Moments
+  ipcMain.handle(IPC.MOMENTS_GET_TASKS, () => api.getMomentsTasks());
+  ipcMain.handle(IPC.MOMENTS_GET_RESULTS, () => api.getMomentsResults());
+  ipcMain.handle(IPC.GET_SERVER_URL, () => api.getServerUrl());
+
   // Overlay resize
   ipcMain.on("overlay:resize", (_e, height: number) => {
     resizeOverlay(height);

@@ -37,6 +37,23 @@ export const disconnectGoogle = () => request("DELETE", "/api/auth/google");
 export const startOutlookAuth = () => request("POST", "/api/auth/outlook/start");
 export const disconnectOutlook = () => request("DELETE", "/api/auth/outlook");
 
+// ── Moments ─────────────────────────────────────────────
+export const getMomentsTasks = () => request("GET", "/api/moments/tasks");
+export const getMomentsResults = (includeDismissed = false) =>
+  request("GET", `/api/moments/results${includeDismissed ? "?include_dismissed=true" : ""}`) as Promise<MomentResult[]>;
+
+export const updateMomentState = (slug: string, data: { dismissed?: boolean; pinned?: boolean }) =>
+  request("PUT", `/api/moments/${slug}/state`, data);
+
+export const updateMomentSchedule = (slug: string, data: { frequency: string; schedule: string }) =>
+  request("PUT", `/api/moments/${slug}/schedule`, data);
+
+export const recordMomentView = (slug: string) =>
+  request("POST", `/api/moments/${slug}/view`);
+
+export const recordMomentViewEnd = (slug: string, data: { duration_ms: number }) =>
+  request("POST", `/api/moments/${slug}/view-end`, data);
+
 // ── Onboarding ───────────────────────────────────────────────
 export const getOnboardingStatus = () =>
   request("GET", "/api/onboarding/status") as Promise<{ complete: boolean }>;

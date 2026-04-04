@@ -3,6 +3,7 @@ import { Sidebar } from "./components/Sidebar";
 import { ConnectorsView } from "./components/views/ConnectorsView";
 import { UserModelView } from "./components/views/UserModelView";
 import { SettingsView } from "./components/views/SettingsView";
+import { TadaView } from "./components/views/TadaView";
 import { UpdateModal } from "./components/modals/UpdateModal";
 
 export function App() {
@@ -29,6 +30,7 @@ export function App() {
           />
         )}
         {state.activeView === "connectors" && <ConnectorsView />}
+        {state.activeView === "tada" && <TadaView />}
         {state.activeView === "usermodel" && <UserModelView />}
         {state.activeView === "settings" && <SettingsView />}
       </main>

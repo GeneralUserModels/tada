@@ -16,6 +16,13 @@ class ServerState:
     context_logging_task: asyncio.Task | None = None
     google_refresh_task: asyncio.Task | None = None
     outlook_refresh_task: asyncio.Task | None = None
+    moments_scheduler_task: asyncio.Task | None = None
+    moments_discovery_task: asyncio.Task | None = None
+
+    # Moments executor lock (one at a time)
+    moments_executor_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    
+    # For Tabracadabra
     prediction_loop_task: asyncio.Task | None = None
 
     # Connector instances (populated by connectors service on startup)

@@ -5,61 +5,13 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from pathlib import Path
-
-import asyncio
 
 from dotenv import load_dotenv
-import litellm
-from sandbox_runtime import SandboxManager, SandboxRuntimeConfig
 
-from server.config import ServerConfig
-
-from .agent import Agent
-from .tools import ALL_TOOLS, TOOL_MAP, _bg_manager, _task_manager
-from .tools.compact import CompactTool
-from .tools.subagent import SubAgentTool
+from .builder import build_agent
+from .tools import _task_manager
 
 load_dotenv()
-
-# Load the same persisted config (powernap-config.json) as the main server.
-# This sets API keys as env vars so litellm and other tools can pick them up.
-_config = ServerConfig()
-_config.load_persisted()
-
-# Set the agent API key so litellm can pick it up
-if _config.agent_api_key:
-    os.environ.setdefault("ANTHROPIC_API_KEY", _config.agent_api_key)
-
-POWERNAP_DATA = str(Path.home() / "Library" / "Application Support" / "PowerNap")
-POWERNAP_REPO = str(Path.home() / "Documents" / "NAP" / "powernap")
-
-asyncio.run(SandboxManager.initialize(SandboxRuntimeConfig(
-    network={},
-    filesystem={"allow_write": [POWERNAP_DATA, POWERNAP_REPO]},
-)))
-
-DEFAULT_MODEL = _config.agent_model
-TRANSCRIPT_DIR = Path("/tmp/powernap_transcripts")
-
-SYSTEM_PROMPT = f"""\
-You are an agent with tools to read, write, edit files, run shell commands, search the web, and browse websites.
-
-You can read any file on the system. You can write files to:
-- {POWERNAP_DATA}/ (app data, logs, tasks)
-- {POWERNAP_REPO}/ (project repo)
-- /tmp/
-
-You can browse the web using the browser_navigate, browser_read_text, browser_click, browser_type, and browser_screenshot tools. These use the user's Chrome cookies, so you can access authenticated pages (Twitter, Gmail, etc.). Use browser_read_text with a CSS selector to narrow down content on large pages.
-
-Before doing any work, always plan first:
-1. Read relevant files to understand the current state
-2. Use TodoWrite to break the task into steps and track progress
-3. Only then start making changes, updating todos as you go
-
-Use the task tool to spawn subagents for isolated exploration.
-Be concise. Use tools proactively.
-"""
 
 SLASH_COMMANDS = {
     "/compact": "Compress conversation history",
@@ -70,46 +22,15 @@ SLASH_COMMANDS = {
 }
 
 
-def _make_summarizer(model: str):
-    def summarize(text: str) -> str:
-        resp = litellm.completion(
-            model=model,
-            messages=[{"role": "user", "content": text}],
-            max_tokens=2000,
-        )
-        return resp.choices[0].message.content or ""
-    return summarize
-
-
-def _make_child_agent(model: str, system_prompt: str):
-    def factory(tools):
-        return Agent(model=model, system_prompt=system_prompt, tools=tools, max_rounds=30, web_search=True)
-    return factory
-
-
-def _build_agent(model: str):
-    compact_tool = CompactTool(TRANSCRIPT_DIR, _make_summarizer(model))
-    subagent_tool = SubAgentTool(_make_child_agent(model, SYSTEM_PROMPT), ALL_TOOLS)
-    all_tools = ALL_TOOLS + [compact_tool, subagent_tool]
-    agent = Agent(
-        model=model,
-        system_prompt=SYSTEM_PROMPT,
-        tools=all_tools,
-        compact_tool=compact_tool,
-        bg_manager=_bg_manager,
-        web_search=True,
-    )
-    return agent, compact_tool
-
-
 def main():
     parser = argparse.ArgumentParser(description="PowerNap agent")
     parser.add_argument("query", nargs="*", help="One-shot query (omit for REPL)")
-    parser.add_argument("-m", "--model", default=os.environ.get("POWERNAP_AGENT_MODEL", DEFAULT_MODEL))
+    parser.add_argument("-m", "--model", default=os.environ["POWERNAP_AGENT_MODEL"])
+    parser.add_argument("--data-dir", default=os.environ.get("POWERNAP_DATA_DIR", "."))
     args = parser.parse_args()
 
     model = args.model
-    agent, compact_tool = _build_agent(model)
+    agent, compact_tool = build_agent(model, args.data_dir)
     history: list = []
 
     # one-shot mode

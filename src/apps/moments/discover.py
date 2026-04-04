@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Add parent packages to path when run directly
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-
-from agent.__main__ import _build_agent, DEFAULT_MODEL
+from agent.builder import build_agent
+from apps.moments._incremental import read_checkpoint, write_checkpoint, classify_sessions
 
 INSTRUCTION_TEMPLATE = """\
 You are analyzing a user's digital activity logs to discover opportunities for an AI agent to augment their workflow.
@@ -28,7 +25,12 @@ The AI agent that will execute these tasks is powerful. It runs in the backgroun
 - Execute multi-step workflows end-to-end (not just "suggest" — actually DO the thing)
 - Maintain persistent context across runs (reading lists, experiment logs, etc.)
 
-Your job is to find high-value workflows where this agent can save real effort — especially multi-step sequences the user repeats manually, research and information foraging the agent can do proactively, and "extra-mile" tasks that would be valuable but the user never bothers doing themselves. Tasks do NOT need to span multiple apps — a single-app workflow that the agent can handle end-to-end is just as valuable.
+Your job is to predict WHAT to automate — not HOW. The executing agent is capable and will figure out \
+implementation details on its own. Find high-value workflows where this agent can save real effort — \
+especially multi-step sequences the user repeats manually, research and information foraging the agent \
+can do proactively, and "extra-mile" tasks that would be valuable but the user never bothers doing \
+themselves. Tasks do NOT need to span multiple apps — a single-app workflow that the agent can handle \
+end-to-end is just as valuable.
 
 ## Log files to read (all in {logs_dir}/)
 
@@ -50,22 +52,22 @@ Start by reading ALL session_*/labels.jsonl files. These show what the user actu
 
 Focus on the SESSION LOGS. Look for:
 - **Multi-step manual workflows** — the same sequence of 3+ steps repeated across sessions. The task should collapse these into a single command.
-- **Monitoring patterns** — repeatedly checking the same dashboards, outputs, or status pages. The agent should watch in the background and proactively report summaries or flag anomalies.
 - **Content production drudgery** — manually exporting, downloading, copying, and arranging artifacts. The agent should do the entire pipeline end-to-end.
 - **Information foraging** — searching for, reading, and comparing information from multiple sources. The agent should do the research and present a structured summary.
-- **Communication overhead** — triaging, classifying, and responding to messages. The agent should handle the routine parts and surface only what needs human judgment.
+- **Communication overhead** — triaging, classifying, and responding to messages. The agent should handle the routine parts, surface what needs human judgment, and prepare drafts the user can review and send in seconds.
 - **Things the user SHOULD do but doesn't** — valuable habits (note-taking, tracking, summarizing) that the user skips. The agent can maintain these proactively.
+- **Learning opportunities** — things the user is working with but could understand more deeply. The agent can teach concepts, explain techniques, surface relevant papers/talks, or create personalized explainers based on what the user is actually doing. Look for tools, libraries, domains, or patterns where a short educational deep-dive would level up the user's work.
 
 ## Quality bar for tasks
 
-- A BAD task is vague, single-step, or just a notification. A GOOD task specifies exact inputs, concrete actions the agent takes, and what artifact it produces.
-- Each task instruction should be detailed enough that an AI agent can execute it without further clarification. Specify triggers, steps, outputs, and success criteria.
+- A BAD task is vague, single-step, or just a notification. A GOOD task clearly describes what the user needs and why, grounded in observed behavior.
+- Focus on the problem and desired outcome — don't prescribe implementation steps, the executing agent will figure those out.
 - Tasks should be grounded in specific patterns you observed in the logs — not generic productivity advice.
 - Do NOT produce pop-psychology insights like "user has anxiety about builds" or "user switches between deep work and dopamine hits." Focus on concrete workflows the agent can execute.
 
 ## How to work
 
-Before diving in, plan your approach using TodoWrite to break the work into trackable steps. Update your todos as you progress.
+Before diving in, plan your approach using PlanWrite to outline your steps. Use PlanUpdate to track progress as you go.
 
 Use your tools aggressively:
 - **bash**: run Python snippets to compute statistics (most frequent apps, common action sequences, time spent per app, repeated multi-step patterns). Don't just eyeball the logs — quantify.
@@ -76,7 +78,7 @@ Use your tools aggressively:
 ### Workflow
 
 1. **Check existing tasks**: First, check if {logs_dir}/tasks/ already has task files. If so, read them all to understand what's already been proposed. You must not duplicate existing tasks — only add new, different ones.
-2. **Plan**: Use TodoWrite to outline your steps. List all session directories and log files you need to read.
+2. **Plan**: Use PlanWrite to outline your steps. List all session directories and log files you need to read.
 3. **Read & analyze**: Read ALL log files. Use subagents to parallelize reading across session directories. Run bash commands with Python snippets to compute statistics. Reflect on what you find as you go.
 4. **Write tasks**: Only AFTER completing steps 1-3, write the task files one at a time using write_file. Update your todos as you complete each file.
 
@@ -89,17 +91,23 @@ Each file MUST start with this exact frontmatter format:
 ---
 title: <title>
 description: <one-line summary>
-frequency: <daily|weekly|ad-hoc|on-trigger>
-schedule: <if daily/weekly, specify when e.g. "daily at 8am", "every Monday 9am". if on-trigger, specify the trigger e.g. "when a new PR is opened">
+frequency: <daily|weekly|once>
+schedule: <specify when e.g. "daily at 8am", "every Monday 9am", "once">
 confidence: <0.0-1.0>
 usefulness: <1-10>
 ---
 
-After the frontmatter, write the rest of the file in whatever structure best fits the task. Include the detailed instruction for the agent, observed behavior from the logs, and any other relevant context. Every task MUST include a Reasons section citing specific patterns from the logs.
+After the frontmatter, write the rest of the file in whatever structure best fits the task. Describe \
+what the user needs and the observed behavior that motivates it. Do NOT write implementation instructions \
+for the executing agent — it will figure out how to do it. Every task MUST include a Reasons section \
+citing specific patterns from the logs.
 
 ## Rules
 - Every task MUST cite patterns observed in the logs (repeated workflows, app-switching sequences, recurring actions across sessions)
 - Do NOT produce generic productivity advice — every task must be grounded in observed behavior
+- Do NOT produce reactive or trigger-based tasks ("when X happens, do Y"). Every task must be \
+something the agent can execute on a schedule — a batch of work it runs at a fixed time and \
+produces a complete result. No continuous monitoring, no event listeners, no "watch for changes."
 - confidence reflects how strongly the logs support this task existing
 - usefulness reflects how much time/effort/value the automation would provide
 
@@ -107,18 +115,77 @@ When you are done, run `ls -la {logs_dir}/tasks/` to verify all task files exist
 """
 
 
-def run(logs_dir: str, model: str = DEFAULT_MODEL) -> str:
-    agent, _ = _build_agent(model)
-    agent.max_rounds = 200
+INCREMENTAL_SECTION = """\
+
+## Incremental Discovery — Prioritize New Activity
+
+This is a RE-RUN. The last discovery was on **{last_discovery_date}**. You should still read all sessions, \
+but prioritize finding new patterns from recent activity.
+
+### New sessions since last discovery (prioritize these):
+{new_sessions_list}
+
+### Previously analyzed sessions:
+{old_sessions_list}
+
+Read all sessions, but weight your analysis toward the new ones. Old sessions have already been mined \
+for tasks — look for patterns there only if they weren't caught before or if they combine with new activity \
+to reveal something new.
+
+### Non-session logs (email, calendar, notifications, filesystem):
+These files may contain both old and new entries. Prioritize entries dated AFTER {last_discovery_date}, \
+but don't ignore older entries — they can still reveal patterns.
+
+### Existing tasks:
+Read ALL existing task files in {logs_dir}/tasks/ — you must not duplicate any existing task. Your job \
+is to find NEW tasks that aren't already covered. If a new session reveals a variation or extension \
+of an existing task, note that in a new task file rather than modifying the existing one.
+"""
+
+
+def run(logs_dir: str, model: str) -> str:
+    logs_path = Path(logs_dir).resolve()
+    logs_dir = str(logs_path)
+    checkpoint_path = logs_path / "tasks" / ".last_discovery"
+
+    last_discovery = read_checkpoint(checkpoint_path)
+    new_sessions, old_sessions = classify_sessions(logs_dir, last_discovery)
+
     instruction = INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir)
+
+    if last_discovery is not None and new_sessions:
+        new_list = "\n".join(f"- {s}/labels.jsonl" for s in new_sessions)
+        old_list = "\n".join(f"- {s}/labels.jsonl" for s in old_sessions) if old_sessions else "- (none)"
+        instruction += INCREMENTAL_SECTION.format(
+            last_discovery_date=last_discovery.strftime("%Y-%m-%d %H:%M"),
+            new_sessions_list=new_list,
+            old_sessions_list=old_list,
+            logs_dir=logs_dir,
+        )
+    elif last_discovery is not None and not new_sessions:
+        instruction += (
+            f"\n\n## Note\n\nThe last discovery was on "
+            f"**{last_discovery.strftime('%Y-%m-%d %H:%M')}** and there are NO new session "
+            f"directories since then. Check existing non-session logs (email, calendar, "
+            f"notifications, filesystem) for new entries since that date. If nothing "
+            f"substantial is new, it's fine to produce no new tasks — just verify existing "
+            f"tasks are still relevant and exit."
+        )
+
+    agent, _ = build_agent(model, logs_dir)
+    agent.max_rounds = 200
     messages = [{"role": "user", "content": instruction}]
-    return agent.run(messages)
+    result = agent.run(messages)
+
+    write_checkpoint(checkpoint_path)
+
+    return result
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Discover agent tasks from activity logs")
     parser.add_argument("logs_dir", help="Path to the logs directory")
-    parser.add_argument("-m", "--model", default=os.environ.get("POWERNAP_AGENT_MODEL", DEFAULT_MODEL))
+    parser.add_argument("-m", "--model", default=os.environ["POWERNAP_AGENT_MODEL"])
     args = parser.parse_args()
 
     result = run(args.logs_dir, model=args.model)

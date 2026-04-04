@@ -3,14 +3,17 @@ import time
 from pathlib import Path
 from typing import Callable
 
+import litellm
+
 from .base_tool import BaseTool
 
 
 class CompactTool(BaseTool):
-    def __init__(self, transcript_dir: Path, summarizer: Callable[[str], str]):
+    def __init__(self, transcript_dir: Path, summarizer: Callable[[str], str], model: str = "anthropic/claude-sonnet-4-20250514"):
         """
         transcript_dir: where to save conversation transcripts.
         summarizer: callable(text) -> summary string (wraps the LLM call).
+        model: model name for accurate token counting via litellm.
         """
         super().__init__("compress", "Manually compress conversation context.",
             {
@@ -20,9 +23,10 @@ class CompactTool(BaseTool):
         )
         self._transcript_dir = transcript_dir
         self._summarizer = summarizer
+        self._model = model
 
     def estimate_tokens(self, messages: list) -> int:
-        return len(json.dumps(messages, default=str)) // 4
+        return litellm.token_counter(model=self._model, messages=messages)
 
     def microcompact(self, messages: list):
         """Clear old tool_result content in-place, keeping the last 3."""
@@ -52,8 +56,8 @@ class CompactTool(BaseTool):
             "as if the conversation never reset.\n\n"
             "Include ALL of the following in your summary:\n"
             "1. **User's original request** — what the user asked for, in their words.\n"
-            "2. **Current plan and progress** — what steps were planned, which are done, "
-            "which remain. Include any todo list verbatim if one exists.\n"
+            "2. **Current plan and progress** — the plan summary and all todo items with their "
+            "IDs and statuses. Reproduce the plan state verbatim so it can be restored.\n"
             "3. **Key decisions and context** — any choices made, constraints discovered, "
             "or user preferences expressed (e.g. 'user said not to use X').\n"
             "4. **Files read and modified** — list every file path that was read or edited, "

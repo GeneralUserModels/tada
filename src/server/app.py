@@ -43,6 +43,11 @@ async def lifespan(app: FastAPI):
     state.google_refresh_task = asyncio.create_task(refresh_google_tokens(state.config))
     state.outlook_refresh_task = asyncio.create_task(refresh_outlook_tokens(state.config))
 
+    # Start moments services (scheduler + periodic discovery)
+    from apps.moments.scheduler import run_moments_scheduler
+    from apps.moments.discovery import run_moments_discovery
+    state.moments_scheduler_task = asyncio.create_task(run_moments_scheduler(state))
+    state.moments_discovery_task = asyncio.create_task(run_moments_discovery(state))
     # Initialize predictor (and trainer for powernap) before starting loops
     await init_model(state)
     state.model.training_task = asyncio.create_task(run_training_service(state))
@@ -88,6 +93,8 @@ async def lifespan(app: FastAPI):
         state.context_logging_task,
         state.google_refresh_task,
         state.outlook_refresh_task,
+        state.moments_scheduler_task,
+        state.moments_discovery_task,
         state.prediction_loop_task,
     ]
     for task in all_tasks:
@@ -127,6 +134,8 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(onboarding_router)
     app.include_router(connectors_router)
+    from apps.moments.routes import router as moments_router
+    app.include_router(moments_router)
     app.include_router(settings.router)
     app.include_router(status.router)
     app.include_router(user_models_router)
