@@ -1,20 +1,57 @@
-"""Browser tools: navigate, read, click, type, screenshot using Chrome cookies."""
+"""Browser tools: navigate, read, click, type, screenshot using Chrome cookies.
+
+All Playwright operations run on a dedicated thread since Playwright's sync API
+is greenlet-bound and cannot be used from arbitrary threads (e.g. subagent threads).
+"""
 
 import tempfile
+import threading
 from pathlib import Path
+from queue import Queue
 from urllib.parse import urlparse
 
 from .base_tool import BaseTool
 
 
 class BrowserManager:
-    """Shared state for a Playwright browser session with Chrome cookie injection."""
+    """Proxy that runs all Playwright calls on a single dedicated thread."""
 
     def __init__(self):
         self._playwright = None
         self._browser = None
         self._context = None
         self._page = None
+        self._queue = Queue()       # (callable, args, result_queue)
+        self._thread = None
+        self._started = False
+
+    def _start_thread(self):
+        if self._started:
+            return
+        self._started = True
+        self._thread = threading.Thread(target=self._run_loop, daemon=True)
+        self._thread.start()
+
+    def _run_loop(self):
+        """Dedicated thread: process browser commands sequentially."""
+        while True:
+            fn, args, result_q = self._queue.get()
+            if fn is None:  # shutdown sentinel
+                break
+            try:
+                result_q.put(("ok", fn(*args)))
+            except Exception as e:
+                result_q.put(("error", e))
+
+    def _call(self, fn, *args):
+        """Submit work to the browser thread and block until done."""
+        self._start_thread()
+        result_q = Queue(maxsize=1)
+        self._queue.put((fn, args, result_q))
+        status, value = result_q.get()
+        if status == "error":
+            raise value
+        return value
 
     def _ensure_browser(self):
         if self._browser is not None:
@@ -54,7 +91,7 @@ class BrowserManager:
             self._context.add_cookies(pw_cookies)
         return None
 
-    def navigate(self, url: str, wait_until: str = "domcontentloaded") -> str:
+    def _do_navigate(self, url: str, wait_until: str) -> str:
         self._ensure_browser()
         warning = self._inject_cookies(url)
         self._page.goto(url, wait_until=wait_until, timeout=30000)
@@ -64,7 +101,7 @@ class BrowserManager:
             result += f"\n{warning}"
         return result
 
-    def read_text(self, selector: str = "body") -> str:
+    def _do_read_text(self, selector: str) -> str:
         self._ensure_browser()
         if not self._page.url or self._page.url == "about:blank":
             return "Error: no page loaded. Use browser_navigate first."
@@ -76,13 +113,13 @@ class BrowserManager:
             return f"(no visible text in '{selector}')"
         return text[:50000]
 
-    def click(self, selector: str) -> str:
+    def _do_click(self, selector: str) -> str:
         self._ensure_browser()
         self._page.click(selector, timeout=10000)
         self._page.wait_for_load_state("domcontentloaded", timeout=10000)
         return f"Clicked '{selector}'. Current URL: {self._page.url}"
 
-    def type_text(self, selector: str, text: str, press_enter: bool = False) -> str:
+    def _do_type_text(self, selector: str, text: str, press_enter: bool) -> str:
         self._ensure_browser()
         self._page.fill(selector, text, timeout=10000)
         if press_enter:
@@ -90,7 +127,7 @@ class BrowserManager:
             self._page.wait_for_load_state("domcontentloaded", timeout=10000)
         return f"Typed into '{selector}'. Current URL: {self._page.url}"
 
-    def screenshot(self) -> str:
+    def _do_screenshot(self) -> str:
         self._ensure_browser()
         if not self._page.url or self._page.url == "about:blank":
             return "Error: no page loaded. Use browser_navigate first."
@@ -98,7 +135,26 @@ class BrowserManager:
         self._page.screenshot(path=str(path), full_page=False)
         return f"Screenshot saved: {path}"
 
+    # Public API — safe to call from any thread
+
+    def navigate(self, url: str, wait_until: str = "domcontentloaded") -> str:
+        return self._call(self._do_navigate, url, wait_until)
+
+    def read_text(self, selector: str = "body") -> str:
+        return self._call(self._do_read_text, selector)
+
+    def click(self, selector: str) -> str:
+        return self._call(self._do_click, selector)
+
+    def type_text(self, selector: str, text: str, press_enter: bool = False) -> str:
+        return self._call(self._do_type_text, selector, text, press_enter)
+
+    def screenshot(self) -> str:
+        return self._call(self._do_screenshot)
+
     def shutdown(self):
+        if self._started:
+            self._queue.put((None, None, None))  # sentinel
         if self._browser:
             self._browser.close()
         if self._playwright:
@@ -107,6 +163,7 @@ class BrowserManager:
         self._context = None
         self._page = None
         self._playwright = None
+        self._started = False
 
 
 class BrowserNavigateTool(BaseTool):

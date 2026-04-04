@@ -6,7 +6,7 @@ from .write import WriteTool
 from .edit import EditTool
 from .terminal import TerminalTool
 from .mcp import MCPTool
-from .todo import TodoTool
+from .todo import PlanState, PlanWriteTool, PlanUpdateTool
 from .subagent import SubAgentTool
 from .compact import CompactTool
 from .background import BackgroundManager, BackgroundRunTool, CheckBackgroundTool
@@ -25,9 +25,11 @@ _task_manager = TaskManager(TASKS_DIR)
 _skill_loader = SkillLoader(SKILLS_DIR)
 _browser_manager = BrowserManager()
 
+_plan_state = PlanState()
+
 ALL_TOOLS = [
     ReadTool(), WriteTool(), EditTool(), TerminalTool(),
-    TodoTool(), SkillTool(_skill_loader),
+    PlanWriteTool(_plan_state), PlanUpdateTool(_plan_state), SkillTool(_skill_loader),
     BackgroundRunTool(_bg_manager), CheckBackgroundTool(_bg_manager),
     TaskCreateTool(_task_manager), TaskGetTool(_task_manager),
     TaskUpdateTool(_task_manager), TaskListTool(_task_manager),

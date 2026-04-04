@@ -31,6 +31,9 @@ class SettingsUpdate(BaseModel):
     past_len: int | None = None
     future_len: int | None = None
     loss_mode: str | None = None
+    moments_enabled: bool | None = None
+    moments_agent_model: str | None = None
+    moments_agent_model_api_key: str | None = None
     tabracadabra_enabled: bool | None = None
     tabracadabra_model: str | None = None
     tabracadabra_api_key: str | None = None
@@ -59,6 +62,9 @@ async def get_settings(request: Request):
         "past_len": cfg.past_len,
         "future_len": cfg.future_len,
         "loss_mode": cfg.loss_mode,
+        "moments_enabled": cfg.moments_enabled,
+        "moments_agent_model": cfg.moments_agent_model,
+        "moments_agent_model_api_key": cfg.moments_agent_model_api_key,
         "tabracadabra_enabled": cfg.tabracadabra_enabled,
         "tabracadabra_model": cfg.tabracadabra_model,
         "tabracadabra_api_key": cfg.tabracadabra_api_key,

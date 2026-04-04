@@ -1,0 +1,32 @@
+/* PowerNap Moments — Feed Template (overrides only) */
+
+/* Tab bar */
+.tab-bar {
+  display: flex; gap: 4px; margin-bottom: 16px;
+  border-bottom: 1px solid var(--glass-border); padding-bottom: 0;
+}
+.tab-btn {
+  padding: 8px 16px; font-size: 12px; font-weight: 550; font-family: inherit;
+  color: var(--text-secondary); background: none; border: none;
+  border-bottom: 2px solid transparent; cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--sage); border-bottom-color: var(--sage); font-weight: 650; }
+
+/* Card content */
+.card-summary { font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; margin-bottom: 10px; }
+.card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.card-tag {
+  font-size: 9px; font-weight: 600; padding: 1px 7px; border-radius: 20px;
+  color: var(--text-secondary); background: rgba(var(--sage-rgb), 0.06);
+}
+
+/* Score indicator */
+.score {
+  flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--sage); background: rgba(var(--mint-rgb), 0.35);
+}
+.score.high { color: var(--active-green); background: rgba(93,163,78,0.12); }

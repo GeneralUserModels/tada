@@ -1,0 +1,41 @@
+/* PowerNap Moments — Table Template (overrides only) */
+
+.container { max-width: 900px; }
+.controls { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.search-input { width: 260px; }
+
+/* Glass card override for table wrapper */
+.glass-card.table-wrap { padding: 4px 0; overflow: hidden; }
+.table-wrap { overflow-x: auto; }
+
+/* Table */
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+
+th {
+  text-align: left; font-weight: 600; color: var(--text-secondary);
+  padding: 10px 14px; border-bottom: 1px solid var(--glass-border);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  white-space: nowrap; user-select: none;
+}
+th.sortable { cursor: pointer; transition: color 0.15s; }
+th.sortable:hover { color: var(--text); }
+th .sort-arrow { font-size: 9px; margin-left: 4px; color: var(--text-tertiary); }
+th.sorted { color: var(--sage); }
+th.sorted .sort-arrow { color: var(--sage); }
+
+td {
+  padding: 10px 14px; border-bottom: 1px solid rgba(var(--sage-rgb), 0.06);
+  font-variant-numeric: tabular-nums;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(var(--sage-rgb), 0.04); }
+
+/* Expandable row detail */
+tr.detail-row td {
+  padding: 0 14px 12px 14px; background: rgba(var(--sage-rgb), 0.02);
+  border-bottom: 1px solid rgba(var(--sage-rgb), 0.08);
+}
+.row-detail {
+  font-size: 12px; color: var(--text-secondary); line-height: 1.55;
+  padding: 8px 0;
+}
