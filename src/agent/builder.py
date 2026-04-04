@@ -17,18 +17,11 @@ from .tools import ALL_TOOLS, _bg_manager
 from .tools.compact import CompactTool
 from .tools.subagent import SubAgentTool
 
-DEFAULT_MODEL = "anthropic/claude-sonnet-4-20250514"
-
-POWERNAP_DATA = str(Path.home() / "Library" / "Application Support" / "PowerNap")
-POWERNAP_REPO = str(Path.home() / "Documents" / "NAP" / "powernap")
-TRANSCRIPT_DIR = Path("/tmp/powernap_transcripts")
-
-SYSTEM_PROMPT = f"""\
+_SYSTEM_PROMPT_TEMPLATE = """\
 You are an agent with tools to read, write, edit files, run shell commands, search the web, and browse websites.
 
 You can read any file on the system. You can write files to:
-- {POWERNAP_DATA}/ (app data, logs, tasks)
-- {POWERNAP_REPO}/ (project repo)
+- {data_dir}/ (app data, logs, tasks)
 - /tmp/
 
 You can browse the web using the browser_navigate, browser_read_text, browser_click, browser_type, and browser_screenshot tools. These use the user's Chrome cookies, so you can access authenticated pages (Twitter, Gmail, etc.). Use browser_read_text with a CSS selector to narrow down content on large pages.
@@ -46,24 +39,30 @@ Be concise. Use tools proactively.
 _sandbox_initialized = False
 
 
-def _ensure_sandbox():
+def _ensure_sandbox(data_dir: str):
     global _sandbox_initialized
     if _sandbox_initialized:
         return
     asyncio.run(SandboxManager.initialize(SandboxRuntimeConfig(
         network={},
-        filesystem={"allow_write": [POWERNAP_DATA, POWERNAP_REPO]},
+        filesystem={
+            "allow_write": [data_dir, "/tmp"],
+            "deny_read": ["~/.ssh", "~/.gnupg", "~/.aws/credentials"],
+        },
     )))
     _sandbox_initialized = True
 
 
-async def _ensure_sandbox_async():
+async def _ensure_sandbox_async(data_dir: str):
     global _sandbox_initialized
     if _sandbox_initialized:
         return
     await SandboxManager.initialize(SandboxRuntimeConfig(
         network={},
-        filesystem={"allow_write": [POWERNAP_DATA, POWERNAP_REPO]},
+        filesystem={
+            "allow_write": [data_dir, "/tmp"],
+            "deny_read": ["~/.ssh", "~/.gnupg", "~/.aws/credentials"],
+        },
     ))
     _sandbox_initialized = True
 
@@ -85,15 +84,18 @@ def _make_child_agent(model: str, system_prompt: str):
     return factory
 
 
-def build_agent(model: str = DEFAULT_MODEL):
+def build_agent(model: str, data_dir: str):
     """Build a fully configured Agent with all tools. Initializes sandbox on first call."""
-    _ensure_sandbox()
-    compact_tool = CompactTool(TRANSCRIPT_DIR, _make_summarizer(model), model=model)
-    subagent_tool = SubAgentTool(_make_child_agent(model, SYSTEM_PROMPT), ALL_TOOLS)
+    data_dir = str(Path(data_dir).resolve())
+    _ensure_sandbox(data_dir)
+    system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(data_dir=data_dir)
+    transcript_dir = Path(data_dir) / "transcripts"
+    compact_tool = CompactTool(transcript_dir, _make_summarizer(model), model=model)
+    subagent_tool = SubAgentTool(_make_child_agent(model, system_prompt), ALL_TOOLS)
     all_tools = ALL_TOOLS + [compact_tool, subagent_tool]
     agent = Agent(
         model=model,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         tools=all_tools,
         compact_tool=compact_tool,
         bg_manager=_bg_manager,

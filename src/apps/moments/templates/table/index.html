@@ -4,26 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Table</title>
+  <link rel="stylesheet" href="../shared/base.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1 id="title"></h1>
-      <p class="meta" id="subtitle"></p>
-    </header>
-    <div class="stat-row" id="stats"></div>
-    <div class="controls">
-      <input type="text" class="search-input" id="search" placeholder="Search...">
-    </div>
-    <div class="glass-card table-wrap">
-      <table>
-        <thead id="thead"></thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
-    <div class="result-count" id="count"></div>
-  </div>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="../shared/components.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -21,90 +21,110 @@ const DATA = {
   ],
 };
 
-// ── State ────────────────────────────────────────────────
-let sortKey = null;
-let sortAsc = true;
-let searchQuery = "";
+// ── App ─────────────────────────────────────────────────
+const h = React.createElement;
+const { useState } = React;
+const { PageHeader, StatRow, SearchInput, Badge, ResultCount, GlassCard } = PN;
 
-// ── Helpers ──────────────────────────────────────────────
-function statusBadge(status) {
-  const types = { current: "success", outdated: "warning", vulnerable: "danger" };
-  return `<span class="badge ${types[status] || ""}">${status}</span>`;
-}
+// Status badge type mapping
+var STATUS_TYPES = { current: "success", outdated: "warning", vulnerable: "danger" };
 
-// ── Render ───────────────────────────────────────────────
-function render() {
-  document.getElementById("title").textContent = DATA.title;
-  document.getElementById("subtitle").textContent = DATA.subtitle;
-
-  document.getElementById("stats").innerHTML = DATA.stats.map(s => `
-    <div class="stat-pill">
-      <div class="stat-value">${s.value}</div>
-      <div class="stat-label">${s.label}</div>
-    </div>
-  `).join("");
-
-  renderTable();
-}
-
-function renderTable() {
-  const q = searchQuery.toLowerCase();
-  let rows = DATA.rows.filter(r =>
-    !q || DATA.columns.some(c => String(r[c.key] || "").toLowerCase().includes(q))
+function SortableHeader({ columns, sortKey, sortAsc, onSort }) {
+  return h("thead", null,
+    h("tr", null,
+      columns.map(function(c) {
+        var sorted = sortKey === c.key;
+        var arrow = sorted ? (sortAsc ? "\u2191" : "\u2193") : "";
+        return h("th", {
+          key: c.key,
+          className: (c.sortable ? "sortable" : "") + (sorted ? " sorted" : ""),
+          onClick: c.sortable ? function() { onSort(c.key); } : undefined
+        }, c.label, c.sortable ? h("span", { className: "sort-arrow" }, arrow) : null);
+      })
+    )
   );
+}
 
+function TableRow({ row, columns, onToggle, expanded }) {
+  var cells = columns.map(function(c) {
+    var val = row[c.key] || "";
+    return h("td", { key: c.key },
+      c.key === "status" ? h(Badge, { text: val, type: STATUS_TYPES[val] }) : val
+    );
+  });
+
+  return h(React.Fragment, null,
+    h("tr", {
+      className: "data-row",
+      style: { cursor: row.detail ? "pointer" : "default" },
+      onClick: row.detail ? onToggle : undefined
+    }, cells),
+    row.detail ? h("tr", {
+      className: "detail-row",
+      style: { display: expanded ? "" : "none" }
+    }, h("td", { colSpan: columns.length },
+      h("div", { className: "row-detail" }, row.detail)
+    )) : null
+  );
+}
+
+function TableApp() {
+  var [sortKey, setSortKey] = useState(null);
+  var [sortAsc, setSortAsc] = useState(true);
+  var [searchQuery, setSearchQuery] = useState("");
+  var [expandedRows, setExpandedRows] = useState({});
+
+  function handleSort(key) {
+    if (sortKey === key) { setSortAsc(!sortAsc); }
+    else { setSortKey(key); setSortAsc(true); }
+  }
+
+  function toggleRow(idx) {
+    setExpandedRows(function(prev) {
+      var next = Object.assign({}, prev);
+      next[idx] = !next[idx];
+      return next;
+    });
+  }
+
+  // Filter
+  var q = searchQuery.toLowerCase();
+  var rows = DATA.rows.filter(function(r) {
+    return !q || DATA.columns.some(function(c) {
+      return String(r[c.key] || "").toLowerCase().includes(q);
+    });
+  });
+
+  // Sort
   if (sortKey) {
-    rows = [...rows].sort((a, b) => {
-      const va = String(a[sortKey] || ""), vb = String(b[sortKey] || "");
+    rows = rows.slice().sort(function(a, b) {
+      var va = String(a[sortKey] || ""), vb = String(b[sortKey] || "");
       return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
     });
   }
 
-  // Header
-  document.getElementById("thead").innerHTML = "<tr>" + DATA.columns.map(c => {
-    const sorted = sortKey === c.key;
-    const arrow = sorted ? (sortAsc ? "\u2191" : "\u2193") : "";
-    return `<th class="${c.sortable ? "sortable" : ""}${sorted ? " sorted" : ""}" data-key="${c.key}">
-      ${c.label}${c.sortable ? `<span class="sort-arrow">${arrow}</span>` : ""}
-    </th>`;
-  }).join("") + "</tr>";
-
-  // Body
-  document.getElementById("tbody").innerHTML = rows.map(r => {
-    const cells = DATA.columns.map(c => {
-      const val = r[c.key] || "";
-      return `<td>${c.key === "status" ? statusBadge(val) : val}</td>`;
-    }).join("");
-    const detail = r.detail ? `<tr class="detail-row" style="display:none"><td colspan="${DATA.columns.length}"><div class="row-detail">${r.detail}</div></td></tr>` : "";
-    return `<tr class="data-row" style="cursor:${r.detail ? "pointer" : "default"}">${cells}</tr>${detail}`;
-  }).join("");
-
-  document.getElementById("count").textContent = `${rows.length} of ${DATA.rows.length} rows`;
+  return h("div", { className: "container" },
+    h(PageHeader, { title: DATA.title, subtitle: DATA.subtitle }),
+    h(StatRow, { stats: DATA.stats }),
+    h("div", { className: "controls" },
+      h(SearchInput, { value: searchQuery, onChange: setSearchQuery })
+    ),
+    h(GlassCard, { className: "table-wrap" },
+      h("table", null,
+        h(SortableHeader, { columns: DATA.columns, sortKey: sortKey, sortAsc: sortAsc, onSort: handleSort }),
+        h("tbody", null,
+          rows.map(function(r, i) {
+            return h(TableRow, {
+              key: i, row: r, columns: DATA.columns,
+              expanded: !!expandedRows[i],
+              onToggle: function() { toggleRow(i); }
+            });
+          })
+        )
+      )
+    ),
+    h(ResultCount, { count: rows.length, total: DATA.rows.length })
+  );
 }
 
-// Sort
-document.getElementById("thead").addEventListener("click", e => {
-  const th = e.target.closest("th.sortable");
-  if (!th) return;
-  const key = th.dataset.key;
-  if (sortKey === key) { sortAsc = !sortAsc; } else { sortKey = key; sortAsc = true; }
-  renderTable();
-});
-
-// Row expand
-document.getElementById("tbody").addEventListener("click", e => {
-  const row = e.target.closest("tr.data-row");
-  if (!row) return;
-  const detail = row.nextElementSibling;
-  if (detail?.classList.contains("detail-row")) {
-    detail.style.display = detail.style.display === "none" ? "" : "none";
-  }
-});
-
-// Search
-document.getElementById("search").addEventListener("input", e => {
-  searchQuery = e.target.value;
-  renderTable();
-});
-
-render();
+ReactDOM.createRoot(document.getElementById("root")).render(h(TableApp));

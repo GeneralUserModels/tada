@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from agent.builder import build_agent, DEFAULT_MODEL
+from agent.builder import build_agent
 from apps.moments._incremental import read_checkpoint, write_checkpoint, classify_sessions
 
 INSTRUCTION_TEMPLATE = """\
@@ -132,7 +132,7 @@ situational opportunities.
 """
 
 
-def run(logs_dir: str, model: str = DEFAULT_MODEL) -> str:
+def run(logs_dir: str, model: str) -> str:
     logs_dir = str(Path(logs_dir).resolve())
     Path(logs_dir, "oneoffs").mkdir(parents=True, exist_ok=True)
     checkpoint_path = Path(logs_dir) / "oneoffs" / ".last_discovery"
@@ -159,7 +159,7 @@ def run(logs_dir: str, model: str = DEFAULT_MODEL) -> str:
             f"substantial is new, it's fine to produce no new tasks."
         )
 
-    agent, _ = build_agent(model)
+    agent, _ = build_agent(model, logs_dir)
     agent.max_rounds = 200
     messages = [{"role": "user", "content": instruction}]
     result = agent.run(messages)
@@ -172,7 +172,7 @@ def run(logs_dir: str, model: str = DEFAULT_MODEL) -> str:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Discover one-off tasks from activity logs")
     parser.add_argument("logs_dir", help="Path to the logs directory")
-    parser.add_argument("-m", "--model", default=os.environ.get("POWERNAP_AGENT_MODEL", DEFAULT_MODEL))
+    parser.add_argument("-m", "--model", default=os.environ["POWERNAP_AGENT_MODEL"])
     args = parser.parse_args()
 
     result = run(args.logs_dir, model=args.model)

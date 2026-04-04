@@ -5,16 +5,17 @@ const DATA = {
   subtitle: "A brief description of what this moment shows",
 };
 
-// ── Render ───────────────────────────────────────────────
-function render() {
-  const app = document.getElementById("app");
-  app.innerHTML = `
-    <h1>${DATA.title}</h1>
-    <p class="meta">${DATA.subtitle}</p>
-    <div class="glass-card" style="margin-top: 16px;">
-      <p>Build your moment interface here.</p>
-    </div>
-  `;
+// ── App ─────────────────────────────────────────────────
+const h = React.createElement;
+const { PageHeader, GlassCard } = PN;
+
+function BlankApp() {
+  return h("div", { className: "container" },
+    h(PageHeader, { title: DATA.title, subtitle: DATA.subtitle }),
+    h(GlassCard, { style: { marginTop: "16px" } },
+      h("p", null, "Build your moment interface here.")
+    )
+  );
 }
 
-render();
+ReactDOM.createRoot(document.getElementById("root")).render(h(BlankApp));

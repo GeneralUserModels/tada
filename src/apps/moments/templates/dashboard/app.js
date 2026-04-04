@@ -35,76 +35,43 @@ const DATA = {
   ],
 };
 
-// ── State ────────────────────────────────────────────────
-let activeFilter = "all";
-let searchQuery = "";
+// ── App ─────────────────────────────────────────────────
+const h = React.createElement;
+const { useState } = React;
+const { PageHeader, StatRow, FilterBar, SearchInput, ResultCount, ItemCard, EmptyState, useFilter, useSearch } = PN;
 
-// ── Render ───────────────────────────────────────────────
-function render() {
-  document.getElementById("title").textContent = DATA.title;
-  document.getElementById("subtitle").textContent = DATA.subtitle;
+function DashboardApp() {
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Stats
-  document.getElementById("stats").innerHTML = DATA.stats.map(s => `
-    <div class="stat-pill${s.highlight ? " highlight" : ""}">
-      <div class="stat-value">${s.value}</div>
-      <div class="stat-label">${s.label}</div>
-    </div>
-  `).join("");
+  const filtered = useFilter(DATA.items, "filterKey", activeFilter);
+  const results = useSearch(filtered, ["title", "subtitle", "description"], searchQuery);
 
-  // Filters
-  document.getElementById("filters").innerHTML = DATA.filters.map(f => `
-    <button class="filter-btn${f.id === activeFilter ? " active" : ""}" data-filter="${f.id}">
-      ${f.label}
-    </button>
-  `).join("");
-
-  renderItems();
+  return h("div", { className: "container" },
+    h(PageHeader, { title: DATA.title, subtitle: DATA.subtitle }),
+    h(StatRow, { stats: DATA.stats }),
+    h("div", { className: "controls" },
+      h(FilterBar, { filters: DATA.filters, active: activeFilter, onChange: setActiveFilter }),
+      h(SearchInput, { value: searchQuery, onChange: setSearchQuery })
+    ),
+    results.length === 0
+      ? h(EmptyState, { message: "No matching items." })
+      : h("div", null,
+          h(ResultCount, { count: results.length }),
+          results.map(function(item, i) {
+            return h(ItemCard, {
+              key: i,
+              title: item.title,
+              subtitle: item.subtitle,
+              description: item.description,
+              badges: item.badges,
+              meta: item.meta,
+              url: item.url,
+              delay: i * 0.03
+            });
+          })
+        )
+  );
 }
 
-function renderItems() {
-  const q = searchQuery.toLowerCase();
-  const filtered = DATA.items.filter(item => {
-    if (activeFilter !== "all" && item.filterKey !== activeFilter) return false;
-    if (q && !`${item.title} ${item.subtitle} ${item.description}`.toLowerCase().includes(q)) return false;
-    return true;
-  });
-
-  const container = document.getElementById("items");
-  if (filtered.length === 0) {
-    container.innerHTML = '<div class="empty">No matching items.</div>';
-    return;
-  }
-
-  container.innerHTML =
-    `<div class="result-count">${filtered.length} item${filtered.length !== 1 ? "s" : ""}</div>` +
-    filtered.map((item, i) => `
-      <div class="glass-card" style="animation-delay: ${i * 0.03}s">
-        <div class="card-header">
-          <div>
-            <div class="card-title">${item.url ? `<a href="${item.url}" target="_blank">${item.title}</a>` : item.title}</div>
-            ${item.subtitle ? `<div class="card-subtitle">${item.subtitle}</div>` : ""}
-          </div>
-          ${item.badges?.length ? `<div class="card-badges">${item.badges.map(b =>
-            `<span class="badge${b.type ? " " + b.type : ""}">${b.text}</span>`).join("")}</div>` : ""}
-        </div>
-        ${item.description ? `<div class="card-desc">${item.description}</div>` : ""}
-        ${item.meta ? `<div class="card-meta">${item.meta}</div>` : ""}
-      </div>
-    `).join("");
-}
-
-// Events
-document.getElementById("filters").addEventListener("click", e => {
-  const btn = e.target.closest(".filter-btn");
-  if (!btn) return;
-  activeFilter = btn.dataset.filter;
-  render();
-});
-
-document.getElementById("search").addEventListener("input", e => {
-  searchQuery = e.target.value;
-  renderItems();
-});
-
-render();
+ReactDOM.createRoot(document.getElementById("root")).render(h(DashboardApp));
