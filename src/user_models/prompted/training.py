@@ -33,7 +33,6 @@ async def run_label_watcher(state):
             await state.broadcast("status", {
                 "recording_active": screen is not None and not screen.paused,
                 "training_active": False,
-                "inference_active": state.model.inference_active,
                 "labels_processed": data_manager.labels_processed,
             })
         except asyncio.TimeoutError:

@@ -9,6 +9,7 @@ from litellm import completion as litellm_completion
 class BasePredictor(ABC):
 
     _verifier_prompt_path: Path  # set by subclass __init__
+    should_score_prediction: bool = False
 
     @abstractmethod
     def predict_from_snapshot(self, past: list, future_len: int, **kwargs) -> dict:

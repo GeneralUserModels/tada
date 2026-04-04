@@ -1,12 +1,57 @@
 import { useState } from "react";
 import React from "react";
-import { ModelDropdown, LLM_MODELS } from "./ModelDropdown";
+import { ModelDropdown, LLM_MODELS, ModelOption } from "./ModelDropdown";
 
 export const ADVANCED_ROWS: { label: string; modelKey: string; apiKeyKey: string }[] = [
-  { label: "Reward LM",   modelKey: "reward_llm",   apiKeyKey: "reward_llm_api_key" },
-  { label: "Labeling LM", modelKey: "label_model",  apiKeyKey: "label_model_api_key" },
-  { label: "Filter LM",   modelKey: "filter_model", apiKeyKey: "filter_model_api_key" },
+  { label: "Reward LM",      modelKey: "reward_llm",          apiKeyKey: "reward_llm_api_key" },
+  { label: "Labeling LM",    modelKey: "label_model",         apiKeyKey: "label_model_api_key" },
+  { label: "Filter LM",      modelKey: "filter_model",        apiKeyKey: "filter_model_api_key" },
+  { label: "Tabracadabra LM",  modelKey: "tabracadabra_model",  apiKeyKey: "tabracadabra_api_key" },
 ];
+
+interface ModelApiKeyRowProps {
+  label: string;
+  modelKey: string;
+  apiKeyKey: string;
+  values: Record<string, string>;
+  setValues: (updater: (prev: Record<string, string>) => Record<string, string>) => void;
+  options?: ModelOption[];
+  modelPlaceholder?: string;
+  apiKeyPlaceholder?: string;
+}
+
+export function ModelApiKeyRow({
+  label, modelKey, apiKeyKey, values, setValues,
+  options = LLM_MODELS,
+  modelPlaceholder = "Select a model",
+  apiKeyPlaceholder = "Leave blank to use shared key",
+}: ModelApiKeyRowProps) {
+  return (
+    <div className="model-row">
+      <span className="model-row-label">{label}</span>
+      <div className="model-row-fields">
+        <label className="field">
+          <span>Model</span>
+          <ModelDropdown
+            value={values[modelKey] ?? ""}
+            onChange={(val) => setValues(v => ({ ...v, [modelKey]: val }))}
+            options={options}
+            placeholder={modelPlaceholder}
+          />
+        </label>
+        <label className="field">
+          <span>API Key</span>
+          <input
+            type="text"
+            placeholder={apiKeyPlaceholder}
+            value={values[apiKeyKey] ?? ""}
+            onChange={(e) => setValues(v => ({ ...v, [apiKeyKey]: e.target.value }))}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   values: Record<string, string>;
@@ -37,29 +82,7 @@ export function AdvancedLLMSection({ values, setValues, children }: Props) {
         <div className="advanced-section">
           <p className="advanced-hint">Override model and/or API key per LLM. Leave blank to use the shared values above.</p>
           {ADVANCED_ROWS.map((row) => (
-            <div key={row.modelKey} className="model-row">
-              <span className="model-row-label">{row.label}</span>
-              <div className="model-row-fields">
-                <label className="field">
-                  <span>Model</span>
-                  <ModelDropdown
-                    value={values[row.modelKey] ?? ""}
-                    onChange={(val) => setValues(v => ({ ...v, [row.modelKey]: val }))}
-                    options={LLM_MODELS}
-                    placeholder="Use shared model"
-                  />
-                </label>
-                <label className="field">
-                  <span>API Key</span>
-                  <input
-                    type="text"
-                    placeholder="Leave blank to use shared key"
-                    value={values[row.apiKeyKey] ?? ""}
-                    onChange={(e) => setValues(v => ({ ...v, [row.apiKeyKey]: e.target.value }))}
-                  />
-                </label>
-              </div>
-            </div>
+            <ModelApiKeyRow key={row.modelKey} {...row} values={values} setValues={setValues} modelPlaceholder="Use shared model" />
           ))}
           {children}
         </div>
