@@ -26,7 +26,7 @@ function allKeys(): string[] {
 
 
 export function SettingsView() {
-  const { state } = useAppContext();
+  const { state, dispatch } = useAppContext();
   const [values, setValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -122,33 +122,25 @@ export function SettingsView() {
           </div>
           <div className="model-row" style={{ marginTop: 10 }}>
             <span className="model-row-label">Tabracadabra</span>
-            <div style={{ display: "flex", gap: 4, background: "rgba(0,0,0,0.05)", borderRadius: 8, padding: 3, width: "fit-content" }}>
-              {(["true", "false"] as const).map((val) => {
-                const active = (values["tabracadabra_enabled"] ?? "true") === val;
-                return (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => setValues(v => ({ ...v, tabracadabra_enabled: val }))}
-                    style={{
-                      padding: "5px 14px",
-                      borderRadius: 6,
-                      border: "none",
-                      fontSize: 12,
-                      fontFamily: "inherit",
-                      cursor: "pointer",
-                      fontWeight: active ? 600 : 400,
-                      background: active ? "white" : "transparent",
-                      color: active ? "var(--text)" : "var(--text-tertiary)",
-                      boxShadow: active ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    {val === "true" ? "Enabled" : "Disabled"}
-                  </button>
-                );
-              })}
-            </div>
+            <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={(values["tabracadabra_enabled"] ?? "true") === "true"}
+                style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
+                onChange={(e) => setValues(v => ({ ...v, tabracadabra_enabled: e.target.checked ? "true" : "false" }))}
+              />
+              <span style={{
+                position: "absolute", inset: 0,
+                background: (values["tabracadabra_enabled"] ?? "true") === "true" ? "#84B179" : "rgba(132,177,121,0.15)",
+                borderRadius: 20, transition: "background 0.2s",
+              }} />
+              <span style={{
+                position: "absolute", height: 14, width: 14, left: 3, bottom: 3,
+                background: "#fff", borderRadius: "50%", transition: "transform 0.2s",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                transform: (values["tabracadabra_enabled"] ?? "true") === "true" ? "translateX(16px)" : "translateX(0)",
+              }} />
+            </label>
           </div>
 
           <AdvancedLLMSection values={values} setValues={setValues}>
