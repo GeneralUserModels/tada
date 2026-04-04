@@ -11,3 +11,5 @@ IMPORTANT:
 - Don't generate any filler phrases (e.g. it's essential to, feedback is vital, let's keep iterating, etc.).
 
 NEVER generate or repeat anything that is ALREADY in the provided image.
+
+Generate 3-4 sentences of text for the user.

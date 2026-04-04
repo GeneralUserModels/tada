@@ -14,7 +14,6 @@ async def init_predictor(state, config, loop):
             data_manager=state.model.data_manager,
             model=config.prompted_model,
             api_key=config.default_llm_api_key,
-            max_tokens=config.max_completion_length,
             log_dir=config.log_dir,
             retriever_checkpoint=config.retriever_checkpoint,
         )
