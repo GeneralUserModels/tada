@@ -201,6 +201,7 @@ class RewardScorer:
         """
         while True:
             try:
+                logger.info("[llm] powernap scoring")
                 response = litellm_completion(
                     model=self.reward_llm,
                     messages=[{"role": "user", "content": prompt}],
