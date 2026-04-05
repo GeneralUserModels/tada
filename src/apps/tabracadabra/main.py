@@ -325,39 +325,45 @@ class TabracadabraService:
     def _loading_spinner(self, first_piece_event: threading.Event, cancel_event: threading.Event):
         try:
             FRAMES_HOLDING = ["◐", "◓", "◑", "◒"]
-            FRAMES_LOCKED = ["◼", "◻", "◼", "◻"]
-            INTERVAL = 0.12
-
-            frames = FRAMES_HOLDING
-            self._type_text(JOINER + frames[0])
-            self._inserted_len += 2
-            self._spinner_count = 2
-            self._last_char_space = False
+            TARGET_DURATION_S = 15.0
+            INTERVAL_S = 0.12
 
             idx = 0
+            display_text = FRAMES_HOLDING[idx]
+            self._type_text(JOINER + display_text)
+            self._inserted_len += 1 + len(display_text)
+            self._spinner_count = 1 + len(display_text)
+            self._last_char_space = False
+            activated_t0: Optional[float] = None
 
             while not first_piece_event.is_set() and not cancel_event.is_set():
                 # OS-level block — zero CPU while waiting
-                cancel_event.wait(timeout=INTERVAL)
+                cancel_event.wait(timeout=INTERVAL_S)
                 if first_piece_event.is_set() or cancel_event.is_set():
                     break
 
-                # Switch frames when locked in
-                frames = FRAMES_LOCKED if self._activated else FRAMES_HOLDING
+                if self._activated:
+                    if activated_t0 is None:
+                        activated_t0 = time.monotonic()
+                    elapsed = time.monotonic() - activated_t0
+                    pct = min(100, int((elapsed / TARGET_DURATION_S) * 100))
+                    idx = (idx + 1) % len(FRAMES_HOLDING)
+                    next_display = f"{FRAMES_HOLDING[idx]} {pct:3d}%"
+                else:
+                    idx = (idx + 1) % len(FRAMES_HOLDING)
+                    next_display = FRAMES_HOLDING[idx]
 
-                self._press_backspace(1)
-                self._inserted_len -= 1
-                self._spinner_count = max(0, self._spinner_count - 1)
+                if next_display == display_text:
+                    continue
 
-                if first_piece_event.is_set() or cancel_event.is_set():
-                    break
+                self._press_backspace(len(display_text))
+                self._inserted_len = max(0, self._inserted_len - len(display_text))
+                self._spinner_count = max(0, self._spinner_count - len(display_text))
 
-                next_frame = frames[(idx + 1) % len(frames)]
-                self._type_text(next_frame)
-                self._inserted_len += 1
-                self._spinner_count += 1
-
-                idx = (idx + 1) % len(frames)
+                self._type_text(next_display)
+                self._inserted_len += len(next_display)
+                self._spinner_count += len(next_display)
+                display_text = next_display
         finally:
             self._spinner_active = False
 
@@ -387,7 +393,9 @@ class TabracadabraService:
             first_piece_event.set()
             t = self._spinner_thread
             if t and t.is_alive():
-                t.join(timeout=0.5)
+                # Wait until spinner thread fully exits so it cannot emit
+                # late backspaces that clip the first completion characters.
+                t.join()
             self._cleanup_spinner_if_present()
             self._clear_suppress_flag()
             self._finish_session()
@@ -422,7 +430,7 @@ class TabracadabraService:
                     # otherwise spinner can backspace between our count read and delete
                     t = self._spinner_thread
                     if t and t.is_alive():
-                        t.join(timeout=0.5)
+                        t.join()
                     self._cleanup_spinner_if_present()
                     self._content_started = True
                 self._safe_type_piece(piece)
@@ -443,7 +451,7 @@ class TabracadabraService:
         first_piece_event.set()
         t = self._spinner_thread
         if t and t.is_alive():
-            t.join(timeout=0.5)
+            t.join()
         self._cleanup_spinner_if_present()
         self._content_started = True
         for word in "Lorem ipsum dolor sit amet, consectetur adipiscing elit.".split(" "):
@@ -544,7 +552,7 @@ class TabracadabraService:
             self._cancel_event.set()
         t = self._spinner_thread
         if t and t.is_alive():
-            t.join(timeout=0.5)
+            t.join()
         self._cleanup_spinner_if_present()
         self._spinner_thread = None
 
