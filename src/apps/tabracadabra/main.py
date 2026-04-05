@@ -110,16 +110,23 @@ def _get_dpi_scale(mon: dict, target_dpi: int) -> float | None:
 
 
 def capture_active_monitor_as_data_url(target_dpi=DEFAULT_TARGET_DPI):
+    """Capture active monitor as a PNG data URL. Logs sub-step timings when any step exceeds 500ms."""
+    t0 = time.perf_counter()
     with mss.mss() as sct:
+        t1 = time.perf_counter()
         mx, my = _get_cursor_point()
+        t_cursor = time.perf_counter()
         mon = _find_monitor_for_point(sct.monitors, mx, my)
         raw = sct.grab(mon)
+        t_grab = time.perf_counter()
         img = Image.frombytes("RGB", raw.size, raw.rgb)
 
         img = _annotate_with_cursor(img, mon, mx, my)
+        t_annotate = time.perf_counter()
 
         out_img = img
         scale = _get_dpi_scale(mon, target_dpi)
+        t_dpi = time.perf_counter()
         if scale is not None and scale < 1.0:
             new_w = int(out_img.width * scale)
             new_h = int(out_img.height * scale)
@@ -128,7 +135,22 @@ def capture_active_monitor_as_data_url(target_dpi=DEFAULT_TARGET_DPI):
         out_img.save(buf, format="PNG")
         b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
         data_url = f"data:image/png;base64,{b64}"
-        return data_url, None
+        t_end = time.perf_counter()
+
+    slow_ms = 500
+    cursor_ms = (t_cursor - t1) * 1000
+    grab_ms = (t_grab - t_cursor) * 1000
+    annotate_ms = (t_annotate - t_grab) * 1000
+    dpi_ms = (t_dpi - t_annotate) * 1000
+    encode_ms = (t_end - t_dpi) * 1000
+    total_ms = (t_end - t0) * 1000
+    if total_ms >= slow_ms:
+        print(
+            f"[tabracadabra] timing screenshot_detail cursor_ms={cursor_ms:.1f} grab_ms={grab_ms:.1f} "
+            f"annotate_ms={annotate_ms:.1f} dpi_ms={dpi_ms:.1f} encode_ms={encode_ms:.1f} total_ms={total_ms:.1f}",
+            flush=True,
+        )
+    return data_url, None
 
 
 # ------------- Normalization helpers -------------
@@ -332,20 +354,33 @@ class TabracadabraService:
             return None
 
     def _build_messages(self):
+        t_build = time.perf_counter()
+        t_cap = time.perf_counter()
         data_url, _ = capture_active_monitor_as_data_url()
+        screenshot_ms = (time.perf_counter() - t_cap) * 1000
+
+        t_fetch = time.perf_counter()
         predictor_messages = self._fetch_predictor_messages()
+        predictor_fetch_ms = (time.perf_counter() - t_fetch) * 1000
 
         tabracadabra_turn = {"role": "user", "content": [
             {"type": "image_url", "image_url": {"url": data_url}},
             {"type": "text", "text": self._prompt_text},
         ]}
 
+        build_total_ms = (time.perf_counter() - t_build) * 1000
+        ctx = "yes" if predictor_messages else "no"
+        n_msg = len(predictor_messages) if predictor_messages else 0
+        print(
+            f"[tabracadabra] timing build_messages screenshot_ms={screenshot_ms:.1f} "
+            f"predictor_fetch_ms={predictor_fetch_ms:.1f} total_ms={build_total_ms:.1f} "
+            f"predictor_ctx={ctx} n_prefix_msgs={n_msg}",
+            flush=True,
+        )
+
         if predictor_messages:
-            print(f"[tabracadabra] Using predictor context ({len(predictor_messages)} messages)", flush=True)
             return predictor_messages + [tabracadabra_turn]
-        else:
-            print("[tabracadabra] No predictor context available, using standalone prompt", flush=True)
-            return [tabracadabra_turn]
+        return [tabracadabra_turn]
 
     # ------------- Loading animation (spinner) -------------
     def _loading_spinner(self, first_piece_event: threading.Event, cancel_event: threading.Event):
@@ -408,14 +443,15 @@ class TabracadabraService:
             return
         messages = self._build_messages()
         first_piece_seen_local = False
-        stream = litellm_completion(
-            model=self._model,
-            messages=messages,
-            stream=True,
-            stream_options={"include_usage": True},
-            api_key=self._api_key or None,
-        )
+        t_llm = time.perf_counter()
         try:
+            stream = litellm_completion(
+                model=self._model,
+                messages=messages,
+                stream=True,
+                stream_options={"include_usage": True},
+                api_key=self._api_key or None,
+            )
             for chunk in stream:
                 if cancel_event.is_set():
                     break
@@ -427,6 +463,10 @@ class TabracadabraService:
                     continue
                 if not first_piece_seen_local:
                     first_piece_seen_local = True
+                    print(
+                        f"[tabracadabra] timing llm ttft_ms={(time.perf_counter() - t_llm) * 1000:.1f}",
+                        flush=True,
+                    )
                     first_piece_event.set()
                     # Wait for spinner thread to fully stop before cleaning up,
                     # otherwise spinner can backspace between our count read and delete
@@ -437,6 +477,10 @@ class TabracadabraService:
                     self._content_started = True
                 self._safe_type_piece(piece)
         finally:
+            print(
+                f"[tabracadabra] timing llm stream_total_ms={(time.perf_counter() - t_llm) * 1000:.1f}",
+                flush=True,
+            )
             first_piece_event.set()
             self._finish_session()
 
