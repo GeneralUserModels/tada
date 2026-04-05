@@ -53,11 +53,10 @@ async def lifespan(app: FastAPI):
     state.model.training_task = asyncio.create_task(run_training_service(state))
     logger.info("Training service started (%s mode)", state.config.model_type)
 
-    # Background prediction loop (keeps tabracadabra context cache warm)
-    state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
-
     # Start Tabracadabra event tap service (macOS only)
     if sys.platform == "darwin" and state.config.tabracadabra_enabled:
+        # Background prediction loop (keeps tabracadabra context cache warm)
+        state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
         try:
             from apps.tabracadabra.main import TabracadabraService, load_prompt
 

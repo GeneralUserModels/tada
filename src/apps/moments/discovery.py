@@ -8,7 +8,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_INTERVAL = 43200  # 12 hours
+DEFAULT_INTERVAL = 86400  # 24 hours
 
 
 class MomentsDiscovery:

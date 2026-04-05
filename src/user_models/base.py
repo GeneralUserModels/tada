@@ -1,7 +1,10 @@
 import json
+import logging
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from litellm import completion as litellm_completion
 
@@ -35,6 +38,7 @@ class BasePredictor(ABC):
             candidates=candidate_block,
         )
 
+        logger.info("[llm] reward scoring")
         response = litellm_completion(
             model=reward_llm,
             messages=[{"role": "user", "content": prompt}],

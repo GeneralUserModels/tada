@@ -136,7 +136,7 @@ class ServerConfig(BaseModel):
     # Moments
     tada_dir: str = Field(default_factory=lambda: os.getenv("POWERNAP_TADA_DIR", "./logs-tada"))
     moments_agent_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_AGENT_MODEL", "gemini/gemini-3.1-flash-preview"))
-    moments_discovery_interval: int = 43200  # 12 hours
+    moments_discovery_interval: int = 86400  # 24 hours
     moments_agent_model_api_key: str = ""
     moments_enabled: bool = True
 

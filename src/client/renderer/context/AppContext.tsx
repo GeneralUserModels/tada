@@ -104,6 +104,7 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, trainingActive: action.active };
 
     case "PREDICTION":
+      if ((action.data as Record<string, unknown>).source === "auto") return state;
       return {
         ...state,
         generating: false,
