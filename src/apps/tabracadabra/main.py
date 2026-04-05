@@ -14,15 +14,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 from litellm import completion as litellm_completion
 
-import mss
-from PIL import Image, ImageDraw
+from PIL import Image
 
 import Quartz
 
-from screeninfo import get_monitors
-
-from connectors.screen.napsack.recorder import DEFAULT_TARGET_DPI
-from napsack.record.__main__ import get_monitor_dpis, calculate_monitor_scales
+from connectors.screen.napsack.recorder import (
+    DEFAULT_TARGET_DPI,
+    TABRACADABRA_LATEST_FRAME_PNG,
+)
 
 load_dotenv()
 
@@ -49,105 +48,45 @@ def load_prompt() -> str:
     return prompt_path.read_text()
 
 
-# ------------- Screenshot helpers (mss + Quartz) -------------
-def _get_cursor_point():
-    ev = Quartz.CGEventCreate(None)
-    loc = Quartz.CGEventGetLocation(ev)
-    return int(loc.x), int(loc.y)
-
-
-def _find_monitor_for_point(monitors, x, y):
-    for mon in monitors[1:]:
-        left, top = mon["left"], mon["top"]
-        right = left + mon["width"]
-        bottom = top + mon["height"]
-        if left <= x < right and top <= y < bottom:
-            return mon
-    return monitors[1] if len(monitors) > 1 else monitors[0]
-
-
-def _annotate_with_cursor(img: Image.Image, mon: dict, mx: int, my: int) -> Image.Image:
-    cx = mx - mon["left"]
-    cy = my - mon["top"]
-    cx = max(0, min(cx, img.width - 1))
-    cy = max(0, min(cy, img.height - 1))
-
-    width_mm = mon.get("width_mm")
-    height_mm = mon.get("height_mm")
-    if width_mm and height_mm:
-        dpi_x = mon["width"] / (width_mm / 25.4)
-        dpi_y = mon["height"] / (height_mm / 25.4)
-        dpi = (dpi_x + dpi_y) / 2
-    else:
-        dpi = 96
-
-    base_size_at_96dpi = 12
-    dot_r = int((dpi / 96) * base_size_at_96dpi)
-    outline_w = max(2, dot_r // 4)
-
-    draw = ImageDraw.Draw(img, "RGBA")
-    draw.ellipse(
-        (cx - dot_r - outline_w, cy - dot_r - outline_w,
-         cx + dot_r + outline_w, cy + dot_r + outline_w),
-        fill=(255, 255, 255, 255)
-    )
-    draw.ellipse(
-        (cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r),
-        fill=(255, 0, 0, 255)
-    )
-    return img
-
-
-def _get_dpi_scale(mon: dict, target_dpi: int) -> float | None:
-    """Get DPI-based scale factor for a monitor, using napsack's DPI detection."""
-    monitor_dpis = get_monitor_dpis()
-    scales = calculate_monitor_scales(target_dpi, monitor_dpis) if monitor_dpis else {}
-    # Match mss monitor to screeninfo monitor by position and size
-    for i, sm in enumerate(get_monitors()):
-        if sm.x == mon["left"] and sm.y == mon["top"] and sm.width == mon["width"] and sm.height == mon["height"]:
-            return scales.get(i)
-    return None
-
-
+# ------------- Screenshot (napsack shared frame only; screen MCP writes TABRACADABRA_LATEST_FRAME_PNG) -------------
 def capture_active_monitor_as_data_url(target_dpi=DEFAULT_TARGET_DPI):
-    """Capture active monitor as a PNG data URL. Logs sub-step timings when any step exceeds 500ms."""
+    """PNG data URL from napsack's latest shared frame. DPI scaling was applied when the frame was captured."""
+    del target_dpi  # unused; kept for call-site compatibility
     t0 = time.perf_counter()
-    with mss.mss() as sct:
-        t1 = time.perf_counter()
-        mx, my = _get_cursor_point()
-        t_cursor = time.perf_counter()
-        mon = _find_monitor_for_point(sct.monitors, mx, my)
-        raw = sct.grab(mon)
-        t_grab = time.perf_counter()
-        img = Image.frombytes("RGB", raw.size, raw.rgb)
-
-        img = _annotate_with_cursor(img, mon, mx, my)
-        t_annotate = time.perf_counter()
-
-        out_img = img
-        scale = _get_dpi_scale(mon, target_dpi)
-        t_dpi = time.perf_counter()
-        if scale is not None and scale < 1.0:
-            new_w = int(out_img.width * scale)
-            new_h = int(out_img.height * scale)
-            out_img = out_img.resize((new_w, new_h), Image.LANCZOS)
-        buf = io.BytesIO()
-        out_img.save(buf, format="PNG")
-        b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-        data_url = f"data:image/png;base64,{b64}"
-        t_end = time.perf_counter()
-
     slow_ms = 500
-    cursor_ms = (t_cursor - t1) * 1000
-    grab_ms = (t_grab - t_cursor) * 1000
-    annotate_ms = (t_annotate - t_grab) * 1000
-    dpi_ms = (t_dpi - t_annotate) * 1000
-    encode_ms = (t_end - t_dpi) * 1000
+    max_age = float(os.getenv("TABRACADABRA_FRAME_MAX_AGE_S", "5"))
+    try:
+        st = os.stat(TABRACADABRA_LATEST_FRAME_PNG)
+    except OSError as e:
+        raise RuntimeError(
+            f"No shared frame at {TABRACADABRA_LATEST_FRAME_PNG}. "
+            "Run PowerNap with the screen connector (MCP) so the recorder can publish frames."
+        ) from e
+    age_s = time.time() - st.st_mtime
+    if age_s > max_age:
+        raise RuntimeError(
+            f"Shared frame is stale ({age_s:.1f}s old, max {max_age}s via TABRACADABRA_FRAME_MAX_AGE_S). "
+            "Screen recorder may be stopped or stuck."
+        )
+    t1 = time.perf_counter()
+    try:
+        with Image.open(TABRACADABRA_LATEST_FRAME_PNG) as im:
+            out_img = im.convert("RGB").copy()
+    except (OSError, ValueError) as e:
+        raise RuntimeError(f"Could not read shared frame at {TABRACADABRA_LATEST_FRAME_PNG}") from e
+    t_load = time.perf_counter()
+    buf = io.BytesIO()
+    out_img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    data_url = f"data:image/png;base64,{b64}"
+    t_end = time.perf_counter()
     total_ms = (t_end - t0) * 1000
     if total_ms >= slow_ms:
+        file_ms = (t_load - t1) * 1000
+        encode_ms = (t_end - t_load) * 1000
         print(
-            f"[tabracadabra] timing screenshot_detail cursor_ms={cursor_ms:.1f} grab_ms={grab_ms:.1f} "
-            f"annotate_ms={annotate_ms:.1f} dpi_ms={dpi_ms:.1f} encode_ms={encode_ms:.1f} total_ms={total_ms:.1f}",
+            f"[tabracadabra] timing screenshot_detail source=shared file_ms={file_ms:.1f} "
+            f"encode_ms={encode_ms:.1f} total_ms={total_ms:.1f}",
             flush=True,
         )
     return data_url, None
@@ -441,7 +380,18 @@ class TabracadabraService:
         if self._placeholder:
             self._placeholder_worker(cancel_event, first_piece_event)
             return
-        messages = self._build_messages()
+        try:
+            messages = self._build_messages()
+        except Exception as e:
+            print(f"[tabracadabra] {e}", flush=True)
+            first_piece_event.set()
+            t = self._spinner_thread
+            if t and t.is_alive():
+                t.join(timeout=0.5)
+            self._cleanup_spinner_if_present()
+            self._clear_suppress_flag()
+            self._finish_session()
+            return
         first_piece_seen_local = False
         t_llm = time.perf_counter()
         try:
