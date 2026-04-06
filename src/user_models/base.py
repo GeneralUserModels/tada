@@ -44,6 +44,7 @@ class BasePredictor(ABC):
             model=reward_llm,
             messages=[{"role": "user", "content": prompt}],
             api_key=api_key or None,
+            metadata={"app": "reward_lm"},
         )
 
         text = response.choices[0].message.content.strip()

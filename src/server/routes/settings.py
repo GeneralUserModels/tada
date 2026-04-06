@@ -1,5 +1,6 @@
 """GET/PUT /api/settings — API keys and model config."""
 
+import asyncio
 import logging
 import os
 import sys
@@ -100,6 +101,10 @@ async def update_settings(update: SettingsUpdate, request: Request):
             if state.tabracadabra_service is None:
                 try:
                     from apps.tabracadabra.main import TabracadabraService, load_prompt
+                    from apps.tabracadabra.prediction_loop import run_prediction_loop
+
+                    if state.prediction_loop_task is None or state.prediction_loop_task.done():
+                        state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
 
                     tab_config = {
                         "model": cfg.tabracadabra_model,
@@ -121,5 +126,8 @@ async def update_settings(update: SettingsUpdate, request: Request):
                 except Exception:
                     logger.warning("Error stopping Tabracadabra service", exc_info=True)
                 state.tabracadabra_service = None
+            if state.prediction_loop_task is not None and not state.prediction_loop_task.done():
+                state.prediction_loop_task.cancel()
+                state.prediction_loop_task = None
 
     return {"status": "ok", "updated": updated}

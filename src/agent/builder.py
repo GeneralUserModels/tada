@@ -73,6 +73,7 @@ def _make_summarizer(model: str):
             model=model,
             messages=[{"role": "user", "content": text}],
             max_tokens=2000,
+            metadata={"app": "agent_summarizer"},
         )
         return resp.choices[0].message.content or ""
     return summarize
