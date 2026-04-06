@@ -9,6 +9,7 @@ export const LLM_MODELS: ModelOption[] = [
   { value: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
   { value: "anthropic/claude-sonnet-4-6",         label: "Claude Sonnet 4.6" },
   { value: "anthropic/claude-opus-4-6",           label: "Claude Opus 4.6" },
+  { value: "gemini/gemini-3-flash-preview",        label: "Gemini 3 Flash Preview" },
   { value: "gemini/gemini-3.1-flash-lite-preview", label: "Gemini Flash 3.1 Flash-Lite Preview" },
 ];
 
@@ -126,7 +127,7 @@ export function ModelDropdown({ value, onChange, options, placeholder = "Select 
         }}
       >
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {selected ? selected.label : placeholder}
+          {selected ? selected.label : value ? value : placeholder}
         </span>
         <svg
           width="10" height="10" viewBox="0 0 12 12" fill="none"
