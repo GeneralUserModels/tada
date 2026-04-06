@@ -209,7 +209,7 @@ class PromptedPredictor(BasePredictor):
         """Run prediction from a pre-sliced list of past actions."""
         self.index_context()
 
-        past_actions_block = build_actions_block(past)
+        past_actions_block = build_actions_block(past, include_descriptions=True)
 
         image_parts = []
         if num_imgs_per_sample is not None:

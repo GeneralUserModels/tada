@@ -127,7 +127,7 @@ class FinetunedPredictor(BasePredictor):
 
     def predict_from_snapshot(self, past, future_len, num_imgs_per_sample=None, **kwargs):
         """Run prediction from a pre-sliced list of past actions."""
-        past_actions_block = build_actions_block(past)
+        past_actions_block = build_actions_block(past, include_descriptions=True)
 
         # Always build content as a list so predict() can append TextParts directly
         actions_with_imgs = past[-num_imgs_per_sample:] if num_imgs_per_sample is not None else past
