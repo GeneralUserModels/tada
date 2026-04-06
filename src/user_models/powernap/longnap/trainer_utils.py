@@ -55,8 +55,29 @@ def build_context_block(events: List[Dict[str, Any]]) -> str:
 def fmt_action(text: str) -> str:
     return f"<action>{text}</action>"
 
-def build_actions_block(records: List[Dict[str, Any]]) -> str:
-    lines = [fmt_action(r["text"]) for r in records]
+def collect_dense_captions(events: List[Dict[str, Any]]) -> str:
+    """Collect unique dense captions from a list of events, preserving order."""
+    seen = set()
+    captions = []
+    for e in events:
+        dc = e.get("dense_caption", "")
+        if dc and dc not in seen:
+            seen.add(dc)
+            captions.append(dc)
+    return "\n".join(captions)
+
+
+def build_actions_block(records: List[Dict[str, Any]], include_descriptions: bool = False) -> str:
+    lines = []
+    last_dense_caption = ""
+    for r in records:
+        lines.append(fmt_action(r["text"]))
+        if not include_descriptions:
+            continue
+        dense_caption = (r.get("dense_caption", "") or "").strip()
+        if dense_caption and dense_caption != last_dense_caption:
+            lines.append(f"<description>{dense_caption}</description>")
+            last_dense_caption = dense_caption
     return "<actions>\n" + "\n".join("    " + a for a in lines) + "\n</actions>"
 
 def build_think_user_message() -> Dict[str, str]:

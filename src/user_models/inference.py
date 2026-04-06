@@ -72,8 +72,8 @@ async def handle_prediction_request(state: Any):
 
     await state.broadcast("prediction", {
         "actions": result["actions"],
-        "think": result["think"],
-        "revise": result["revise"],
+        "think": result.get("think", ""),
+        "revise": result.get("revise", ""),
         "timestamp": result["timestamp"],
     })
 
