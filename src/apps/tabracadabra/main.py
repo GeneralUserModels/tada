@@ -27,6 +27,9 @@ load_dotenv()
 
 # ------------- Constants -------------
 JOINER = "\u2060"  # WORD JOINER (plays nice with Backspace)
+SPINNER_FRAMES_HOLDING = ["◐", "◓", "◑", "◒"]
+SPINNER_PROGRESS_DURATION_S = 9.0
+SPINNER_TICK_INTERVAL_S = 0.12
 
 # Keycodes
 KC_TAB = 48       # 0x30
@@ -324,12 +327,8 @@ class TabracadabraService:
     # ------------- Loading animation (spinner) -------------
     def _loading_spinner(self, first_piece_event: threading.Event, cancel_event: threading.Event):
         try:
-            FRAMES_HOLDING = ["◐", "◓", "◑", "◒"]
-            TARGET_DURATION_S = 15.0
-            INTERVAL_S = 0.12
-
             idx = 0
-            display_text = FRAMES_HOLDING[idx]
+            display_text = SPINNER_FRAMES_HOLDING[idx]
             self._type_text(JOINER + display_text)
             self._inserted_len += 1 + len(display_text)
             self._spinner_count = 1 + len(display_text)
@@ -338,7 +337,7 @@ class TabracadabraService:
 
             while not first_piece_event.is_set() and not cancel_event.is_set():
                 # OS-level block — zero CPU while waiting
-                cancel_event.wait(timeout=INTERVAL_S)
+                cancel_event.wait(timeout=SPINNER_TICK_INTERVAL_S)
                 if first_piece_event.is_set() or cancel_event.is_set():
                     break
 
@@ -346,12 +345,12 @@ class TabracadabraService:
                     if activated_t0 is None:
                         activated_t0 = time.monotonic()
                     elapsed = time.monotonic() - activated_t0
-                    pct = min(100, int((elapsed / TARGET_DURATION_S) * 100))
-                    idx = (idx + 1) % len(FRAMES_HOLDING)
-                    next_display = f"{FRAMES_HOLDING[idx]} {pct:3d}%"
+                    pct = min(100, int((elapsed / SPINNER_PROGRESS_DURATION_S) * 100))
+                    idx = (idx + 1) % len(SPINNER_FRAMES_HOLDING)
+                    next_display = f"{SPINNER_FRAMES_HOLDING[idx]} {pct:3d}%"
                 else:
-                    idx = (idx + 1) % len(FRAMES_HOLDING)
-                    next_display = FRAMES_HOLDING[idx]
+                    idx = (idx + 1) % len(SPINNER_FRAMES_HOLDING)
+                    next_display = SPINNER_FRAMES_HOLDING[idx]
 
                 if next_display == display_text:
                     continue
