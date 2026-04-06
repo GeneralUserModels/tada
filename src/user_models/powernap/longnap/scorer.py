@@ -38,7 +38,7 @@ class RewardScorer:
     
     def __init__(
         self,
-        reward_llm: str = "gemini/gemini-3-flash-preview",
+        reward_llm: str = "gemini/gemini-3.1-flash-lite-preview",
         api_key: str = "",
         accuracy_weight: float = 0.5,
         formatting_weight: float = 0.5,
@@ -323,7 +323,7 @@ class RewardScorer:
 
 
 def create_reward_scorer(
-    reward_llm: str = "gemini/gemini-3-flash-preview",
+    reward_llm: str = "gemini/gemini-3.1-flash-lite-preview",
     api_key: str = "",
     accuracy_weight: float = 0.5,
     formatting_weight: float = 0.5,

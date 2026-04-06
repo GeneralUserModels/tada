@@ -52,6 +52,7 @@ async def _labeling_loop() -> None:
             await _labeled_queue.put({  # type: ignore[union-attr]
                 "id": label["start_time"],
                 "summary": label["text"],
+                "dense_caption": label.get("dense_caption", ""),
                 "screenshot_path": label.get("screenshot_path"),
                 "raw_events": label.get("raw_events", []),
             })

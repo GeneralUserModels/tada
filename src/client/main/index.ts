@@ -12,7 +12,6 @@ import { spawn, ChildProcess } from "child_process";
 import { IPC } from "./ipc";
 import * as api from "./api";
 import * as sse from "./sse";
-import * as recorder from "./features/recorder";
 import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogleTokenPath, getOutlookTokenPath } from "./paths";
 import * as bootstrap from "./features/bootstrap";
 import { runOnboarding } from "./features/onboarding";
@@ -336,11 +335,17 @@ app.whenReady().then(async () => {
     await runBootstrap();
   }
 
-  // Start server before onboarding so the onboarding window calls Python directly
-  const port = await findFreePort();
-  api.setServerUrl(`http://127.0.0.1:${port}`);
-  startServer(port);
-  await waitForServer(`http://127.0.0.1:${port}/api/status`);
+  // In dev, the supervisor starts the server and provides the URL.
+  // In packaged mode, Electron owns server lifecycle directly.
+  const externalDevServerUrl = isDev() ? process.env.POWERNAP_SERVER_URL : undefined;
+  if (externalDevServerUrl) {
+    api.setServerUrl(externalDevServerUrl);
+  } else {
+    const port = await findFreePort();
+    api.setServerUrl(`http://127.0.0.1:${port}`);
+    startServer(port);
+  }
+  await waitForServer(`${api.getServerUrl()}/api/status`);
 
   const { complete } = await api.getOnboardingStatus() as { complete: boolean };
   if (!complete) {
@@ -377,7 +382,6 @@ app.on("before-quit", () => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    recorder.stopRecording();
     sse.disconnect();
     stopServer();
     app.quit();

@@ -4,10 +4,24 @@
 import argparse
 import logging
 import os
+import threading
+import time
+import signal
 import uvicorn
 
 
 logging.basicConfig(level=logging.INFO, format="%(name)s - %(levelname)s - %(message)s")
+
+
+def _watch_parent():
+    """Exit if parent process dies (re-parented to PID 1 / launchd)."""
+    ppid = os.getppid()
+    while True:
+        time.sleep(2)
+        if os.getppid() != ppid:
+            logging.getLogger(__name__).info("Parent process died, shutting down")
+            os.kill(os.getpid(), signal.SIGTERM)
+            break
 
 
 def main():
@@ -54,6 +68,8 @@ def main():
     os.environ["POWERNAP_WANDB_PROJECT"] = args.wandb_project
     os.environ["POWERNAP_WANDB_RUN_NAME"] = args.wandb_run_name
     os.environ["POWERNAP_PORT"] = str(args.port)
+
+    threading.Thread(target=_watch_parent, daemon=True).start()
 
     uvicorn.run(
         "server.app:create_app",

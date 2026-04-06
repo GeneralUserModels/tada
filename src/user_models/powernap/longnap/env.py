@@ -168,10 +168,13 @@ class LongNAPEnv(Env):
         if self.retriever is None:
             return ""
         
-        # Combine think output with past actions for better retrieval
+        # Combine think output with past actions and dense caption for better retrieval
         full_query = query
         if self.past_actions:
             full_query = query + "\n\n" + self.past_actions
+        dense_caption = self.input_data.get("dense_caption", "")
+        if dense_caption:
+            full_query = full_query + "\n\n" + dense_caption
         
         # Query retriever
         hits = self.retriever.query(
@@ -348,6 +351,7 @@ class LongNAPEnvGroupBuilder(EnvGroupBuilder):
         # Save retriever candidates (don't add yet — wait for finalized rewards in training step)
         if self.retriever is not None:
             candidates = []
+            dense_caption = self.input_data.get("dense_caption", "")
             for env in env_group:
                 if isinstance(env, LongNAPEnv) and env.revise_text:
                     past_actions = self.input_data.get("past_actions", "")
@@ -355,6 +359,8 @@ class LongNAPEnvGroupBuilder(EnvGroupBuilder):
                         text = past_actions.strip() + "\n\n<revise>\n" + env.revise_text.strip()
                     else:
                         text = "<revise>\n" + env.revise_text.strip()
+                    if dense_caption:
+                        text = dense_caption.strip() + "\n\n" + text
                     candidates.append({"text": text, "ts": env.ts, "end_ts": env.end_ts})
                 else:
                     candidates.append(None)
