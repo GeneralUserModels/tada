@@ -6,6 +6,7 @@ import time
 import base64
 import io
 import json
+import logging
 import re
 import urllib.request
 import urllib.error
@@ -14,7 +15,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from litellm import completion as litellm_completion
 
-from PIL import Image
+logger = logging.getLogger(__name__)
+
+import mss
+from PIL import Image, ImageDraw
 
 import Quartz
 
@@ -400,6 +404,14 @@ class TabracadabraService:
             self._finish_session()
             return
         first_piece_seen_local = False
+        logger.info("[llm] tabracadabra")
+        stream = litellm_completion(
+            model=self._model,
+            messages=messages,
+            stream=True,
+            stream_options={"include_usage": True},
+            api_key=self._api_key or None,
+        )
         t_llm = time.perf_counter()
         try:
             stream = litellm_completion(

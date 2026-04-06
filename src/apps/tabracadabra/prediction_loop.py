@@ -31,6 +31,6 @@ async def run_prediction_loop(state) -> None:
         except asyncio.TimeoutError:
             pass
         try:
-            await handle_prediction_request(state)
+            await handle_prediction_request(state, source="auto")
         except Exception as e:
             logger.warning("Prediction loop error: %s", e)

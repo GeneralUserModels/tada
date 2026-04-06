@@ -2,8 +2,11 @@ import base64
 import copy
 import io
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from PIL import Image
 
@@ -95,6 +98,7 @@ class PromptedPredictor(BasePredictor):
         return "\n\n".join(blocks)
 
     def _sample(self, messages: list, stop: list) -> str:
+        logger.info("[llm] prediction: generating")
         response = litellm_completion(
             model=self.model,
             messages=messages,

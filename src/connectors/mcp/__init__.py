@@ -31,6 +31,7 @@ class MCPConnector:
     ) -> None:
         self._paused = False
         self.error: str | None = None
+        self._disconnect_event = asyncio.Event()
         # Merge full parent env with any connector-specific overrides.
         # MCP's stdio_client only inherits a minimal set (HOME, PATH, etc.) by default,
         # so without this, API keys and other env vars set in the server process are lost.
@@ -52,10 +53,16 @@ class MCPConnector:
         if error is not None:
             self.error = error
 
-    async def stop(self, error: str | None = None) -> None:
-        """Pause and disconnect the underlying subprocess immediately."""
+    def stop(self, error: str | None = None) -> None:
+        """Pause and request disconnection (actual disconnect happens in the owning task)."""
         self.pause(error=error)
-        await self._disconnect()
+        self._disconnect_event.set()
+
+    async def disconnect_if_needed(self) -> None:
+        """Disconnect if a stop was requested.  Must be called from the same task that connected."""
+        if self._disconnect_event.is_set():
+            self._disconnect_event.clear()
+            await self._disconnect()
 
     def resume(self) -> None:
         self._paused = False
@@ -86,16 +93,25 @@ class MCPConnector:
     async def wait_for_notification(self, timeout: float = 10.0) -> bool:
         """Block until the server pushes a resource-updated notification (or timeout).
 
-        Returns True if notified, False on timeout.
+        Returns True if notified, False on timeout or if a disconnect was requested.
         """
         if self._notification_event is None:
             raise RuntimeError("Notifications not enabled for this connector")
-        try:
-            await asyncio.wait_for(self._notification_event.wait(), timeout=timeout)
+        notify_task = asyncio.ensure_future(self._notification_event.wait())
+        disconnect_task = asyncio.ensure_future(self._disconnect_event.wait())
+        done, pending = await asyncio.wait(
+            [notify_task, disconnect_task],
+            timeout=timeout,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for t in pending:
+            t.cancel()
+        if self._disconnect_event.is_set():
+            return False
+        if self._notification_event.is_set():
             self._notification_event.clear()
             return True
-        except asyncio.TimeoutError:
-            return False
+        return False
 
     async def _message_handler(
         self,

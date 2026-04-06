@@ -83,6 +83,7 @@ def _filter_with_llm(items: list[dict], source: str, model: str, api_key: str = 
     results = []
     for i in range(0, len(items), batch_size):
         batch = items[i:i + batch_size]
+        logger.info("[llm] connector filter (%s): %d items", source, len(batch))
         response = litellm_completion(
             model=model,
             messages=[{"role": "user", "content": FILTER_PROMPT.format(
@@ -145,6 +146,8 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
         logger.info(f"{cfg.name}: fetched {len(items)}, kept {len(to_write)}")
 
     while True:
+        await cfg.connector.disconnect_if_needed()
+
         error_occurred = False
         try:
             await poll()
@@ -163,7 +166,8 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
             else:
                 user_msg = raw
             logger.warning(f"{cfg.name}: pausing — {user_msg}")
-            await cfg.connector.stop(error=user_msg)
+            cfg.connector.stop(error=user_msg)
+            await cfg.connector.disconnect_if_needed()
             # Persist so the connector stays paused-with-error across restarts
             if cfg.name not in state.config.disabled_connectors:
                 state.config.disabled_connectors.append(cfg.name)
@@ -177,10 +181,12 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
             error_occurred = True
         # For long-poll connectors (interval=0), ensure a minimum backoff on error or when paused
         # to avoid tight-looping. Normal case: re-poll immediately (the tool handled the wait).
-        if error_occurred or cfg.connector.paused:
-            await asyncio.sleep(max(cfg.interval, 5))
-        else:
-            await asyncio.sleep(cfg.interval)
+        delay = max(cfg.interval, 5) if (error_occurred or cfg.connector.paused) else cfg.interval
+        if delay > 0:
+            try:
+                await asyncio.wait_for(cfg.connector._disconnect_event.wait(), timeout=delay)
+            except asyncio.TimeoutError:
+                pass
 
 
 async def run_context_logging_service(state) -> None:
