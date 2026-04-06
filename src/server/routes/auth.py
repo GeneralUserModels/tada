@@ -267,6 +267,17 @@ async def google_start(request: Request):
     }
     _write_token(state.config.google_token_path, token)
 
+    # Re-enable google connectors that were disabled due to errors
+    for name, auth in getattr(state, "connector_auth", {}).items():
+        if auth == "google":
+            if name in state.config.disabled_connectors:
+                state.config.disabled_connectors.remove(name)
+            state.config.connector_errors.pop(name, None)
+            conn = state.connectors.get(name)
+            if conn:
+                conn.resume()
+    state.config.save()
+
     await state.broadcast("connectors", {})
     return {"ok": True}
 
@@ -337,6 +348,17 @@ async def outlook_start(request: Request):
         "scopes": MICROSOFT_SCOPES,
     }
     _write_token(state.config.outlook_token_path, token)
+
+    # Re-enable outlook connectors that were disabled due to errors
+    for name, auth in getattr(state, "connector_auth", {}).items():
+        if auth == "outlook":
+            if name in state.config.disabled_connectors:
+                state.config.disabled_connectors.remove(name)
+            state.config.connector_errors.pop(name, None)
+            conn = state.connectors.get(name)
+            if conn:
+                conn.resume()
+    state.config.save()
 
     await state.broadcast("connectors", {})
     return {"ok": True}

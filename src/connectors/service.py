@@ -165,25 +165,33 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
             # Strip "Error executing tool X: " wrapper added by FastMCP
             if raw.startswith("Error executing tool "):
                 _, _, raw = raw.partition(": ")
-            if "unable to open database file" in raw:
-                user_msg = "Permission denied — grant Full Disk Access in System Settings → Privacy & Security"
-            elif "No such file or directory" in raw or "FileNotFoundError" in raw:
-                user_msg = "Not signed in"
-            elif "401" in raw or "Unauthorized" in raw:
-                user_msg = "Authentication expired — reconnect your account"
+            # Transient network errors — log and retry on next interval, don't disable
+            _transient_markers = ("NameResolutionError", "ConnectionError", "RemoteDisconnected",
+                                  "Connection aborted", "Max retries exceeded", "timed out",
+                                  "ConnectionReset", "NewConnectionError")
+            if any(m in raw for m in _transient_markers):
+                logger.warning(f"{cfg.name}: transient network error, will retry — {raw}")
+                error_occurred = True
             else:
-                user_msg = raw
-            logger.warning(f"{cfg.name}: pausing — {user_msg}")
-            cfg.connector.stop(error=user_msg)
-            await cfg.connector.disconnect_if_needed()
-            # Persist so the connector stays paused-with-error across restarts
-            if cfg.name not in state.config.disabled_connectors:
-                state.config.disabled_connectors.append(cfg.name)
-            state.config.connector_errors[cfg.name] = user_msg
-            state.config.save()
-            if state is not None:
-                await state.broadcast("connectors", {"name": cfg.name, "error": user_msg, "enabled": False})
-            error_occurred = True
+                if "unable to open database file" in raw:
+                    user_msg = "Permission denied — grant Full Disk Access in System Settings → Privacy & Security"
+                elif "No such file or directory" in raw or "FileNotFoundError" in raw:
+                    user_msg = "Not signed in"
+                elif "401" in raw or "Unauthorized" in raw:
+                    user_msg = "Authentication expired — reconnect your account"
+                else:
+                    user_msg = raw
+                logger.warning(f"{cfg.name}: pausing — {user_msg}")
+                cfg.connector.stop(error=user_msg)
+                await cfg.connector.disconnect_if_needed()
+                # Persist so the connector stays paused-with-error across restarts
+                if cfg.name not in state.config.disabled_connectors:
+                    state.config.disabled_connectors.append(cfg.name)
+                state.config.connector_errors[cfg.name] = user_msg
+                state.config.save()
+                if state is not None:
+                    await state.broadcast("connectors", {"name": cfg.name, "error": user_msg, "enabled": False})
+                error_occurred = True
         except Exception as e:
             logger.exception(f"{cfg.name} poll failed")
             error_occurred = True
