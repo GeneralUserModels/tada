@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
-import { updateSettings } from "../../api/client";
+import { getSettings, updateSettings } from "../../api/client";
 import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, TINKER_MODELS, TADA_MODELS } from "../shared/ModelDropdown";
 
@@ -52,12 +52,20 @@ export function SettingsView() {
     data["tabracadabra_enabled"] = values["tabracadabra_enabled"] === "true";
     if (Object.keys(data).length > 0) {
       await updateSettings(data);
+      const fresh = await getSettings();
+      dispatch({ type: "LOAD_SETTINGS", settings: fresh as Record<string, unknown> });
     }
   };
 
   const handleLLMModelChange = (val: string) => {
     setValues(v => ({ ...v, reward_llm: val, label_model: val, filter_model: val, tabracadabra_model: val }));
   };
+
+  const hasUnsavedChanges = allKeys().some((key) => {
+    const saved = state.settings[key];
+    const current = values[key];
+    return String(saved ?? "") !== String(current ?? "");
+  });
 
   const modelType = values["model_type"] ?? "prompted";
   const isTinker = modelType === "powernap";
@@ -248,6 +256,23 @@ export function SettingsView() {
         </div>
       </section>
 
+      {hasUnsavedChanges && (
+        <div style={{
+          position: "fixed", bottom: 16, left: 216, right: 16,
+          background: "#fff", border: "1px solid rgba(132,177,121,0.25)",
+          borderRadius: 12,
+          boxShadow: "0 4px 24px rgba(44,58,40,0.12), 0 1px 4px rgba(0,0,0,0.06)",
+          padding: "12px 20px", display: "flex", alignItems: "center",
+          justifyContent: "space-between", zIndex: 100,
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text, #2C3A28)" }}>
+            Careful, you have unsaved changes!
+          </span>
+          <button className="pill-btn pill-start" onClick={handleSave}>
+            Save Changes
+          </button>
+        </div>
+      )}
     </div>
   );
 }
