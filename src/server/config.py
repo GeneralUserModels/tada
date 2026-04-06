@@ -76,19 +76,19 @@ class ServerConfig(BaseModel):
     precision: str = "accurate"
 
     # Labeler
-    label_model: str = "gemini/gemini-3-flash-preview"
+    label_model: str = "gemini/gemini-3.1-flash-lite-preview"
     label_model_api_key: str = ""
-    filter_model: str = "gemini/gemini-3-flash-preview"
+    filter_model: str = "gemini/gemini-3.1-flash-lite-preview"
     filter_model_api_key: str = ""
     chunk_workers: int = 4
 
     # Model selection
     model_type: str = "prompted"
-    prompted_model: str = "gemini/gemini-3-flash-preview"
+    prompted_model: str = "gemini/gemini-3.1-flash-lite-preview"
 
     # Trainer
     model: str = "Qwen/Qwen3-VL-30B-A3B-Instruct"
-    reward_llm: str = "gemini/gemini-3-flash-preview"
+    reward_llm: str = "gemini/gemini-3.1-flash-lite-preview"
     reward_llm_api_key: str = ""
     num_generations: int = 4
     learning_rate: float = 5e-5
@@ -105,7 +105,7 @@ class ServerConfig(BaseModel):
 
     # Tabracadabra
     tabracadabra_enabled: bool = True
-    tabracadabra_model: str = "gemini/gemini-3-flash-preview"
+    tabracadabra_model: str = "gemini/gemini-3.1-flash-lite-preview"
     tabracadabra_api_key: str = ""
 
     # Agent

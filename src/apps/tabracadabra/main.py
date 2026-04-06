@@ -107,7 +107,7 @@ def _normalize_piece(piece: str) -> str:
 def _fetch_powernap_config(base_url: str = "http://localhost:8000") -> dict:
     """Fetch tabracadabra config from PowerNap settings. Falls back to env vars on error."""
     defaults = {
-        "model": os.getenv("MODEL", "gemini/gemini-3-flash-preview"),
+        "model": os.getenv("MODEL", "gemini/gemini-3.1-flash-lite-preview"),
         "api_key": os.getenv("LLM_API_KEY", ""),
         "hold_threshold": float(os.getenv("HOLD_THRESHOLD", "0.35")),
         "powernap_base_url": base_url,

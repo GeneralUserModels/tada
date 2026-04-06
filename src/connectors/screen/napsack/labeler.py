@@ -73,12 +73,12 @@ class Labeler:
             max_workers: Number of parallel chunk processors.
             log_dir: Directory to save labels.jsonl and screenshots.
             save_screenshots: If True, save screenshots for labeled samples.
-            model: Gemini model name for labeling (default: gemini-2.5-flash).
+            model: Gemini model name for labeling (default: gemini-3.1-flash-lite-preview).
         """
         self.max_workers = max_workers
         resolved_api_key = api_key or os.environ.get("POWERNAP_LABEL_API_KEY") or None
         with contextlib.redirect_stdout(sys.stderr):
-            self.client = LiteLLMClient(model_name=model or "gemini/gemini-3-flash-preview", api_key=resolved_api_key)
+            self.client = LiteLLMClient(model_name=model or "gemini/gemini-3.1-flash-lite-preview", api_key=resolved_api_key)
         self.prompt = self._load_prompt()
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.save_screenshots = save_screenshots

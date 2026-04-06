@@ -9,12 +9,12 @@ export const LLM_MODELS: ModelOption[] = [
   { value: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
   { value: "anthropic/claude-sonnet-4-6",         label: "Claude Sonnet 4.6" },
   { value: "anthropic/claude-opus-4-6",           label: "Claude Opus 4.6" },
-  { value: "gemini/gemini-3-flash-preview",       label: "Gemini Flash 3.0 Preview" },
+  { value: "gemini/gemini-3.1-flash-lite-preview", label: "Gemini Flash 3.1 Flash-Lite Preview" },
 ];
 
 export const TADA_MODELS: ModelOption[] = [
   { value: "gemini/gemini-3.1-flash-preview",       label: "Gemini Flash 3.1 Preview" },
-  { value: "gemini/gemini-3-flash-preview",          label: "Gemini Flash 3.0 Preview" },
+  { value: "gemini/gemini-3.1-flash-lite-preview",   label: "Gemini Flash 3.1 Flash-Lite Preview" },
   { value: "anthropic/claude-haiku-4-5-20251001",    label: "Claude Haiku 4.5" },
   { value: "anthropic/claude-sonnet-4-6",            label: "Claude Sonnet 4.6" },
   { value: "anthropic/claude-opus-4-6",              label: "Claude Opus 4.6" },
