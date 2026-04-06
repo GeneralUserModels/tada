@@ -110,9 +110,11 @@ async def lifespan(app: FastAPI):
     if state.model.data_manager is not None:
         state.model.data_manager.stop()
 
-    # Pause all connectors (stops active ones like filesystem watcher)
-    for connector in state.connectors.values():
-        connector.pause()
+    # Stop all connectors so child MCP subprocesses are disconnected on shutdown.
+    await asyncio.gather(
+        *[connector.stop() for connector in state.connectors.values()],
+        return_exceptions=True,
+    )
 
     logger.info("PowerNap server stopped")
 

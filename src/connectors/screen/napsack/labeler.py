@@ -18,7 +18,7 @@ from PIL import Image
 
 # Import from pack
 from napsack.label.clients.litellm import LiteLLMClient
-from napsack.label.clients.client import IMAGE_CAPTION_SCHEMA
+from napsack.label.clients.client import DENSE_IMAGE_CAPTION_SCHEMA
 from napsack.label.models import Aggregation as LabelAggregation
 from napsack.record.sanitize import sanitize_records
 
@@ -73,12 +73,12 @@ class Labeler:
             max_workers: Number of parallel chunk processors.
             log_dir: Directory to save labels.jsonl and screenshots.
             save_screenshots: If True, save screenshots for labeled samples.
-            model: Gemini model name for labeling (default: gemini-2.5-flash).
+            model: Gemini model name for labeling (default: gemini-3.1-flash-lite-preview).
         """
         self.max_workers = max_workers
         resolved_api_key = api_key or os.environ.get("POWERNAP_LABEL_API_KEY") or None
         with contextlib.redirect_stdout(sys.stderr):
-            self.client = LiteLLMClient(model_name=model or "gemini/gemini-3-flash-preview", api_key=resolved_api_key)
+            self.client = LiteLLMClient(model_name=model or "gemini/gemini-3.1-flash-lite-preview", api_key=resolved_api_key)
         self.prompt = self._load_prompt()
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.save_screenshots = save_screenshots
@@ -94,8 +94,10 @@ class Labeler:
                 self.screenshots_dir.mkdir(exist_ok=True)
 
     def _load_prompt(self) -> str:
-        """Load the default prompt from pack's label module."""
-        return (files("napsack.label") / "prompts" / "default.txt").read_text()
+        """Load the default prompt from pack's label module with dense output format."""
+        base = (files("napsack.label") / "prompts" / "default.txt").read_text()
+        output_fmt = (files("napsack.label") / "prompts" / "output" / "dense_image.txt").read_text()
+        return base.replace("{{OUTPUT_FORMAT}}", output_fmt)
 
     def label_chunk(self, aggregations: List) -> List[dict]:
         """Label a chunk of aggregations via video.
@@ -154,14 +156,17 @@ class Labeler:
             while True:
                 try:
                     with contextlib.redirect_stdout(sys.stderr):
-                        captions = self.client.generate(base_prompt, file_desc, schema=IMAGE_CAPTION_SCHEMA)
+                        result = self.client.generate(base_prompt, file_desc, schema=DENSE_IMAGE_CAPTION_SCHEMA)
                     break
                 except Exception as e:
                     logger.warning(f"Gemini generate failed: {e}. Retrying in 120s...")
                     time.sleep(120)
 
+            captions = result["actions"]
+            dense_caption = result.get("dense_caption", "")
+
             # 6. Match captions to aggregations (with sanitized events)
-            return self._match_captions_to_aggs(captions, valid_aggs, sanitized_dicts)
+            return self._match_captions_to_aggs(captions, valid_aggs, sanitized_dicts, dense_caption)
 
     async def alabel_chunk(self, aggregations: List) -> List[dict]:
         """Async version of label_chunk - runs in thread pool."""
@@ -173,6 +178,7 @@ class Labeler:
         captions: List[dict],
         aggregations: List,
         sanitized_dicts: List[dict],
+        dense_caption: str = "",
     ) -> List[dict]:
         """Match timestamped captions back to source aggregations.
         
@@ -219,6 +225,7 @@ class Labeler:
             
             result = {
                 "text": caption.get("caption", ""),
+                "dense_caption": dense_caption,
                 "start_time": start_time,
                 "img": img,
                 "screenshot_path": str(screenshot_path) if screenshot_path else None,
@@ -230,6 +237,7 @@ class Labeler:
             if self.labels_file:
                 serializable = {
                     "text": result["text"],
+                    "dense_caption": result["dense_caption"],
                     "start_time": result["start_time"],
                     "screenshot_path": result["screenshot_path"],
                     "raw_events": result["raw_events"],

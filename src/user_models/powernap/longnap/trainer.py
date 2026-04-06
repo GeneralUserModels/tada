@@ -30,7 +30,7 @@ from retrievers import InMemoryBM25Temporal, jaccard_ngrams
 from user_models.powernap.longnap.scorer import create_reward_scorer
 from user_models.powernap.longnap.trainer_utils import (
     TASK_DESCRIPTION_WITH_IMAGES, TASK_DESCRIPTION_MIXED,
-    build_actions_block, build_context_block,
+    build_actions_block, build_context_block, collect_dense_captions,
 )
 
 import wandb
@@ -81,6 +81,8 @@ def make_sample(
     else:
         content = TASK_DESCRIPTION_MIXED + "\n\n" + context_block
 
+    dense_caption = collect_dense_captions(past_predict)
+
     return {
         "messages": [{"role": "user", "content": content}],
         "solution": future_actions,
@@ -89,6 +91,7 @@ def make_sample(
         "future_len": future_len,
         "past_len": past_len,
         "past_actions": context_block,
+        "dense_caption": dense_caption,
     }
 
 class OnlineEnvTrainer:
@@ -103,7 +106,7 @@ class OnlineEnvTrainer:
         self,
         data_manager=None,
         model_name: str = "Qwen/Qwen3-VL-30B-A3B-Instruct",
-        reward_llm: str = "gemini/gemini-3-flash-preview",
+        reward_llm: str = "gemini/gemini-3.1-flash-lite-preview",
         reward_llm_api_key: str = "",
         num_generations: int = 8,
         learning_rate: float = 1e-5,

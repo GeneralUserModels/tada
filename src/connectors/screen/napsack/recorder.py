@@ -7,14 +7,19 @@ from datetime import datetime
 from queue import Queue, Empty
 from typing import List, Optional
 
+from PIL import Image
 from napsack.record.__main__ import ScreenRecorder, get_monitor_dpis, calculate_monitor_scales
 
 
 # Default DPI for screenshot rescaling (lower = smaller images, fewer tokens)
 DEFAULT_TARGET_DPI = 100
 
+## A bit unfortunate that we have some tabracadabra dependenceis here... 
 # Flag file created by tabracadabra to suppress aggregation during active streaming
 TABRACADABRA_SUPPRESS_FLAG = os.path.join(tempfile.gettempdir(), "powernap_tab_active")
+
+# Latest frame from napsack screenshot loop (atomic PNG) for Tabracadabra — same process as screen MCP only
+TABRACADABRA_LATEST_FRAME_PNG = os.path.join(tempfile.gettempdir(), "powernap_tab_latest.png")
 
 # Default event types to disable for online recording (mouse move is too noisy)
 DEFAULT_DISABLE = ["move"]
@@ -76,6 +81,21 @@ class OnlineRecorder(ScreenRecorder):
         self.save_worker.screenshot_log = self.session_dir / "screenshots.jsonl"
         self.aggregation_worker.aggregations_file = self.session_dir / "raw_aggregations.jsonl"
         self.input_event_queue.session_dir = self.session_dir
+
+        self.image_queue.add_callback(self._publish_latest_frame_png)
+
+    def _publish_latest_frame_png(self, buffer_image) -> None:
+        """Write each new frame to a temp path for Tabracadabra (main process reads; avoids second mss)."""
+        try:
+            data = getattr(buffer_image, "data", None)
+            if data is None:
+                return
+            img = Image.fromarray(data)
+            tmp = TABRACADABRA_LATEST_FRAME_PNG + ".tmp"
+            img.save(tmp, format="PNG")
+            os.replace(tmp, TABRACADABRA_LATEST_FRAME_PNG)
+        except Exception:
+            pass
 
     def start(self):
         with redirect_stdout(sys.stderr):

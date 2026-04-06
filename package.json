@@ -9,7 +9,7 @@
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
     "start": "npm run build && electron dist/main/index.js",
-    "dev": "npm run build:main && concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron dist/main/index.js\"",
+    "dev": "node scripts/dev-supervisor.cjs",
     "dist": "npm run build && npx electron-builder --mac --publish never",
     "release": "npm run build && npx electron-builder --mac --publish always",
     "reset": "rm -f powernap-config.json ~/.config/powernap/google-token.json ~/.config/powernap/outlook-token.json"
@@ -28,7 +28,6 @@
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
-    "concurrently": "^9.2.1",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",
     "typescript": "^5.6.0",
