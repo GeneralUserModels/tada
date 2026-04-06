@@ -44,9 +44,7 @@ export function SettingsView() {
     const data: Record<string, unknown> = {};
     for (const key of allKeys()) {
       const val = (values[key] ?? "").trim();
-      if (val) {
-        data[key] = val;
-      }
+      data[key] = val;
     }
     // tabracadabra_enabled is a boolean
     data["tabracadabra_enabled"] = values["tabracadabra_enabled"] === "true";
