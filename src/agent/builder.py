@@ -67,32 +67,35 @@ async def _ensure_sandbox_async(data_dir: str):
     _sandbox_initialized = True
 
 
-def _make_summarizer(model: str):
+def _make_summarizer(model: str, api_key: str | None = None):
     def summarize(text: str) -> str:
-        resp = litellm.completion(
+        kwargs = dict(
             model=model,
             messages=[{"role": "user", "content": text}],
             max_tokens=2000,
             metadata={"app": "agent_summarizer"},
         )
+        if api_key:
+            kwargs["api_key"] = api_key
+        resp = litellm.completion(**kwargs)
         return resp.choices[0].message.content or ""
     return summarize
 
 
-def _make_child_agent(model: str, system_prompt: str):
+def _make_child_agent(model: str, system_prompt: str, api_key: str | None = None):
     def factory(tools):
-        return Agent(model=model, system_prompt=system_prompt, tools=tools, max_rounds=30, web_search=True)
+        return Agent(model=model, system_prompt=system_prompt, tools=tools, max_rounds=30, web_search=True, api_key=api_key)
     return factory
 
 
-def build_agent(model: str, data_dir: str):
+def build_agent(model: str, data_dir: str, api_key: str | None = None):
     """Build a fully configured Agent with all tools. Initializes sandbox on first call."""
     data_dir = str(Path(data_dir).resolve())
     _ensure_sandbox(data_dir)
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(data_dir=data_dir)
     transcript_dir = Path(data_dir) / "transcripts"
-    compact_tool = CompactTool(transcript_dir, _make_summarizer(model), model=model)
-    subagent_tool = SubAgentTool(_make_child_agent(model, system_prompt), ALL_TOOLS)
+    compact_tool = CompactTool(transcript_dir, _make_summarizer(model, api_key), model=model)
+    subagent_tool = SubAgentTool(_make_child_agent(model, system_prompt, api_key), ALL_TOOLS)
     all_tools = ALL_TOOLS + [compact_tool, subagent_tool]
     agent = Agent(
         model=model,
@@ -101,5 +104,6 @@ def build_agent(model: str, data_dir: str):
         compact_tool=compact_tool,
         bg_manager=_bg_manager,
         web_search=True,
+        api_key=api_key,
     )
     return agent, compact_tool

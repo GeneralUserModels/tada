@@ -26,8 +26,10 @@ class Agent:
         bg_manager: BackgroundManager | None = None,
         max_rounds: int = 30,
         web_search: bool | dict = False,
+        api_key: str | None = None,
     ):
         self.model = model
+        self.api_key = api_key or None
         self.system_prompt = system_prompt
         self.max_rounds = max_rounds
         self._compact = compact_tool
@@ -225,6 +227,8 @@ class Agent:
             max_tokens=16000,
             metadata={"app": "agent"},
         )
+        if self.api_key:
+            kwargs["api_key"] = self.api_key
         if self._web_search_options:
             kwargs["web_search_options"] = self._web_search_options
             # Gemini requires this when combining web search with function calling

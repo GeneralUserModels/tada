@@ -133,7 +133,6 @@ async def run_moments_scheduler(state) -> None:
     await _ensure_sandbox_async(logs_dir)
 
     executor_lock = state.moments_executor_lock
-    model = state.config.moments_agent_model
 
     while True:
         try:
@@ -141,6 +140,10 @@ async def run_moments_scheduler(state) -> None:
 
             if not state.config.moments_enabled:
                 continue
+
+            cfg = state.config
+            model = cfg.moments_agent_model
+            api_key = cfg.resolve_api_key("moments_agent_api_key")
 
             tada_dir = Path(state.config.tada_dir).resolve()
             if not tada_dir.exists():
@@ -179,6 +182,7 @@ async def run_moments_scheduler(state) -> None:
                     success = await asyncio.to_thread(
                         execute_moment, str(md_file), output_dir, logs_dir, model,
                         frequency_override=freq_override, schedule_override=sched_override,
+                        api_key=api_key,
                     )
                     completed_at = _time.time()
                     save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")

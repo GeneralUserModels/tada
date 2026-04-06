@@ -13,7 +13,7 @@ async def init_predictor(state, config, loop):
         predictor = PromptedPredictor(
             data_manager=state.model.data_manager,
             model=config.prompted_model,
-            api_key=config.default_llm_api_key,
+            api_key=config.resolve_api_key("default_llm_api_key"),
             log_dir=config.log_dir,
             retriever_checkpoint=config.retriever_checkpoint,
         )

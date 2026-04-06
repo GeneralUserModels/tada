@@ -20,7 +20,7 @@ _PERSISTED_FIELDS = {
     "model_type", "prompted_model",
     "disabled_connectors", "connector_errors", "mcp_connectors",
     "onboarding_complete",
-    "tada_dir", "moments_agent_model", "moments_agent_model_api_key", "moments_discovery_interval", "moments_enabled",
+    "tada_dir", "moments_agent_model", "moments_agent_api_key", "moments_discovery_interval", "moments_enabled",
     "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
     "agent_model", "agent_api_key",
 }
@@ -137,7 +137,7 @@ class ServerConfig(BaseModel):
     tada_dir: str = Field(default_factory=lambda: os.getenv("POWERNAP_TADA_DIR", "./logs-tada"))
     moments_agent_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_AGENT_MODEL", "gemini/gemini-3.1-flash-preview"))
     moments_discovery_interval: int = 86400  # 24 hours
-    moments_agent_model_api_key: str = ""
+    moments_agent_api_key: str = ""
     moments_enabled: bool = True
 
     # Connectors: names of connectors that are disabled (paused)
@@ -152,11 +152,14 @@ class ServerConfig(BaseModel):
     # Onboarding completion flag (set by POST /api/onboarding/complete)
     onboarding_complete: bool = False
 
+    def resolve_api_key(self, key: str) -> str | None:
+        """Return the feature-specific API key, falling back to default_llm_api_key."""
+        return getattr(self, key, None) or self.default_llm_api_key or None
+
     def load_persisted(self) -> None:
         """Load user-settable fields from the config file, if it exists.
 
         CLI-arg-derived fields (log_dir, token paths, etc.) are not overwritten.
-        Also sets env vars for API keys so subprocesses inherit them.
         """
         if not CONFIG_PATH.exists():
             return
@@ -170,16 +173,6 @@ class ServerConfig(BaseModel):
                     setattr(self, field, [MCPConnectorDef.model_validate(item) for item in data[field]])
                 else:
                     setattr(self, field, data[field])
-        _key_env_map = {
-            "default_llm_api_key": "GEMINI_API_KEY",
-            "tinker_api_key": "TINKER_API_KEY",
-            "wandb_api_key": "WANDB_API_KEY",
-            "hf_token": "HF_TOKEN",
-        }
-        for field, env_var in _key_env_map.items():
-            val = getattr(self, field)
-            if val and not os.environ.get(env_var):
-                os.environ[env_var] = val
 
     def save(self) -> None:
         """Persist user-settable fields to the config file.

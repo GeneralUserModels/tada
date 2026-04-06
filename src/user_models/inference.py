@@ -113,7 +113,7 @@ async def _score_prediction(state: Any, result: dict, cutoff_ts: float, future_l
             _executor,
             lambda: predictor.score_prediction(
                 result["actions"], ground_truth, config.reward_llm,
-                api_key=config.reward_llm_api_key or config.default_llm_api_key,
+                api_key=config.resolve_api_key("reward_llm_api_key"),
             ),
         )
     except Exception as e:

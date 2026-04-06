@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.builder import build_agent
+from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -311,6 +312,7 @@ def run(
     model: str,
     frequency_override: str | None = None,
     schedule_override: str | None = None,
+    api_key: str | None = None,
 ) -> bool:
     """Execute a moment task. Returns True if index.html was produced."""
     task_content = Path(task_path).read_text()
@@ -339,7 +341,7 @@ def run(
             templates_dir=str(TEMPLATES_DIR),
         )
 
-    agent, _ = build_agent(model, logs_dir)
+    agent, _ = build_agent(model, logs_dir, api_key=api_key)
     agent.max_rounds = 100
     agent.run([{"role": "user", "content": instruction}])
 
@@ -362,8 +364,9 @@ if __name__ == "__main__":
     parser.add_argument("task_path", help="Path to the task .md file")
     parser.add_argument("output_dir", help="Directory to write HTML output")
     parser.add_argument("logs_dir", help="Path to the logs directory")
-    parser.add_argument("-m", "--model", default=os.environ["POWERNAP_AGENT_MODEL"])
+    parser.add_argument("-m", "--model", default=None)
     args = parser.parse_args()
+    model = args.model or resolve_moments_model()
 
-    success = run(args.task_path, args.output_dir, args.logs_dir, model=args.model)
+    success = run(args.task_path, args.output_dir, args.logs_dir, model=model, api_key=resolve_moments_api_key())
     print("Success" if success else "Failed")
