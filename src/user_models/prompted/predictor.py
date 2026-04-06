@@ -92,6 +92,7 @@ class PromptedPredictor(BasePredictor):
             temperature=self.temperature,
             stop=stop,
             api_key=self.api_key or None,
+            metadata={"app": "tabracadabra"},
         )
         return response.choices[0].message.content or ""
 

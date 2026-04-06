@@ -67,6 +67,7 @@ class MCPConnector:
     def resume(self) -> None:
         self._paused = False
         self.error = None
+        self._disconnect_event.clear()  # cancel any pending disconnect from stop()
 
     def serialize_item(self, item: dict) -> dict:
         return {k: v for k, v in item.items() if k not in self._exclude}

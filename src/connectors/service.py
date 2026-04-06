@@ -91,6 +91,7 @@ def _filter_with_llm(items: list[dict], source: str, model: str, api_key: str = 
             )}],
             response_format=_FilterResult,
             api_key=api_key or None,
+            metadata={"app": "filter"},
         )
         results.extend(item.model_dump() for item in _FilterResult.model_validate_json(response.choices[0].message.content).items)
     return results
@@ -146,6 +147,13 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
 
     while True:
         await cfg.connector.disconnect_if_needed()
+
+        # Reconnect notification-based connectors that were resumed but are still disconnected
+        if cfg.uses_notifications and not cfg.connector.paused and cfg.connector._session is None:
+            try:
+                await cfg.connector.connect()
+            except Exception:
+                logger.exception("%s: failed to reconnect after resume", cfg.name)
 
         error_occurred = False
         try:
@@ -218,6 +226,7 @@ async def run_context_logging_service(state) -> None:
                     "POWERNAP_LABEL_API_KEY": config.label_model_api_key or config.default_llm_api_key,
                     "POWERNAP_FPS": str(config.fps),
                     "POWERNAP_BUFFER_SECONDS": str(config.buffer_seconds),
+                    "POWERNAP_COST_APP": "labeler",
                 },
                 exclude_from_serialization=["img"],
             ),
