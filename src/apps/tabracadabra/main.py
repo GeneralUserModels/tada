@@ -22,15 +22,18 @@ from PIL import Image, ImageDraw
 
 import Quartz
 
-from screeninfo import get_monitors
-
-from connectors.screen.napsack.recorder import DEFAULT_TARGET_DPI
-from napsack.record.__main__ import get_monitor_dpis, calculate_monitor_scales
+from connectors.screen.napsack.recorder import (
+    DEFAULT_TARGET_DPI,
+    TABRACADABRA_LATEST_FRAME_PNG,
+)
 
 load_dotenv()
 
 # ------------- Constants -------------
 JOINER = "\u2060"  # WORD JOINER (plays nice with Backspace)
+SPINNER_FRAMES_HOLDING = ["◐", "◓", "◑", "◒"]
+SPINNER_PROGRESS_DURATION_S = 9.0
+SPINNER_TICK_INTERVAL_S = 0.12
 
 # Keycodes
 KC_TAB = 48       # 0x30
@@ -52,86 +55,48 @@ def load_prompt() -> str:
     return prompt_path.read_text()
 
 
-# ------------- Screenshot helpers (mss + Quartz) -------------
-def _get_cursor_point():
-    ev = Quartz.CGEventCreate(None)
-    loc = Quartz.CGEventGetLocation(ev)
-    return int(loc.x), int(loc.y)
-
-
-def _find_monitor_for_point(monitors, x, y):
-    for mon in monitors[1:]:
-        left, top = mon["left"], mon["top"]
-        right = left + mon["width"]
-        bottom = top + mon["height"]
-        if left <= x < right and top <= y < bottom:
-            return mon
-    return monitors[1] if len(monitors) > 1 else monitors[0]
-
-
-def _annotate_with_cursor(img: Image.Image, mon: dict, mx: int, my: int) -> Image.Image:
-    cx = mx - mon["left"]
-    cy = my - mon["top"]
-    cx = max(0, min(cx, img.width - 1))
-    cy = max(0, min(cy, img.height - 1))
-
-    width_mm = mon.get("width_mm")
-    height_mm = mon.get("height_mm")
-    if width_mm and height_mm:
-        dpi_x = mon["width"] / (width_mm / 25.4)
-        dpi_y = mon["height"] / (height_mm / 25.4)
-        dpi = (dpi_x + dpi_y) / 2
-    else:
-        dpi = 96
-
-    base_size_at_96dpi = 12
-    dot_r = int((dpi / 96) * base_size_at_96dpi)
-    outline_w = max(2, dot_r // 4)
-
-    draw = ImageDraw.Draw(img, "RGBA")
-    draw.ellipse(
-        (cx - dot_r - outline_w, cy - dot_r - outline_w,
-         cx + dot_r + outline_w, cy + dot_r + outline_w),
-        fill=(255, 255, 255, 255)
-    )
-    draw.ellipse(
-        (cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r),
-        fill=(255, 0, 0, 255)
-    )
-    return img
-
-
-def _get_dpi_scale(mon: dict, target_dpi: int) -> float | None:
-    """Get DPI-based scale factor for a monitor, using napsack's DPI detection."""
-    monitor_dpis = get_monitor_dpis()
-    scales = calculate_monitor_scales(target_dpi, monitor_dpis) if monitor_dpis else {}
-    # Match mss monitor to screeninfo monitor by position and size
-    for i, sm in enumerate(get_monitors()):
-        if sm.x == mon["left"] and sm.y == mon["top"] and sm.width == mon["width"] and sm.height == mon["height"]:
-            return scales.get(i)
-    return None
-
-
+# ------------- Screenshot (napsack shared frame only; screen MCP writes TABRACADABRA_LATEST_FRAME_PNG) -------------
 def capture_active_monitor_as_data_url(target_dpi=DEFAULT_TARGET_DPI):
-    with mss.mss() as sct:
-        mx, my = _get_cursor_point()
-        mon = _find_monitor_for_point(sct.monitors, mx, my)
-        raw = sct.grab(mon)
-        img = Image.frombytes("RGB", raw.size, raw.rgb)
-
-        img = _annotate_with_cursor(img, mon, mx, my)
-
-        out_img = img
-        scale = _get_dpi_scale(mon, target_dpi)
-        if scale is not None and scale < 1.0:
-            new_w = int(out_img.width * scale)
-            new_h = int(out_img.height * scale)
-            out_img = out_img.resize((new_w, new_h), Image.LANCZOS)
-        buf = io.BytesIO()
-        out_img.save(buf, format="PNG")
-        b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-        data_url = f"data:image/png;base64,{b64}"
-        return data_url, None
+    """PNG data URL from napsack's latest shared frame. DPI scaling was applied when the frame was captured."""
+    del target_dpi  # unused; kept for call-site compatibility
+    t0 = time.perf_counter()
+    slow_ms = 500
+    max_age = float(os.getenv("TABRACADABRA_FRAME_MAX_AGE_S", "5"))
+    try:
+        st = os.stat(TABRACADABRA_LATEST_FRAME_PNG)
+    except OSError as e:
+        raise RuntimeError(
+            f"No shared frame at {TABRACADABRA_LATEST_FRAME_PNG}. "
+            "Run PowerNap with the screen connector (MCP) so the recorder can publish frames."
+        ) from e
+    age_s = time.time() - st.st_mtime
+    if age_s > max_age:
+        raise RuntimeError(
+            f"Shared frame is stale ({age_s:.1f}s old, max {max_age}s via TABRACADABRA_FRAME_MAX_AGE_S). "
+            "Screen recorder may be stopped or stuck."
+        )
+    t1 = time.perf_counter()
+    try:
+        with Image.open(TABRACADABRA_LATEST_FRAME_PNG) as im:
+            out_img = im.convert("RGB").copy()
+    except (OSError, ValueError) as e:
+        raise RuntimeError(f"Could not read shared frame at {TABRACADABRA_LATEST_FRAME_PNG}") from e
+    t_load = time.perf_counter()
+    buf = io.BytesIO()
+    out_img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    data_url = f"data:image/png;base64,{b64}"
+    t_end = time.perf_counter()
+    total_ms = (t_end - t0) * 1000
+    if total_ms >= slow_ms:
+        file_ms = (t_load - t1) * 1000
+        encode_ms = (t_end - t_load) * 1000
+        print(
+            f"[tabracadabra] timing screenshot_detail source=shared file_ms={file_ms:.1f} "
+            f"encode_ms={encode_ms:.1f} total_ms={total_ms:.1f}",
+            flush=True,
+        )
+    return data_url, None
 
 
 # ------------- Normalization helpers -------------
@@ -149,7 +114,7 @@ def _normalize_piece(piece: str) -> str:
 def _fetch_powernap_config(base_url: str = "http://localhost:8000") -> dict:
     """Fetch tabracadabra config from PowerNap settings. Falls back to env vars on error."""
     defaults = {
-        "model": os.getenv("MODEL", "gemini/gemini-3-flash-preview"),
+        "model": os.getenv("MODEL", "gemini/gemini-3.1-flash-lite-preview"),
         "api_key": os.getenv("LLM_API_KEY", ""),
         "hold_threshold": float(os.getenv("HOLD_THRESHOLD", "0.35")),
         "powernap_base_url": base_url,
@@ -335,58 +300,73 @@ class TabracadabraService:
             return None
 
     def _build_messages(self):
+        t_build = time.perf_counter()
+        t_cap = time.perf_counter()
         data_url, _ = capture_active_monitor_as_data_url()
+        screenshot_ms = (time.perf_counter() - t_cap) * 1000
+
+        t_fetch = time.perf_counter()
         predictor_messages = self._fetch_predictor_messages()
+        predictor_fetch_ms = (time.perf_counter() - t_fetch) * 1000
 
         tabracadabra_turn = {"role": "user", "content": [
             {"type": "image_url", "image_url": {"url": data_url}},
             {"type": "text", "text": self._prompt_text},
         ]}
 
+        build_total_ms = (time.perf_counter() - t_build) * 1000
+        ctx = "yes" if predictor_messages else "no"
+        n_msg = len(predictor_messages) if predictor_messages else 0
+        print(
+            f"[tabracadabra] timing build_messages screenshot_ms={screenshot_ms:.1f} "
+            f"predictor_fetch_ms={predictor_fetch_ms:.1f} total_ms={build_total_ms:.1f} "
+            f"predictor_ctx={ctx} n_prefix_msgs={n_msg}",
+            flush=True,
+        )
+
         if predictor_messages:
-            print(f"[tabracadabra] Using predictor context ({len(predictor_messages)} messages)", flush=True)
             return predictor_messages + [tabracadabra_turn]
-        else:
-            print("[tabracadabra] No predictor context available, using standalone prompt", flush=True)
-            return [tabracadabra_turn]
+        return [tabracadabra_turn]
 
     # ------------- Loading animation (spinner) -------------
     def _loading_spinner(self, first_piece_event: threading.Event, cancel_event: threading.Event):
         try:
-            FRAMES_HOLDING = ["◐", "◓", "◑", "◒"]
-            FRAMES_LOCKED = ["◼", "◻", "◼", "◻"]
-            INTERVAL = 0.12
-
-            frames = FRAMES_HOLDING
-            self._type_text(JOINER + frames[0])
-            self._inserted_len += 2
-            self._spinner_count = 2
-            self._last_char_space = False
-
             idx = 0
+            display_text = SPINNER_FRAMES_HOLDING[idx]
+            self._type_text(JOINER + display_text)
+            self._inserted_len += 1 + len(display_text)
+            self._spinner_count = 1 + len(display_text)
+            self._last_char_space = False
+            activated_t0: Optional[float] = None
 
             while not first_piece_event.is_set() and not cancel_event.is_set():
                 # OS-level block — zero CPU while waiting
-                cancel_event.wait(timeout=INTERVAL)
+                cancel_event.wait(timeout=SPINNER_TICK_INTERVAL_S)
                 if first_piece_event.is_set() or cancel_event.is_set():
                     break
 
-                # Switch frames when locked in
-                frames = FRAMES_LOCKED if self._activated else FRAMES_HOLDING
+                if self._activated:
+                    if activated_t0 is None:
+                        activated_t0 = time.monotonic()
+                    elapsed = time.monotonic() - activated_t0
+                    pct = min(100, int((elapsed / SPINNER_PROGRESS_DURATION_S) * 100))
+                    idx = (idx + 1) % len(SPINNER_FRAMES_HOLDING)
+                    next_display = f"{SPINNER_FRAMES_HOLDING[idx]} {pct:3d}%"
+                else:
+                    idx = (idx + 1) % len(SPINNER_FRAMES_HOLDING)
+                    next_display = SPINNER_FRAMES_HOLDING[idx]
 
-                self._press_backspace(1)
-                self._inserted_len -= 1
-                self._spinner_count = max(0, self._spinner_count - 1)
+                if next_display == display_text:
+                    continue
 
-                if first_piece_event.is_set() or cancel_event.is_set():
-                    break
+                self._press_backspace(len(display_text))
+                self._inserted_len = max(0, self._inserted_len - len(display_text))
+                self._spinner_count = max(0, self._spinner_count - len(display_text))
 
-                next_frame = frames[(idx + 1) % len(frames)]
-                self._type_text(next_frame)
-                self._inserted_len += 1
-                self._spinner_count += 1
-
-                idx = (idx + 1) % len(frames)
+                self._type_text(next_display)
+                self._inserted_len += len(next_display)
+                self._spinner_count += len(next_display)
+                display_text = next_display
         finally:
             self._spinner_active = False
 
@@ -409,7 +389,20 @@ class TabracadabraService:
         if self._placeholder:
             self._placeholder_worker(cancel_event, first_piece_event)
             return
-        messages = self._build_messages()
+        try:
+            messages = self._build_messages()
+        except Exception as e:
+            print(f"[tabracadabra] {e}", flush=True)
+            first_piece_event.set()
+            t = self._spinner_thread
+            if t and t.is_alive():
+                # Wait until spinner thread fully exits so it cannot emit
+                # late backspaces that clip the first completion characters.
+                t.join()
+            self._cleanup_spinner_if_present()
+            self._clear_suppress_flag()
+            self._finish_session()
+            return
         first_piece_seen_local = False
         logger.info("[llm] tabracadabra")
         stream = litellm_completion(
@@ -419,7 +412,15 @@ class TabracadabraService:
             stream_options={"include_usage": True},
             api_key=self._api_key or None,
         )
+        t_llm = time.perf_counter()
         try:
+            stream = litellm_completion(
+                model=self._model,
+                messages=messages,
+                stream=True,
+                stream_options={"include_usage": True},
+                api_key=self._api_key or None,
+            )
             for chunk in stream:
                 if cancel_event.is_set():
                     break
@@ -431,16 +432,24 @@ class TabracadabraService:
                     continue
                 if not first_piece_seen_local:
                     first_piece_seen_local = True
+                    print(
+                        f"[tabracadabra] timing llm ttft_ms={(time.perf_counter() - t_llm) * 1000:.1f}",
+                        flush=True,
+                    )
                     first_piece_event.set()
                     # Wait for spinner thread to fully stop before cleaning up,
                     # otherwise spinner can backspace between our count read and delete
                     t = self._spinner_thread
                     if t and t.is_alive():
-                        t.join(timeout=0.5)
+                        t.join()
                     self._cleanup_spinner_if_present()
                     self._content_started = True
                 self._safe_type_piece(piece)
         finally:
+            print(
+                f"[tabracadabra] timing llm stream_total_ms={(time.perf_counter() - t_llm) * 1000:.1f}",
+                flush=True,
+            )
             first_piece_event.set()
             self._finish_session()
 
@@ -453,7 +462,7 @@ class TabracadabraService:
         first_piece_event.set()
         t = self._spinner_thread
         if t and t.is_alive():
-            t.join(timeout=0.5)
+            t.join()
         self._cleanup_spinner_if_present()
         self._content_started = True
         for word in "Lorem ipsum dolor sit amet, consectetur adipiscing elit.".split(" "):
@@ -554,7 +563,7 @@ class TabracadabraService:
             self._cancel_event.set()
         t = self._spinner_thread
         if t and t.is_alive():
-            t.join(timeout=0.5)
+            t.join()
         self._cleanup_spinner_if_present()
         self._spinner_thread = None
 

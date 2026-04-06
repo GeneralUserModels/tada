@@ -129,6 +129,7 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
             _append_jsonl(out_path, {
                 "timestamp": now,
                 "text": item.get("summary", ""),
+                "dense_caption": item.get("dense_caption", ""),
                 "source": cfg.connector.serialize_item(item),
                 "source_name": cfg.name,
                 "prediction_event": cfg.prediction_event,
