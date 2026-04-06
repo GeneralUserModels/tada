@@ -31,15 +31,11 @@ class CostTracker:
             entry["input_tokens"] += input_tokens
             entry["output_tokens"] += output_tokens
 
-    def snapshot_and_reset(self) -> tuple[dict, float]:
-        """Return current costs and elapsed seconds, then reset."""
+    def snapshot(self) -> tuple[dict, float]:
+        """Return cumulative costs and total elapsed seconds."""
         with self._lock:
-            snapshot = dict(self._costs)
+            snapshot = {k: dict(v) for k, v in self._costs.items()}
             elapsed = time.time() - self._start_time
-            self._costs = defaultdict(
-                lambda: {"cost": 0.0, "calls": 0, "input_tokens": 0, "output_tokens": 0}
-            )
-            self._start_time = time.time()
         return snapshot, elapsed
 
 
@@ -70,10 +66,10 @@ class CostCallback(CustomLogger):
 
 
 async def run_cost_logger(tracker: CostTracker, interval: int = 60):
-    """Log a cost summary every *interval* seconds, then reset."""
+    """Log cumulative cost summary every *interval* seconds."""
     while True:
         await asyncio.sleep(interval)
-        snapshot, elapsed = tracker.snapshot_and_reset()
+        snapshot, elapsed = tracker.snapshot()
         if not snapshot:
             continue
 
