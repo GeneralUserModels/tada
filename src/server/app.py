@@ -18,6 +18,7 @@ from user_models.routes import router as user_models_router
 from connectors.service import run_context_logging_service
 from user_models.training import init_model, run_training_service
 from apps.tabracadabra.prediction_loop import run_prediction_loop
+from server.cost_tracker import init_cost_tracking, run_cost_logger
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,10 @@ async def lifespan(app: FastAPI):
 
     state = ServerState()
     state.config.load_persisted()
+
+    # Start LLM cost tracking (must be before any litellm calls)
+    cost_tracker = init_cost_tracking()
+    state.cost_logger_task = asyncio.create_task(run_cost_logger(cost_tracker))
 
     # Auto-start DataManager so label counts are available immediately
     from user_models.data_manager import DataManager
@@ -95,6 +100,7 @@ async def lifespan(app: FastAPI):
         state.moments_scheduler_task,
         state.moments_discovery_task,
         state.prediction_loop_task,
+        state.cost_logger_task,
     ]
     for task in all_tasks:
         if task and not task.done():

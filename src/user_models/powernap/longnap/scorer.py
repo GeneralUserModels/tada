@@ -206,6 +206,7 @@ class RewardScorer:
                     model=self.reward_llm,
                     messages=[{"role": "user", "content": prompt}],
                     api_key=self.api_key,
+                    metadata={"app": "reward_lm"},
                 )
                 return response.choices[0].message.content
             except Exception as e:

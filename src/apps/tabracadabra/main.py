@@ -418,6 +418,7 @@ class TabracadabraService:
             stream=True,
             stream_options={"include_usage": True},
             api_key=self._api_key or None,
+            metadata={"app": "tabracadabra"},
         )
         try:
             for chunk in stream:
