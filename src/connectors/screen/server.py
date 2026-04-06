@@ -37,6 +37,8 @@ async def _labeling_loop() -> None:
                 break
 
         if len(buffer) < MIN_CHUNK:
+            if buffer:
+                logger.info("screen: %d recordings queued for labeling", len(buffer))
             await asyncio.sleep(1)
             continue
 

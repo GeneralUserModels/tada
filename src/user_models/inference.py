@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=4)
 
 
-async def handle_prediction_request(state: Any):
+async def handle_prediction_request(state: Any, source: str = "user"):
     """Handle an on-demand prediction request from the client."""
     
 
     model = state.model
 
     if model.predictor is None:
-        await state.broadcast("prediction", {"error": "predictor not initialized (start training first)"})
+        await state.broadcast("prediction", {"error": "predictor not initialized (start training first)", "source": source})
         return
 
     config = state.config
@@ -35,7 +35,8 @@ async def handle_prediction_request(state: Any):
 
     if len(prediction_events) < past_len:
         await state.broadcast("prediction", {
-            "error": f"not enough data ({len(prediction_events)}/{past_len})"
+            "error": f"not enough data ({len(prediction_events)}/{past_len})",
+            "source": source,
         })
         return
 
@@ -50,7 +51,8 @@ async def handle_prediction_request(state: Any):
 
     if len(snapshot) < past_len:
         await state.broadcast("prediction", {
-            "error": f"not enough pre-cutoff items ({len(snapshot)}/{past_len})"
+            "error": f"not enough pre-cutoff items ({len(snapshot)}/{past_len})",
+            "source": source,
         })
         return
 
@@ -65,7 +67,7 @@ async def handle_prediction_request(state: Any):
         )
     except Exception as e:
         logger.error(f"Prediction failed: {e}", exc_info=True)
-        await state.broadcast("prediction", {"error": str(e)})
+        await state.broadcast("prediction", {"error": str(e), "source": source})
         return
 
     state.model.latest_prediction = result
@@ -75,6 +77,7 @@ async def handle_prediction_request(state: Any):
         "think": result.get("think", ""),
         "revise": result.get("revise", ""),
         "timestamp": result["timestamp"],
+        "source": source,
     })
 
     actions_parsed = bool(re.search(r"<action>", result["actions"]))
