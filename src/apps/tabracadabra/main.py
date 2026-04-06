@@ -47,6 +47,8 @@ _ZW_CHARS = ("\u200B", "\u2060")
 
 # Flag file to suppress screen connector aggregation during active streaming
 _SUPPRESS_FLAG = os.path.join(tempfile.gettempdir(), "powernap_tab_active")
+_DEBUG_RENDER_DIR = os.path.join(tempfile.gettempdir(), "powernap_tabracadabra_debug")
+_DEBUG_RENDER_LATEST_PNG = os.path.join(_DEBUG_RENDER_DIR, "rendered_latest.png")
 
 
 def load_prompt() -> str:
@@ -81,6 +83,8 @@ def capture_active_monitor_as_data_url(target_dpi=DEFAULT_TARGET_DPI):
             out_img = im.convert("RGB").copy()
     except (OSError, ValueError) as e:
         raise RuntimeError(f"Could not read shared frame at {TABRACADABRA_LATEST_FRAME_PNG}") from e
+    cursor_info = _annotate_with_cursor_dot(out_img)
+    _save_debug_rendered_frame(out_img)
     t_load = time.perf_counter()
     buf = io.BytesIO()
     out_img.save(buf, format="PNG")
@@ -96,7 +100,76 @@ def capture_active_monitor_as_data_url(target_dpi=DEFAULT_TARGET_DPI):
             f"encode_ms={encode_ms:.1f} total_ms={total_ms:.1f}",
             flush=True,
         )
-    return data_url, None
+    return data_url, cursor_info
+
+
+def _save_debug_rendered_frame(image: Image.Image) -> None:
+    """Persist latest rendered frame for local debugging."""
+    try:
+        os.makedirs(_DEBUG_RENDER_DIR, exist_ok=True)
+        image.save(_DEBUG_RENDER_LATEST_PNG, format="PNG")
+    except Exception as e:
+        print(f"[tabracadabra] debug frame save failed: {e}", flush=True)
+
+
+def _get_cursor_position() -> tuple[float, float] | None:
+    """Return global cursor coordinates in CoreGraphics space (origin at bottom-left)."""
+    try:
+        ev = Quartz.CGEventCreate(None)
+        if ev is None:
+            return None
+        loc = Quartz.CGEventGetLocation(ev)
+        return float(loc.x), float(loc.y)
+    except Exception:
+        return None
+
+
+def _annotate_with_cursor_dot(image: Image.Image) -> dict | None:
+    """
+    Draw a red dot where the cursor is and return metadata.
+    Returns None when cursor location cannot be resolved.
+    """
+    pos = _get_cursor_position()
+    if pos is None:
+        return None
+
+    x_global, y_global = pos
+    width, height = image.size
+
+    display_bounds = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
+    disp_x = float(display_bounds.origin.x)
+    disp_y = float(display_bounds.origin.y)
+    disp_w = float(display_bounds.size.width)
+    disp_h = float(display_bounds.size.height)
+    if disp_w <= 1 or disp_h <= 1:
+        return None
+
+    # Map global cursor coordinates into normalized display coordinates.
+    rel_x = (x_global - disp_x) / disp_w
+    rel_y = (y_global - disp_y) / disp_h
+
+    # On macOS, CGEvent location is effectively top-left-oriented for this path.
+    # Keep env override to flip if needed in unusual setups.
+    flip_y = os.getenv("TABRACADABRA_CURSOR_FLIP_Y", "0") == "1"
+    if flip_y:
+        rel_y = 1.0 - rel_y
+
+    x_img = int(round(rel_x * (width - 1)))
+    y_img = int(round(rel_y * (height - 1)))
+
+    inside = 0 <= x_img < width and 0 <= y_img < height
+    if inside:
+        draw = ImageDraw.Draw(image)
+        r = 7
+        draw.ellipse((x_img - r, y_img - r, x_img + r, y_img + r), fill=(255, 0, 0), outline=(255, 255, 255), width=2)
+
+    return {
+        "image_x": x_img,
+        "image_y": y_img,
+        "global_x": x_global,
+        "global_y": y_global,
+        "inside_image": inside,
+    }
 
 
 # ------------- Normalization helpers -------------
@@ -302,16 +375,35 @@ class TabracadabraService:
     def _build_messages(self):
         t_build = time.perf_counter()
         t_cap = time.perf_counter()
-        data_url, _ = capture_active_monitor_as_data_url()
+        data_url, cursor_info = capture_active_monitor_as_data_url()
         screenshot_ms = (time.perf_counter() - t_cap) * 1000
 
         t_fetch = time.perf_counter()
         predictor_messages = self._fetch_predictor_messages()
         predictor_fetch_ms = (time.perf_counter() - t_fetch) * 1000
 
+        prompt_text = self._prompt_text
+        if cursor_info is None:
+            prompt_text += (
+                "\n\nCursor metadata: cursor position was unavailable for this frame; "
+                "do not assume a red dot location."
+            )
+        elif cursor_info["inside_image"]:
+            prompt_text += (
+                "\n\nCursor metadata: the red dot marks cursor location at "
+                f"(x={cursor_info['image_x']}, y={cursor_info['image_y']}) in image pixels "
+                "(origin: top-left)."
+            )
+        else:
+            prompt_text += (
+                "\n\nCursor metadata: the cursor was outside this frame at capture time "
+                f"(mapped x={cursor_info['image_x']}, y={cursor_info['image_y']}); "
+                "do not assume a red dot is visible."
+            )
+
         tabracadabra_turn = {"role": "user", "content": [
             {"type": "image_url", "image_url": {"url": data_url}},
-            {"type": "text", "text": self._prompt_text},
+            {"type": "text", "text": prompt_text},
         ]}
 
         build_total_ms = (time.perf_counter() - t_build) * 1000
