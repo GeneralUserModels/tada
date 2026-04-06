@@ -12,7 +12,7 @@ Per trial:
    - BUSTED_PREFIX: same size, but unique prefix each call (cache-unlikely)
 
 Environment:
-  - MODEL (optional, default: gemini/gemini-3-flash-preview)
+  - MODEL (optional, default: gemini/gemini-3.1-flash-lite-preview)
   - LLM_API_KEY (optional if provider does not need it locally)
 """
 
@@ -118,7 +118,7 @@ def run_call(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark TTFT for reused vs cache-busted prompt prefixes.")
-    parser.add_argument("--model", default="gemini/gemini-3-flash-preview")
+    parser.add_argument("--model", default="gemini/gemini-3.1-flash-lite-preview")
     parser.add_argument("--api-key", default="")
     parser.add_argument("--total-tokens", type=int, default=5000)
     parser.add_argument("--cached-tokens", type=int, default=2500)

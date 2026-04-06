@@ -106,7 +106,7 @@ class OnlineEnvTrainer:
         self,
         data_manager=None,
         model_name: str = "Qwen/Qwen3-VL-30B-A3B-Instruct",
-        reward_llm: str = "gemini/gemini-3-flash-preview",
+        reward_llm: str = "gemini/gemini-3.1-flash-lite-preview",
         reward_llm_api_key: str = "",
         num_generations: int = 8,
         learning_rate: float = 1e-5,
