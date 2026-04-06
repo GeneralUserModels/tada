@@ -17,7 +17,7 @@ _PERSISTED_FIELDS = {
     "filter_model", "filter_model_api_key",
     "fps", "num_generations",
     "learning_rate", "batch_size", "past_len", "future_len", "loss_mode",
-    "model_type", "prompted_model",
+    "model_type",
     "disabled_connectors", "connector_errors", "mcp_connectors",
     "onboarding_complete",
     "tada_dir", "moments_agent_model", "moments_agent_api_key", "moments_discovery_interval", "moments_enabled",
@@ -84,7 +84,10 @@ class ServerConfig(BaseModel):
 
     # Model selection
     model_type: str = "prompted"
-    prompted_model: str = "gemini/gemini-3.1-flash-lite-preview"
+
+    @property
+    def prompted_model(self) -> str:
+        return self.tabracadabra_model
 
     # Trainer
     model: str = "Qwen/Qwen3-VL-30B-A3B-Instruct"
