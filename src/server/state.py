@@ -24,6 +24,7 @@ class ServerState:
     
     # For Tabracadabra
     prediction_loop_task: asyncio.Task | None = None
+    cost_logger_task: asyncio.Task | None = None
 
     # Connector instances (populated by connectors service on startup)
     connectors: dict = field(default_factory=dict)

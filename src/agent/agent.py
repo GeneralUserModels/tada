@@ -223,6 +223,7 @@ class Agent:
             messages=[{"role": "system", "content": system_blocks}] + conv_messages,
             tools=self._tool_schemas if self._tool_schemas else None,
             max_tokens=16000,
+            metadata={"app": "agent"},
         )
         if self._web_search_options:
             kwargs["web_search_options"] = self._web_search_options

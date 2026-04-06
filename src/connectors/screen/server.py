@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from queue import Empty
@@ -29,6 +30,7 @@ _active_session: ServerSession | None = None
 async def _labeling_loop() -> None:
     """Background task: drain aggregation_queue, label in chunks, notify client."""
     buffer: list = []
+    _last_queued_log = 0.0
     while _recorder is not None and _recorder.running:
         while True:
             try:
@@ -37,8 +39,10 @@ async def _labeling_loop() -> None:
                 break
 
         if len(buffer) < MIN_CHUNK:
-            if buffer:
+            now = time.monotonic()
+            if buffer and now - _last_queued_log >= 60:
                 logger.info("screen: %d recordings queued for labeling", len(buffer))
+                _last_queued_log = now
             await asyncio.sleep(1)
             continue
 
@@ -69,6 +73,11 @@ async def _labeling_loop() -> None:
 @asynccontextmanager
 async def lifespan(_server: FastMCP) -> AsyncIterator[None]:  # type: ignore[type-arg]
     global _recorder, _labeler, _labeled_queue
+
+    from server.cost_tracker import init_cost_tracking, run_cost_logger
+    tracker = init_cost_tracking()
+    asyncio.create_task(run_cost_logger(tracker), name="screen-cost-logger")
+
     _labeled_queue = asyncio.Queue()
     log_dir = os.environ["POWERNAP_LOG_DIR"]
     _recorder = OnlineRecorder(
