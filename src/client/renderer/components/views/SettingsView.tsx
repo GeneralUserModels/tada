@@ -19,7 +19,7 @@ function allKeys(): string[] {
   keys.add("hf_token");
   keys.add("wandb_api_key");
   keys.add("moments_agent_model");
-  keys.add("moments_agent_model_api_key");
+  keys.add("moments_agent_api_key");
   keys.add("tabracadabra_enabled");
   return Array.from(keys);
 }
@@ -162,8 +162,8 @@ export function SettingsView() {
                   <input
                     type="text"
                     placeholder="Leave blank to use shared key"
-                    value={values["moments_agent_model_api_key"] ?? ""}
-                    onChange={(e) => setValues(v => ({ ...v, moments_agent_model_api_key: e.target.value }))}
+                    value={values["moments_agent_api_key"] ?? ""}
+                    onChange={(e) => setValues(v => ({ ...v, moments_agent_api_key: e.target.value }))}
                   />
                 </label>
               </div>

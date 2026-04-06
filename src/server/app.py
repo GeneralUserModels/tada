@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI):
 
             config = {
                 "model": state.config.tabracadabra_model,
-                "api_key": state.config.tabracadabra_api_key or state.config.default_llm_api_key,
+                "api_key": state.config.resolve_api_key("tabracadabra_api_key"),
                 "powernap_base_url": f"http://localhost:{os.environ.get('POWERNAP_PORT', '8000')}",
             }
             service = TabracadabraService(config=config, prompt_text=load_prompt())

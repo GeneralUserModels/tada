@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.builder import build_agent
+from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
 
 INSTRUCTION_TEMPLATE = """\
 You are selecting the best {n} tasks from a pool of candidates. Read all of them, compare across \
@@ -48,13 +49,14 @@ reactive or trigger-based tasks ("when X happens, do Y").
 """
 
 
-def run(logs_dir: str, n: int = 10, model: str = os.environ["POWERNAP_AGENT_MODEL"]) -> str:
+def run(logs_dir: str, n: int = 10, model: str | None = None, api_key: str | None = None) -> str:
     logs_path = Path(logs_dir).resolve()
     tasks_dir = str(logs_path / "tasks")
     oneoffs_dir = str(logs_path / "oneoffs")
     tada_dir = str(logs_path.parent / "logs-tada")
     Path(tada_dir).mkdir(parents=True, exist_ok=True)
-    agent, _ = build_agent(model, logs_dir)
+    model = model or resolve_moments_model()
+    agent, _ = build_agent(model, logs_dir, api_key=api_key)
     agent.max_rounds = 50
     instruction = INSTRUCTION_TEMPLATE.format(
         tasks_dir=tasks_dir, oneoffs_dir=oneoffs_dir, tada_dir=tada_dir, n=n
@@ -67,8 +69,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Filter tasks: rank all candidates and copy the best N to logs-tada/")
     parser.add_argument("logs_dir", help="Path to the logs directory (e.g., logs/)")
     parser.add_argument("-n", "--num-tasks", type=int, default=10, help="Number of top tasks to keep (default: 10)")
-    parser.add_argument("-m", "--model", default=os.environ["POWERNAP_AGENT_MODEL"])
+    parser.add_argument("-m", "--model", default=None)
     args = parser.parse_args()
+    model = args.model or resolve_moments_model()
 
-    result = run(args.logs_dir, n=args.num_tasks, model=args.model)
+    result = run(args.logs_dir, n=args.num_tasks, model=model, api_key=resolve_moments_api_key())
     print(result)

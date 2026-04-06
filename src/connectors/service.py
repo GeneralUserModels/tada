@@ -224,7 +224,7 @@ async def run_context_logging_service(state) -> None:
                 env={
                     "POWERNAP_LOG_DIR": config.log_dir,
                     "POWERNAP_LABEL_MODEL": config.label_model,
-                    "POWERNAP_LABEL_API_KEY": config.label_model_api_key or config.default_llm_api_key,
+                    "POWERNAP_LABEL_API_KEY": config.resolve_api_key("label_model_api_key"),
                     "POWERNAP_FPS": str(config.fps),
                     "POWERNAP_BUFFER_SECONDS": str(config.buffer_seconds),
                     "POWERNAP_COST_APP": "labeler",
@@ -326,7 +326,7 @@ async def run_context_logging_service(state) -> None:
             cfg.connector.error = config.connector_errors[cfg.name]
 
     logger.info("Context logging service started")
-    filter_api_key = config.filter_model_api_key or config.default_llm_api_key
+    filter_api_key = config.resolve_api_key("filter_model_api_key")
 
     # Eagerly connect notification-based connectors so they can receive push events.
     # Without this, fetch() (which triggers _connect) is never called because the

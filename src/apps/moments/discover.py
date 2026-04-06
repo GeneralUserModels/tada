@@ -12,6 +12,7 @@ load_dotenv()
 
 from agent.builder import build_agent
 from apps.moments._incremental import read_checkpoint, write_checkpoint, classify_sessions
+from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
 
 INSTRUCTION_TEMPLATE = """\
 You are analyzing a user's digital activity logs to discover opportunities for an AI agent to augment their workflow.
@@ -143,7 +144,7 @@ of an existing task, note that in a new task file rather than modifying the exis
 """
 
 
-def run(logs_dir: str, model: str) -> str:
+def run(logs_dir: str, model: str, api_key: str | None = None) -> str:
     logs_path = Path(logs_dir).resolve()
     logs_dir = str(logs_path)
     checkpoint_path = logs_path / "tasks" / ".last_discovery"
@@ -172,7 +173,7 @@ def run(logs_dir: str, model: str) -> str:
             f"tasks are still relevant and exit."
         )
 
-    agent, _ = build_agent(model, logs_dir)
+    agent, _ = build_agent(model, logs_dir, api_key=api_key)
     agent.max_rounds = 200
     messages = [{"role": "user", "content": instruction}]
     result = agent.run(messages)
@@ -185,8 +186,9 @@ def run(logs_dir: str, model: str) -> str:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Discover agent tasks from activity logs")
     parser.add_argument("logs_dir", help="Path to the logs directory")
-    parser.add_argument("-m", "--model", default=os.environ["POWERNAP_AGENT_MODEL"])
+    parser.add_argument("-m", "--model", default=None)
     args = parser.parse_args()
+    model = args.model or resolve_moments_model()
 
-    result = run(args.logs_dir, model=args.model)
+    result = run(args.logs_dir, model=model, api_key=resolve_moments_api_key())
     print(result)

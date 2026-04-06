@@ -34,7 +34,7 @@ class SettingsUpdate(BaseModel):
     loss_mode: str | None = None
     moments_enabled: bool | None = None
     moments_agent_model: str | None = None
-    moments_agent_model_api_key: str | None = None
+    moments_agent_api_key: str | None = None
     tabracadabra_enabled: bool | None = None
     tabracadabra_model: str | None = None
     tabracadabra_api_key: str | None = None
@@ -65,7 +65,7 @@ async def get_settings(request: Request):
         "loss_mode": cfg.loss_mode,
         "moments_enabled": cfg.moments_enabled,
         "moments_agent_model": cfg.moments_agent_model,
-        "moments_agent_model_api_key": cfg.moments_agent_model_api_key,
+        "moments_agent_api_key": cfg.moments_agent_api_key,
         "tabracadabra_enabled": cfg.tabracadabra_enabled,
         "tabracadabra_model": cfg.tabracadabra_model,
         "tabracadabra_api_key": cfg.tabracadabra_api_key,
@@ -81,16 +81,6 @@ async def update_settings(update: SettingsUpdate, request: Request):
     for field_name, value in update.model_dump(exclude_none=True).items():
         setattr(cfg, field_name, value)
         updated.append(field_name)
-
-        # Also set environment variables for API keys
-        env_map = {
-            "default_llm_api_key": "GEMINI_API_KEY",
-            "tinker_api_key": "TINKER_API_KEY",
-            "hf_token": "HF_TOKEN",
-            "wandb_api_key": "WANDB_API_KEY",
-        }
-        if field_name in env_map:
-            os.environ[env_map[field_name]] = value
 
     cfg.save()
 
@@ -108,7 +98,7 @@ async def update_settings(update: SettingsUpdate, request: Request):
 
                     tab_config = {
                         "model": cfg.tabracadabra_model,
-                        "api_key": cfg.tabracadabra_api_key or cfg.default_llm_api_key,
+                        "api_key": cfg.resolve_api_key("tabracadabra_api_key"),
                         "powernap_base_url": f"http://localhost:{os.environ.get('POWERNAP_PORT', '8000')}",
                     }
                     service = TabracadabraService(config=tab_config, prompt_text=load_prompt())

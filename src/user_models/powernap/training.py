@@ -26,7 +26,7 @@ async def init_trainer(state, config, loop):
                 data_manager=state.model.data_manager,
                 model_name=config.model,
                 reward_llm=config.reward_llm,
-                reward_llm_api_key=config.reward_llm_api_key or config.default_llm_api_key,
+                reward_llm_api_key=config.resolve_api_key("reward_llm_api_key"),
                 num_generations=config.num_generations,
                 learning_rate=config.learning_rate,
                 max_tokens=config.max_completion_length,

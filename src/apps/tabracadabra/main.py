@@ -200,11 +200,7 @@ def _fetch_powernap_config(base_url: str = "http://localhost:8000") -> dict:
         with urllib.request.urlopen(req, timeout=2) as resp:
             data = json.loads(resp.read().decode())
         defaults["model"] = data.get("tabracadabra_model") or defaults["model"]
-        defaults["api_key"] = (
-            data.get("tabracadabra_api_key")
-            or data.get("default_llm_api_key")
-            or defaults["api_key"]
-        )
+        defaults["api_key"] = data.get("tabracadabra_api_key") or data.get("default_llm_api_key") or defaults["api_key"]
         defaults["hold_threshold"] = float(
             data.get("tabracadabra_hold_threshold") or defaults["hold_threshold"]
         )
