@@ -11,56 +11,58 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from server.state import ServerState
 from server.routes import settings, status, events
-from server.routes.auth import router as auth_router, refresh_google_tokens, refresh_outlook_tokens
+from server.routes.auth import router as auth_router, refresh_expired_tokens, run_token_refresh
 from server.routes.onboarding import router as onboarding_router
 from connectors.routes import router as connectors_router
 from user_models.routes import router as user_models_router
-from connectors.service import run_context_logging_service
-from user_models.training import init_model, run_training_service
-from apps.tabracadabra.prediction_loop import run_prediction_loop
-from server.cost_tracker import init_cost_tracking, run_cost_logger
 
 logger = logging.getLogger(__name__)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Initialize shared state on startup, clean up on shutdown."""
+async def start_services(state: ServerState) -> None:
+    """Start all heavy background services. Called once after onboarding completes."""
+    if state.services_started:
+        return
+    state.services_started = True
 
-    state = ServerState()
-    state.config.load_persisted()
+    from connectors.service import run_context_logging_service
+    from user_models.training import init_model, run_training_service
+    from apps.tabracadabra.prediction_loop import run_prediction_loop
+    from server.cost_tracker import init_cost_tracking, run_cost_logger
 
-    # Start LLM cost tracking (must be before any litellm calls)
+    # LLM cost tracking (must be before any litellm calls)
     cost_tracker = init_cost_tracking()
     state.cost_logger_task = asyncio.create_task(run_cost_logger(cost_tracker))
 
-    # Auto-start DataManager so label counts are available immediately
+    # DataManager
     from user_models.data_manager import DataManager
     dm = DataManager(log_dir=state.config.log_dir)
     await dm.start()
     state.model.data_manager = dm
     logger.info("DataManager started")
 
-    # Start context logging service (creates and owns all connectors)
+    # Refresh expired OAuth tokens before connectors start polling
+    refresh_expired_tokens(state.config)
+
+    # Context logging service (creates and owns all connectors)
     state.context_logging_task = asyncio.create_task(run_context_logging_service(state))
 
-    # Background OAuth token refresh (every 45 min, no-ops if no token)
-    state.google_refresh_task = asyncio.create_task(refresh_google_tokens(state.config))
-    state.outlook_refresh_task = asyncio.create_task(refresh_outlook_tokens(state.config))
+    # Background OAuth token refresh
+    state.token_refresh_task = asyncio.create_task(run_token_refresh(state.config))
 
-    # Start moments services (scheduler + periodic discovery)
+    # Moments services
     from apps.moments.scheduler import run_moments_scheduler
     from apps.moments.discovery import run_moments_discovery
     state.moments_scheduler_task = asyncio.create_task(run_moments_scheduler(state))
     state.moments_discovery_task = asyncio.create_task(run_moments_discovery(state))
-    # Initialize predictor (and trainer for powernap) before starting loops
+
+    # Initialize predictor and start training loop
     await init_model(state)
     state.model.training_task = asyncio.create_task(run_training_service(state))
     logger.info("Training service started (%s mode)", state.config.model_type)
 
-    # Start Tabracadabra event tap service (macOS only)
+    # Tabracadabra event tap service (macOS only)
     if sys.platform == "darwin" and state.config.tabracadabra_enabled:
-        # Background prediction loop (keeps tabracadabra context cache warm)
         state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
         try:
             from apps.tabracadabra.main import TabracadabraService, load_prompt
@@ -76,8 +78,21 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.warning("Tabracadabra service failed to start", exc_info=True)
 
-    app.state.server = state
     logger.info("PowerNap server started")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize shared state on startup, clean up on shutdown."""
+
+    state = ServerState()
+    state.config.load_persisted()
+    app.state.server = state
+
+    # If onboarding already done, start services immediately
+    if state.config.onboarding_complete:
+        await start_services(state)
+
     yield
 
     # Graceful shutdown
@@ -95,8 +110,7 @@ async def lifespan(app: FastAPI):
     all_tasks = [
         state.model.training_task,
         state.context_logging_task,
-        state.google_refresh_task,
-        state.outlook_refresh_task,
+        state.token_refresh_task,
         state.moments_scheduler_task,
         state.moments_discovery_task,
         state.prediction_loop_task,

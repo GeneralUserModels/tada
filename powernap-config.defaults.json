@@ -1,0 +1,6 @@
+{
+  "google_client_id": "892882352791-i0nh6262vjj6lvg26h94j2shfmodbkfu.apps.googleusercontent.com",
+  "google_client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
+  "supabase_url": "https://gicxeybsowfhdanooxdc.supabase.co",
+  "supabase_anon_key": "YOUR_SUPABASE_ANON_KEY"
+}

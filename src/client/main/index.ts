@@ -7,6 +7,7 @@ import {
   ipcMain,
   screen,
 } from "electron";
+import * as fs from "fs";
 import * as path from "path";
 import { spawn, ChildProcess } from "child_process";
 import { IPC } from "./ipc";
@@ -19,6 +20,30 @@ import { setupConnectorIpc } from "./connectors/manager";
 import { initAutoUpdater, installNow, installOnNextLaunch, dismissUpdate, checkForUpdates } from "./features/updater";
 
 let serverProc: ChildProcess | null = null;
+
+// ── Config seeding ───────────────────────────────────────────
+
+function ensureConfigDefaults(): void {
+  const configPath = path.join(getDataDir(), "powernap-config.json");
+  const defaultsPath = isDev()
+    ? path.join(getDataDir(), "powernap-config.defaults.json")
+    : path.join(process.resourcesPath!, "powernap-config.defaults.json");
+
+  let defaults: Record<string, unknown> = {};
+  try { defaults = JSON.parse(fs.readFileSync(defaultsPath, "utf-8")); } catch { return; }
+
+  let cfg: Record<string, unknown> = {};
+  try { cfg = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
+
+  let changed = false;
+  for (const [key, value] of Object.entries(defaults)) {
+    if (!(key in cfg)) { cfg[key] = value; changed = true; }
+  }
+  if (changed) {
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
+  }
+}
 
 // ── Server management ─────────────────────────────────────────
 
@@ -97,7 +122,7 @@ function stopServer(): void {
   }
 }
 
-function waitForServer(url: string, timeoutMs = 30000): Promise<void> {
+function waitForServer(url: string, timeoutMs = 120000): Promise<void> {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     function poll() {
@@ -327,6 +352,7 @@ async function runBootstrap(): Promise<void> {
 
 app.whenReady().then(async () => {
   app.dock?.show();
+  ensureConfigDefaults();
   setupIpc();
   setupConnectorIpc();
 

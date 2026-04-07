@@ -5,9 +5,28 @@ interface Props {
   connectorName: string;
   onClose: () => void;
   onGranted?: () => void;
+  /** Override the default permission-check poller (e.g. to use an HTTP check). */
+  checkPermission?: () => Promise<boolean>;
+  /** When true, skips the `updateConnector` call on grant (onboarding doesn't need it). */
+  skipConnectorUpdate?: boolean;
+  /** Delay (ms) before calling onClose+onGranted after access is granted. */
+  dismissDelay?: number;
+  /** Extra style overrides for the card. */
+  cardStyle?: React.CSSProperties;
+  /** Use CSS class-based buttons instead of inline styles. */
+  useClassButtons?: boolean;
 }
 
-export function PermissionModal({ connectorName, onClose, onGranted }: Props) {
+export function PermissionModal({
+  connectorName,
+  onClose,
+  onGranted,
+  checkPermission,
+  skipConnectorUpdate = false,
+  dismissDelay = 800,
+  cardStyle,
+  useClassButtons = false,
+}: Props) {
   const [info, setInfo] = useState<ConnectorPermissionInfo | null>(null);
   const [statusText, setStatusText] = useState("Waiting for access\u2026");
   const [granted, setGranted] = useState(false);
@@ -34,12 +53,12 @@ export function PermissionModal({ connectorName, onClose, onGranted }: Props) {
     return () => { cancelled = true; };
   }, [connectorName]);
 
-  // Poll for permission after modal opens
   useEffect(() => {
     if (granted) return;
 
+    const poll = checkPermission ?? (() => window.powernap.checkConnectorPermission(connectorName));
     const id = setInterval(async () => {
-      const ok = await window.powernap.checkConnectorPermission(connectorName);
+      const ok = await poll();
       if (ok) {
         clearInterval(id);
         handleGranted();
@@ -52,11 +71,13 @@ export function PermissionModal({ connectorName, onClose, onGranted }: Props) {
   async function handleGranted() {
     setGranted(true);
     setStatusText("Access granted!");
-    await updateConnector(connectorName, true);
+    if (!skipConnectorUpdate) {
+      await updateConnector(connectorName, true);
+    }
     setTimeout(() => {
       onClose();
       onGranted?.();
-    }, 800);
+    }, dismissDelay);
   }
 
   if (!info) return null;
@@ -81,6 +102,7 @@ export function PermissionModal({ connectorName, onClose, onGranted }: Props) {
         width: "calc(100% - 48px)",
         boxShadow: "0 12px 48px rgba(44,58,40,0.18)",
         border: "1px solid rgba(132,177,121,0.15)",
+        ...cardStyle,
       }}>
         <div style={{
           width: 38, height: 38, borderRadius: 10,
@@ -110,27 +132,37 @@ export function PermissionModal({ connectorName, onClose, onGranted }: Props) {
           <span>{statusText}</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button
-            style={{
-              flex: 1, padding: "8px 0", borderRadius: 20,
-              border: "1px solid rgba(132,177,121,0.25)",
-              background: "rgba(199,234,187,0.2)", fontSize: 11.5,
-              fontWeight: 600, color: "#84B179", cursor: "pointer", fontFamily: "inherit",
-            }}
-            onClick={() => window.powernap.openFdaSettings(connectorName)}
-          >
-            Open Settings
-          </button>
-          <button
-            style={{
-              padding: "8px 16px", borderRadius: 20, border: "1px solid transparent",
-              background: "transparent", fontSize: 11.5, color: "#9BA896",
-              cursor: "pointer", fontFamily: "inherit",
-            }}
-            onClick={onClose}
-          >
-            Skip
-          </button>
+          {useClassButtons ? (
+            <>
+              <button className="btn btn-outline btn-sm" style={{ flex: 1 }}
+                onClick={() => window.powernap.openFdaSettings(connectorName)}>Open Settings</button>
+              <button className="btn btn-ghost btn-sm" onClick={onClose}>Skip</button>
+            </>
+          ) : (
+            <>
+              <button
+                style={{
+                  flex: 1, padding: "8px 0", borderRadius: 20,
+                  border: "1px solid rgba(132,177,121,0.25)",
+                  background: "rgba(199,234,187,0.2)", fontSize: 11.5,
+                  fontWeight: 600, color: "#84B179", cursor: "pointer", fontFamily: "inherit",
+                }}
+                onClick={() => window.powernap.openFdaSettings(connectorName)}
+              >
+                Open Settings
+              </button>
+              <button
+                style={{
+                  padding: "8px 16px", borderRadius: 20, border: "1px solid transparent",
+                  background: "transparent", fontSize: 11.5, color: "#9BA896",
+                  cursor: "pointer", fontFamily: "inherit",
+                }}
+                onClick={onClose}
+              >
+                Skip
+              </button>
+            </>
+          )}
         </div>
       </div>
       <style>{`
