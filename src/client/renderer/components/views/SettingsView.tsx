@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { getSettings, updateSettings } from "../../api/client";
 import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
-import { ModelDropdown, LLM_MODELS, TINKER_MODELS, TADA_MODELS } from "../shared/ModelDropdown";
+import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 
 
 // All keys used across all sections
@@ -21,6 +21,7 @@ function allKeys(): string[] {
   keys.add("moments_agent_model");
   keys.add("moments_agent_api_key");
   keys.add("tabracadabra_enabled");
+  keys.add("moments_enabled");
   return Array.from(keys);
 }
 
@@ -46,8 +47,9 @@ export function SettingsView() {
       const val = (values[key] ?? "").trim();
       data[key] = val;
     }
-    // tabracadabra_enabled is a boolean
+    // boolean fields
     data["tabracadabra_enabled"] = values["tabracadabra_enabled"] === "true";
+    data["moments_enabled"] = (values["moments_enabled"] ?? "true") === "true";
     if (Object.keys(data).length > 0) {
       await updateSettings(data);
       const fresh = await getSettings();
@@ -105,24 +107,20 @@ export function SettingsView() {
             <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, cursor: "pointer" }}>
               <input
                 type="checkbox"
-                checked={state.settings.moments_enabled !== false}
+                checked={(values["moments_enabled"] ?? "true") === "true"}
                 style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
-                onChange={async () => {
-                  const enabled = state.settings.moments_enabled === false;
-                  await updateSettings({ moments_enabled: enabled } as Record<string, unknown>);
-                  dispatch({ type: "LOAD_SETTINGS", settings: { ...state.settings, moments_enabled: enabled } });
-                }}
+                onChange={(e) => setValues(v => ({ ...v, moments_enabled: e.target.checked ? "true" : "false" }))}
               />
               <span style={{
                 position: "absolute", inset: 0,
-                background: state.settings.moments_enabled !== false ? "#84B179" : "rgba(132,177,121,0.15)",
+                background: (values["moments_enabled"] ?? "true") === "true" ? "#84B179" : "rgba(132,177,121,0.15)",
                 borderRadius: 20, transition: "background 0.2s",
               }} />
               <span style={{
                 position: "absolute", height: 14, width: 14, left: 3, bottom: 3,
                 background: "#fff", borderRadius: "50%", transition: "transform 0.2s",
                 boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
-                transform: state.settings.moments_enabled !== false ? "translateX(16px)" : "translateX(0)",
+                transform: (values["moments_enabled"] ?? "true") === "true" ? "translateX(16px)" : "translateX(0)",
               }} />
             </label>
           </div>
@@ -150,31 +148,6 @@ export function SettingsView() {
           </div>
 
           <AdvancedLLMSection values={values} setValues={setValues}>
-            {/* Ta-Da LM */}
-            <div className="model-row">
-              <span className="model-row-label">Ta-Da LM</span>
-              <div className="model-row-fields">
-                <label className="field">
-                  <span>Model</span>
-                  <ModelDropdown
-                    value={values["moments_agent_model"] ?? ""}
-                    onChange={(val) => setValues(v => ({ ...v, moments_agent_model: val }))}
-                    options={TADA_MODELS}
-                    placeholder="Select a model"
-                  />
-                </label>
-                <label className="field">
-                  <span>API Key</span>
-                  <input
-                    type="text"
-                    placeholder="Leave blank to use shared key"
-                    value={values["moments_agent_api_key"] ?? ""}
-                    onChange={(e) => setValues(v => ({ ...v, moments_agent_api_key: e.target.value }))}
-                  />
-                </label>
-              </div>
-            </div>
-
             {/* User model type */}
             <div className="model-row" style={{ marginTop: 10 }}>
               <span className="model-row-label">User Model</span>

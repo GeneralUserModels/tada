@@ -1,5 +1,6 @@
 """Onboarding status and OS permission check endpoints."""
 
+import asyncio
 import os
 from pathlib import Path
 
@@ -23,6 +24,9 @@ async def onboarding_complete(request: Request):
     state = request.app.state.server
     state.config.onboarding_complete = True
     state.config.save()
+    # Start heavy services in the background now that onboarding is done
+    from server.app import start_services
+    asyncio.create_task(start_services(state))
     return {"ok": True}
 
 
@@ -33,9 +37,35 @@ async def check_notifications():
 
 @router.get("/permissions/filesystem")
 async def check_filesystem():
-    home = Path.home()
-    granted = any(
-        os.access(home / d, os.R_OK)
-        for d in ("Desktop", "Documents", "Downloads")
-    )
-    return {"granted": granted}
+    # ~/Desktop etc. are always readable; test a TCC-protected path instead.
+    try:
+        os.listdir(Path.home() / "Library" / "Safari")
+        return {"granted": True}
+    except PermissionError:
+        return {"granted": False}
+    except FileNotFoundError:
+        # Safari not installed — fall back to notification DB as a proxy
+        return {"granted": os.access(_NOTIFICATIONS_DB, os.R_OK)}
+
+
+@router.get("/permissions/browser_cookies")
+async def check_browser_cookies():
+    """Verify Chrome cookies work by making a real HTTP request to google.com."""
+    import logging
+    log = logging.getLogger("onboarding.browser_cookies")
+    try:
+        from pycookiecheat import chrome_cookies
+        import requests
+        cookie_dict = chrome_cookies("https://google.com")
+        log.info("pycookiecheat returned %d cookies for google.com", len(cookie_dict))
+        if not cookie_dict:
+            log.info("no cookies found — reporting not granted")
+            return {"granted": False}
+        resp = requests.get("https://www.google.com", cookies=cookie_dict, timeout=5)
+        # Google pages include "Sign in" when not authenticated
+        authenticated = "Sign in" not in resp.text[:5000]
+        log.info("google.com request status=%d authenticated=%s", resp.status_code, authenticated)
+        return {"granted": authenticated}
+    except Exception as e:
+        log.warning("browser cookies check failed: %s", e)
+        return {"granted": False}

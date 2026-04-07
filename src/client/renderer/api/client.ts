@@ -31,6 +31,8 @@ export const requestPrediction = () =>
 // ── Auth (Google + Outlook OAuth — runs in Python) ────────────
 export const startGoogleSignIn = () =>
   request("POST", "/api/auth/google/signin") as Promise<{ name: string; email: string }>;
+export const getGoogleUser = () =>
+  request("GET", "/api/auth/google/user") as Promise<{ name: string; email: string } | null>;
 export const startGoogleAuth = () =>
   request("POST", "/api/auth/google/start") as Promise<{ ok: boolean }>;
 export const disconnectGoogle = () => request("DELETE", "/api/auth/google");
@@ -62,3 +64,5 @@ export const checkNotificationsPermission = () =>
   request("GET", "/api/permissions/notifications") as Promise<{ granted: boolean }>;
 export const checkFilesystemPermission = () =>
   request("GET", "/api/permissions/filesystem") as Promise<{ granted: boolean }>;
+export const checkBrowserCookiesPermission = () =>
+  request("GET", "/api/permissions/browser_cookies") as Promise<{ granted: boolean }>;

@@ -1147,13 +1147,16 @@ button, input, select, textarea, canvas, a, label,
   opacity: 0.7;
 }
 
-.tada-spinner {
+.spinner, .tada-spinner {
   width: 18px;
   height: 18px;
   border: 2px solid rgba(var(--sage-rgb), 0.15);
   border-top-color: var(--sage);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+.tada-spinner {
   margin-bottom: 4px;
 }
 

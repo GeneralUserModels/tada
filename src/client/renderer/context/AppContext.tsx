@@ -22,6 +22,7 @@ export interface RewardPoint {
 
 export interface AppState {
   connected: boolean;
+  servicesReady: boolean;
   trainingActive: boolean;
   labels: number;
   step: number;
@@ -66,6 +67,7 @@ function addHistoryItem(
 
 const initialState: AppState = {
   connected: false,
+  servicesReady: false,
   trainingActive: false,
   labels: 0,
   step: 0,
@@ -88,6 +90,7 @@ function reducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         connected: true,
+        servicesReady: action.status.services_started ?? false,
         trainingActive: action.status.training_active ?? false,
         labels: action.status.labels_processed ?? 0,
         step: action.status.step_count ?? 0,
@@ -96,6 +99,7 @@ function reducer(state: AppState, action: AppAction): AppState {
     case "STATUS_UPDATE":
       return {
         ...state,
+        servicesReady: action.data.services_started ?? state.servicesReady,
         trainingActive: action.data.training_active ?? state.trainingActive,
         labels: action.data.labels_processed ?? state.labels,
       };
