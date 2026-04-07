@@ -126,3 +126,38 @@ async def run_moments_discovery(state) -> None:
         except Exception:
             logger.exception("Moments discovery error")
             await asyncio.sleep(300)
+
+
+def main():
+    """Run the full discovery pipeline once: discover moments, oneoffs, then filter."""
+    import argparse
+    import os
+
+    parser = argparse.ArgumentParser(description="Run moments discovery pipeline")
+    parser.add_argument("--logs-dir", default=os.getenv("POWERNAP_LOG_DIR", "./logs"),
+                        help="Path to logs directory (default: $POWERNAP_LOG_DIR or ./logs)")
+    parser.add_argument("--model", default=os.getenv("POWERNAP_AGENT_MODEL", "anthropic/claude-sonnet-4-20250514"),
+                        help="Model to use for discovery")
+    parser.add_argument("--api-key", default=os.getenv("ANTHROPIC_API_KEY", ""),
+                        help="API key (default: $ANTHROPIC_API_KEY)")
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+
+    logs_dir = str(Path(args.logs_dir).resolve())
+    api_key = args.api_key or None
+
+    logger.info("Discovery: finding recurring moments in %s", logs_dir)
+    MomentsDiscovery(logs_dir, args.model, api_key).run()
+
+    logger.info("Discovery: finding one-off moments")
+    OneoffsDiscovery(logs_dir, args.model, api_key).run()
+
+    logger.info("Discovery: filtering tasks")
+    TaskFilter(logs_dir, args.model, api_key).run()
+
+    logger.info("Discovery pipeline complete")
+
+
+if __name__ == "__main__":
+    main()
