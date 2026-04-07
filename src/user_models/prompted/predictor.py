@@ -153,7 +153,29 @@ class PromptedPredictor(BasePredictor):
         elif isinstance(content, str):
             msg["content"] = content + suffix
 
+        n_msgs = len(messages)
+        n_parts = sum(len(m["content"]) if isinstance(m["content"], list) else 1 for m in messages)
+        n_imgs = sum(
+            1 for m in messages
+            for p in (m["content"] if isinstance(m["content"], list) else [])
+            if isinstance(p, dict) and p.get("type") == "image_url"
+        )
+        total_text = sum(
+            len(p["text"]) for m in messages
+            for p in (m["content"] if isinstance(m["content"], list) else [{"text": m["content"]}])
+            if isinstance(p, dict) and "text" in p
+        )
+
         actions_text = self._sample(messages, stop=["</actions>"])
+
+        logger.info(
+            "[predict] model=%s | retrieval: %d hits, %d chars | "
+            "llm_input: msgs=%d parts=%d images=%d text=%d chars | "
+            "llm_output: %d chars",
+            self.model, len(hits), len(retrieved_text),
+            n_msgs, n_parts, n_imgs, total_text,
+            len(actions_text),
+        )
         messages.append({"role": "assistant", "content": [
             {"type": "text", "text": actions_text}
         ]})
@@ -217,8 +239,10 @@ class PromptedPredictor(BasePredictor):
         past_actions_block = build_actions_block(past, include_descriptions=True)
 
         image_parts = []
+        image_details: list[str] = []
         if num_imgs_per_sample is not None:
-            for action in past[-num_imgs_per_sample:]:
+            candidates = past[-num_imgs_per_sample:]
+            for action in candidates:
                 img_path = action.get("img_path")
                 if img_path is not None:
                     buf = io.BytesIO()
@@ -228,6 +252,9 @@ class PromptedPredictor(BasePredictor):
                         "type": "image_url",
                         "image_url": {"url": f"data:image/png;base64,{b64}"},
                     })
+                    image_details.append(f"{img_path} ({len(b64)} b64)")
+                else:
+                    image_details.append(f"missing (keys: {list(action.keys())})")
 
         task_desc = TASK_DESCRIPTION_WITH_IMAGES if image_parts else TASK_DESCRIPTION
         if image_parts:
@@ -243,4 +270,16 @@ class PromptedPredictor(BasePredictor):
         ts = past[0]["timestamp"]
 
         dense_caption = collect_dense_captions(past)
+
+        logger.info(
+            "[predict_from_snapshot] past=%d future=%d num_imgs_req=%s | "
+            "actions_block=%d chars | images: %d loaded (%s) | "
+            "task_desc=%s | dense_caption=%d chars | retriever_docs=%d",
+            len(past), future_len, num_imgs_per_sample,
+            len(past_actions_block),
+            len(image_parts), "; ".join(image_details) if image_details else "none",
+            "WITH_IMAGES" if image_parts else "TEXT_ONLY",
+            len(dense_caption), self._indexed_context_count,
+        )
+
         return self.predict(messages, ts, future_len=future_len, past_actions=past_actions_block, dense_caption=dense_caption)
