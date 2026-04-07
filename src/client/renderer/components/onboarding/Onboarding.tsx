@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AdvancedLLMSection } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
+import { PermissionModal } from "../modals/PermissionModal";
 import {
   startGoogleSignIn,
   getGoogleUser,
@@ -12,104 +13,6 @@ import {
   updateSettings,
   completeOnboarding,
 } from "../../api/client";
-
-// ── Permission modal ──────────────────────────────────────────
-
-function PermModal({
-  connectorName,
-  onClose,
-  onGranted,
-}: {
-  connectorName: string;
-  onClose: () => void;
-  onGranted: () => void;
-}) {
-  const [info, setInfo] = useState<ConnectorPermissionInfo | null>(null);
-  const [statusText, setStatusText] = useState("Waiting for access\u2026");
-  const [grantedState, setGrantedState] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function init() {
-      const permInfo = await window.powernap.getConnectorPermissionInfo(connectorName);
-      if (cancelled || !permInfo) return;
-      setInfo(permInfo);
-      if (permInfo.hasRequest) {
-        const ok = await window.powernap.requestConnectorPermission(connectorName);
-        if (!cancelled && ok) { handleGranted(); }
-      }
-    }
-    init();
-    return () => { cancelled = true; };
-  }, [connectorName]);
-
-  useEffect(() => {
-    if (grantedState) return;
-    const id = setInterval(async () => {
-      let ok: boolean;
-      if (connectorName === "browser_cookies") {
-        const res = await checkBrowserCookiesPermission();
-        ok = res.granted;
-      } else {
-        ok = await window.powernap.checkConnectorPermission(connectorName);
-      }
-      if (ok) { clearInterval(id); handleGranted(); }
-    }, 1500);
-    return () => clearInterval(id);
-  }, [connectorName, grantedState]);
-
-  function handleGranted() {
-    setGrantedState(true);
-    setStatusText("Access granted!");
-    setTimeout(() => { onClose(); onGranted(); }, 700);
-  }
-
-  if (!info) return null;
-
-  return (
-    <div id="perm-modal-overlay" style={{
-      display: "flex", position: "fixed", inset: 0,
-      background: "rgba(44,58,40,0.35)", backdropFilter: "blur(6px)",
-      WebkitBackdropFilter: "blur(6px)", zIndex: 2000,
-      alignItems: "center", justifyContent: "center", WebkitAppRegion: "no-drag",
-    }}>
-      <div style={{
-        background: "#F4F2EE", borderRadius: 16, padding: "28px 28px 22px",
-        maxWidth: 320, width: "calc(100% - 48px)",
-        boxShadow: "0 12px 48px rgba(44,58,40,0.18)",
-        border: "1px solid rgba(132,177,121,0.15)",
-      }}>
-        <div style={{
-          width: 38, height: 38, borderRadius: 10,
-          background: "rgba(199,234,187,0.35)", color: "#84B179",
-          display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14,
-        }}>
-          <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-            <path d="M8 2a3 3 0 00-3 3v2H4a1 1 0 00-1 1v5a1 1 0 001 1h8a1 1 0 001-1V8a1 1 0 00-1-1h-1V5a3 3 0 00-3-3zm0 1.5A1.5 1.5 0 019.5 5v2h-3V5A1.5 1.5 0 018 3.5z" fill="currentColor"/>
-          </svg>
-        </div>
-        <div id="perm-modal-title" style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em", color: "var(--text)", marginBottom: 6 }}>{info.title}</div>
-        <p id="perm-modal-body" style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 14 }}>{info.body}</p>
-        <ol id="perm-modal-steps" style={{ fontSize: 11.5, color: "var(--text)", lineHeight: 1.8, paddingLeft: 18, marginBottom: 16 }}>
-          {info.steps.map((s, i) => <li key={i}>{s}</li>)}
-        </ol>
-        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 18, display: "flex", alignItems: "center", gap: 6 }}>
-          <span id="perm-modal-spinner" style={{
-            display: "inline-block", width: 7, height: 7, borderRadius: "50%",
-            background: grantedState ? "#84B179" : "#A2CB8B",
-            animation: "perm-pulse 1.2s ease-in-out infinite",
-          }}></span>
-          <span>{statusText}</span>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-outline btn-sm" style={{ flex: 1 }}
-            onClick={() => window.powernap.openFdaSettings(connectorName)}>Open Settings</button>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>Skip</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── Step indicator ────────────────────────────────────────────
 
@@ -162,9 +65,9 @@ export function Onboarding() {
     }).catch(() => {});
   }, []);
 
-  // Model + API key state
-  const [model, setModel] = useState("gemini/gemini-3.1-flash-lite-preview");
-  const [tinkerModel, setTinkerModel] = useState("Qwen/Qwen3-VL-30B-A3B-Instruct");
+  // Model + API key state — defaults sourced from the shared model lists
+  const [model, setModel] = useState(LLM_MODELS[0].value);
+  const [tinkerModel, setTinkerModel] = useState(TINKER_MODELS[0].value);
   const [geminiKey, setGeminiKey] = useState("");
   const [tinkerKey, setTinkerKey] = useState("");
   const [wandbKey, setWandbKey] = useState("");
@@ -246,7 +149,7 @@ export function Onboarding() {
       if (v.trim()) advanced[k] = v.trim();
     }
     const settings: Record<string, unknown> = {
-      reward_llm: model || "gemini/gemini-3.1-flash-lite-preview",
+      reward_llm: model || LLM_MODELS[0].value,
       model: tinkerModel || undefined,
       default_llm_api_key: geminiKey.trim(),
       ...advanced,
@@ -264,10 +167,19 @@ export function Onboarding() {
     <div className="drag-topbar" />
     <div className="wrapper">
       {permModal && (
-        <PermModal
+        <PermissionModal
           connectorName={permModal.name}
           onClose={() => setPermModal(null)}
           onGranted={permModal.onGranted}
+          checkPermission={
+            permModal.name === "browser_cookies"
+              ? async () => (await checkBrowserCookiesPermission()).granted
+              : undefined
+          }
+          skipConnectorUpdate
+          dismissDelay={700}
+          cardStyle={{ maxWidth: 320 }}
+          useClassButtons
         />
       )}
 
