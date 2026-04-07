@@ -30,11 +30,11 @@ export function setupConnectorIpc(): void {
 
   ipcMain.handle(IPC.CONNECTOR_REQUEST_PERMISSION, async (_e, name: string) => {
     const desc = connectorPermissions[name];
-    if (!desc?.request) return desc?.check() ?? true;
+    if (!desc?.request) return (await desc?.check()) ?? true;
     return desc.request();
   });
 
-  ipcMain.handle(IPC.CONNECTOR_CHECK_PERMISSION, (_e, name: string) => {
+  ipcMain.handle(IPC.CONNECTOR_CHECK_PERMISSION, async (_e, name: string) => {
     return canUseConnector(name);
   });
 }

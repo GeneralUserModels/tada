@@ -12,6 +12,9 @@ class ServerState:
     config: ServerConfig = field(default_factory=ServerConfig)
     model: ModelState = field(default_factory=ModelState)
 
+    # Whether heavy services have been started
+    services_started: bool = False
+
     # Service tasks
     context_logging_task: asyncio.Task | None = None
     google_refresh_task: asyncio.Task | None = None

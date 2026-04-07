@@ -107,7 +107,7 @@ class ServerConfig(BaseModel):
     predict_every_n_seconds: int = 10
 
     # Tabracadabra
-    tabracadabra_enabled: bool = True
+    tabracadabra_enabled: bool = False
     tabracadabra_model: str = "gemini/gemini-3.1-flash-lite-preview"
     tabracadabra_api_key: str = ""
 

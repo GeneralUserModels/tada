@@ -19,7 +19,7 @@ import { desktopCapturer, shell, systemPreferences } from "electron";
 
 export interface PermissionDescriptor {
   /** Returns true if the app currently has the required OS permission. */
-  check: () => boolean;
+  check: () => boolean | Promise<boolean>;
   /**
    * Optional: programmatically trigger the native OS permission dialog.
    * Returns true if permission was granted after the request.
@@ -40,7 +40,28 @@ export interface PermissionDescriptor {
 // ── Screen Recording ──────────────────────────────────────────────────────────
 
 const screenPermission: PermissionDescriptor = {
-  check: () => systemPreferences.getMediaAccessStatus("screen") === "granted",
+  check: async () => {
+    const status = systemPreferences.getMediaAccessStatus("screen");
+    if (status !== "granted") return false;
+    // systemPreferences can report "granted" incorrectly (dev builds inherit
+    // terminal permissions, macOS Sequoia API changes). Verify with a real capture.
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ["screen"],
+        thumbnailSize: { width: 1, height: 1 },
+      });
+      if (!sources.length) return false;
+      const bmp = sources[0].thumbnail.toBitmap();
+      if (bmp.length === 0) return false;
+      // All-zero alpha channel = blank capture = no real permission
+      for (let i = 3; i < bmp.length; i += 4) {
+        if (bmp[i] !== 0) return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  },
 
   request: async () => {
     // Trigger the macOS native permission dialog by attempting a capture.
@@ -66,7 +87,7 @@ const screenPermission: PermissionDescriptor = {
   body: "PowerNap needs Screen Recording permission to observe your workflow.",
   steps: [
     "Open System Settings → Privacy & Security → Screen Recording",
-    'Toggle on "Electron" (dev) or "PowerNap" (production)',
+    'Toggle on "PowerNap"',
     "Restart PowerNap if prompted",
   ],
 };
@@ -89,15 +110,83 @@ const notificationsPermission: PermissionDescriptor = {
     }
   },
 
-  // No request() — Full Disk Access has no programmatic dialog API.
+  request: async () => {
+    // No programmatic dialog for FDA — open Settings directly.
+    shell.openExternal(
+      "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+    );
+    return false;
+  },
 
   fixUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
   title: "Full Disk Access Required",
-  body: "PowerNap needs Full Disk Access to read your macOS notification history.",
+  body: "PowerNap needs Full Disk Access to read notifications, files, and browser data.",
   steps: [
     "Open System Settings → Privacy & Security → Full Disk Access",
     'Click the "+" button',
-    'Select "Electron" (dev) or "PowerNap" (production)',
+    'Select "PowerNap"',
+    "Toggle the switch on",
+  ],
+};
+
+// ── Accessibility ────────────────────────────────────────────────────────────
+
+const accessibilityPermission: PermissionDescriptor = {
+  check: () => systemPreferences.isTrustedAccessibilityClient(false),
+
+  request: async () => {
+    // Prompt the native macOS dialog
+    const trusted = systemPreferences.isTrustedAccessibilityClient(true);
+    if (!trusted) {
+      shell.openExternal(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+      );
+    }
+    return trusted;
+  },
+
+  fixUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+  title: "Accessibility Required",
+  body: "PowerNap needs Accessibility permission for Tab autocomplete (Tabracadabra).",
+  steps: [
+    "Open System Settings → Privacy & Security → Accessibility",
+    'Click the "+" button and select "PowerNap"',
+    "Toggle the switch on",
+  ],
+};
+
+// ── Browser Cookies (Chrome — requires Full Disk Access) ─────────────────────
+
+const CHROME_COOKIES = path.join(
+  os.homedir(),
+  "Library", "Application Support",
+  "Google", "Chrome", "Default", "Cookies",
+);
+
+const browserCookiesPermission: PermissionDescriptor = {
+  check: () => {
+    try {
+      fs.accessSync(CHROME_COOKIES, fs.constants.R_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  request: async () => {
+    shell.openExternal(
+      "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+    );
+    return false;
+  },
+
+  fixUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+  title: "Full Disk Access Required",
+  body: "PowerNap needs Full Disk Access to read Chrome cookies for web browsing.",
+  steps: [
+    "Open System Settings → Privacy & Security → Full Disk Access",
+    'Click the "+" button',
+    'Select "PowerNap"',
     "Toggle the switch on",
   ],
 };
@@ -107,9 +196,11 @@ const notificationsPermission: PermissionDescriptor = {
 export const connectorPermissions: Partial<Record<string, PermissionDescriptor>> = {
   screen: screenPermission,
   notifications: notificationsPermission,
+  accessibility: accessibilityPermission,
+  browser_cookies: browserCookiesPermission,
 };
 
 /** Returns true if the named connector either has no permission requirement or passes its check. */
-export function canUseConnector(name: string): boolean {
-  return connectorPermissions[name]?.check() ?? true;
+export async function canUseConnector(name: string): Promise<boolean> {
+  return (await connectorPermissions[name]?.check()) ?? true;
 }

@@ -14,7 +14,7 @@ import * as api from "../api";
 export function runOnboarding(): Promise<void> {
   return new Promise<void>((resolve) => {
     const win = new BrowserWindow({
-      width: 520,
+      width: 580,
       height: 720,
       title: "PowerNap",
       titleBarStyle: "hiddenInset",
@@ -38,8 +38,27 @@ export function runOnboarding(): Promise<void> {
       win.webContents.send(IPC.SERVER_READY, { url: api.getServerUrl() });
     });
 
-    const handleCheckPermission = () =>
-      systemPreferences.getMediaAccessStatus("screen");
+    const handleCheckPermission = async () => {
+      const status = systemPreferences.getMediaAccessStatus("screen");
+      if (status !== "granted") return status;
+      // Verify with a real capture — getMediaAccessStatus can lie in dev builds
+      // (inherits terminal permission) and on macOS Sequoia+.
+      try {
+        const sources = await desktopCapturer.getSources({
+          types: ["screen"],
+          thumbnailSize: { width: 1, height: 1 },
+        });
+        if (!sources.length) return "denied";
+        const bmp = sources[0].thumbnail.toBitmap();
+        if (bmp.length === 0) return "denied";
+        for (let i = 3; i < bmp.length; i += 4) {
+          if (bmp[i] !== 0) return "granted";
+        }
+        return "denied";
+      } catch {
+        return "denied";
+      }
+    };
 
     const handleRequestScreenPermission = async () => {
       try {
