@@ -1,9 +1,10 @@
 import json
-from pathlib import Path
+
+from server.config import CONFIG_PATH
 
 
 def _load_config() -> dict:
-    return json.loads(Path("powernap-config.json").read_text())
+    return json.loads(CONFIG_PATH.read_text())
 
 
 def resolve_moments_model() -> str:
