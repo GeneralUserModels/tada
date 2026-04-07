@@ -148,7 +148,10 @@ class ServerConfig(BaseModel):
     sampler_ttl_seconds: int = 60
 
     # Moments
-    tada_dir: str = Field(default_factory=lambda: os.getenv("POWERNAP_TADA_DIR", "./logs-tada"))
+    tada_dir: str = Field(default_factory=lambda: os.getenv(
+        "POWERNAP_TADA_DIR",
+        str(Path(os.getenv("POWERNAP_LOG_DIR", "./logs")).resolve().parent / "logs-tada"),
+    ))
     moments_agent_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_AGENT_MODEL", DEFAULT_LLM_MODEL))
     moments_discovery_schedule: str = "daily at 2am"
     moments_agent_api_key: str = ""
