@@ -1,7 +1,6 @@
 import os
 import sys
 import tempfile
-import threading
 from contextlib import redirect_stdout
 from pathlib import Path
 from datetime import datetime
@@ -83,38 +82,20 @@ class OnlineRecorder(ScreenRecorder):
         self.aggregation_worker.aggregations_file = self.session_dir / "raw_aggregations.jsonl"
         self.input_event_queue.session_dir = self.session_dir
 
-        self._latest_frame_data = None
-        self._frame_lock = threading.Lock()
-        self._frame_event = threading.Event()
-        self._frame_writer = threading.Thread(target=self._frame_writer_loop, daemon=True)
-        self._frame_writer.start()
-        self.image_queue.add_callback(self._stash_latest_frame)
+        self.image_queue.add_callback(self._publish_latest_frame_png)
 
-    def _stash_latest_frame(self, buffer_image) -> None:
-        """Stash latest frame data for the writer thread (runs inside image_queue lock, so keep fast)."""
-        data = getattr(buffer_image, "data", None)
-        if data is not None:
-            with self._frame_lock:
-                self._latest_frame_data = data
-            self._frame_event.set()
-
-    def _frame_writer_loop(self) -> None:
-        """Background thread: encode and write the latest frame PNG outside the image_queue lock."""
-        while True:
-            self._frame_event.wait(timeout=1.0)
-            self._frame_event.clear()
-            with self._frame_lock:
-                data = self._latest_frame_data
-                self._latest_frame_data = None
+    def _publish_latest_frame_png(self, buffer_image) -> None:
+        """Write each new frame to a temp path for Tabracadabra (main process reads; avoids second mss)."""
+        try:
+            data = getattr(buffer_image, "data", None)
             if data is None:
-                continue
-            try:
-                img = Image.fromarray(data)
-                tmp = TABRACADABRA_LATEST_FRAME_PNG + ".tmp"
-                img.save(tmp, format="PNG")
-                os.replace(tmp, TABRACADABRA_LATEST_FRAME_PNG)
-            except Exception as e:
-                print(f"[tabracadabra] frame write failed: {e}", file=sys.stderr)
+                return
+            img = Image.fromarray(data)
+            tmp = TABRACADABRA_LATEST_FRAME_PNG + ".tmp"
+            img.save(tmp, format="PNG")
+            os.replace(tmp, TABRACADABRA_LATEST_FRAME_PNG)
+        except Exception:
+            pass
 
     def start(self):
         with redirect_stdout(sys.stderr):

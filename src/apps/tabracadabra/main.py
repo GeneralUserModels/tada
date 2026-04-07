@@ -493,14 +493,6 @@ class TabracadabraService:
             return
         first_piece_seen_local = False
         logger.info("[llm] tabracadabra")
-        stream = litellm_completion(
-            model=self._model,
-            messages=messages,
-            stream=True,
-            stream_options={"include_usage": True},
-            api_key=self._api_key or None,
-            metadata={"app": "tabracadabra"},
-        )
         t_llm = time.perf_counter()
         try:
             stream = litellm_completion(
@@ -509,6 +501,7 @@ class TabracadabraService:
                 stream=True,
                 stream_options={"include_usage": True},
                 api_key=self._api_key or None,
+                metadata={"app": "tabracadabra"},
             )
             for chunk in stream:
                 if cancel_event.is_set():
