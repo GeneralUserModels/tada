@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from server.state import ServerState
 from server.routes import settings, status, events
-from server.routes.auth import router as auth_router, refresh_google_tokens, refresh_outlook_tokens
+from server.routes.auth import router as auth_router, refresh_expired_tokens, run_token_refresh
 from server.routes.onboarding import router as onboarding_router
 from connectors.routes import router as connectors_router
 from user_models.routes import router as user_models_router
@@ -41,12 +41,14 @@ async def start_services(state: ServerState) -> None:
     state.model.data_manager = dm
     logger.info("DataManager started")
 
+    # Refresh expired OAuth tokens before connectors start polling
+    refresh_expired_tokens(state.config)
+
     # Context logging service (creates and owns all connectors)
     state.context_logging_task = asyncio.create_task(run_context_logging_service(state))
 
     # Background OAuth token refresh
-    state.google_refresh_task = asyncio.create_task(refresh_google_tokens(state.config))
-    state.outlook_refresh_task = asyncio.create_task(refresh_outlook_tokens(state.config))
+    state.token_refresh_task = asyncio.create_task(run_token_refresh(state.config))
 
     # Moments services
     from apps.moments.scheduler import run_moments_scheduler
@@ -108,8 +110,7 @@ async def lifespan(app: FastAPI):
     all_tasks = [
         state.model.training_task,
         state.context_logging_task,
-        state.google_refresh_task,
-        state.outlook_refresh_task,
+        state.token_refresh_task,
         state.moments_scheduler_task,
         state.moments_discovery_task,
         state.prediction_loop_task,

@@ -17,8 +17,7 @@ class ServerState:
 
     # Service tasks
     context_logging_task: asyncio.Task | None = None
-    google_refresh_task: asyncio.Task | None = None
-    outlook_refresh_task: asyncio.Task | None = None
+    token_refresh_task: asyncio.Task | None = None
     moments_scheduler_task: asyncio.Task | None = None
     moments_discovery_task: asyncio.Task | None = None
 

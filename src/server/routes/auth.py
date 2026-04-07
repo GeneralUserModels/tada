@@ -402,62 +402,51 @@ async def outlook_status(request: Request):
     )}
 
 
-# ── Background token refresh tasks ────────────────────────────
+# ── Token refresh ─────────────────────────────────────────────
 
-async def _refresh_token_loop(
-    config,
-    token_path_getter: Callable,
-    token_url: str,
-    build_body: Callable[[dict], dict],
-    name: str,
-) -> None:
-    while True:
-        await asyncio.sleep(45 * 60)
-        token_path = token_path_getter(config)
-        if not token_path:
-            continue
-        token = _read_token(token_path)
-        if not token or not token.get("refresh_token"):
-            continue
+def _refresh_if_expired(token_path: str | None, token_url: str, build_body: Callable, name: str) -> None:
+    """Refresh a single provider's token if expired or expiring within 5 minutes."""
+    token = _read_token(token_path) if token_path else None
+    if not token or not token.get("refresh_token"):
+        return
+    if token.get("expires_at", 0) > time.time() * 1000 + 5 * 60 * 1000:
+        return
+    data = _http_post(token_url, build_body(token))
+    token["access_token"] = data["access_token"]
+    if "refresh_token" in data:
+        token["refresh_token"] = data["refresh_token"]
+    token["expires_at"] = time.time() * 1000 + data.get("expires_in", 3600) * 1000
+    _write_token(token_path, token)
+    logger.info("[auth] %s token refreshed", name)
+
+
+def _provider_args(config) -> list[tuple]:
+    """Return (token_path, token_url, build_body, name) for each OAuth provider."""
+    return [
+        (config.google_token_path, "https://oauth2.googleapis.com/token",
+         lambda t: {"grant_type": "refresh_token", "refresh_token": t["refresh_token"],
+                    "client_id": t["client_id"], "client_secret": t["client_secret"]}, "Google"),
+        (config.outlook_token_path, f"{MICROSOFT_AUTHORITY}/oauth2/v2.0/token",
+         lambda t: {"grant_type": "refresh_token", "refresh_token": t["refresh_token"],
+                    "client_id": t["client_id"], "scope": " ".join(MICROSOFT_SCOPES)}, "Outlook"),
+    ]
+
+
+def refresh_expired_tokens(config) -> None:
+    """Refresh any expired Google/Outlook tokens. Call before starting connectors."""
+    for args in _provider_args(config):
         try:
-            data = _http_post(token_url, build_body(token))
-            token["access_token"] = data["access_token"]
-            if "refresh_token" in data:
-                token["refresh_token"] = data["refresh_token"]
-            token["expires_at"] = time.time() * 1000 + data.get("expires_in", 3600) * 1000
-            _write_token(token_path, token)
-            logger.info("[auth] %s token refreshed", name)
+            _refresh_if_expired(*args)
         except Exception as e:
-            logger.warning("[auth] %s token refresh failed: %s", name, e)
+            logger.warning("[auth] %s startup refresh failed: %s", args[3], e)
 
 
-async def refresh_google_tokens(config) -> None:
-    """Background task: refresh Google access token every 45 minutes."""
-    await _refresh_token_loop(
-        config,
-        token_path_getter=lambda c: c.google_token_path,
-        token_url="https://oauth2.googleapis.com/token",
-        build_body=lambda t: {
-            "grant_type": "refresh_token",
-            "refresh_token": t["refresh_token"],
-            "client_id": t["client_id"],
-            "client_secret": t["client_secret"],
-        },
-        name="Google",
-    )
-
-
-async def refresh_outlook_tokens(config) -> None:
-    """Background task: refresh Outlook access token every 45 minutes."""
-    await _refresh_token_loop(
-        config,
-        token_path_getter=lambda c: c.outlook_token_path,
-        token_url=f"{MICROSOFT_AUTHORITY}/oauth2/v2.0/token",
-        build_body=lambda t: {
-            "grant_type": "refresh_token",
-            "refresh_token": t["refresh_token"],
-            "client_id": t["client_id"],
-            "scope": " ".join(MICROSOFT_SCOPES),
-        },
-        name="Outlook",
-    )
+async def run_token_refresh(config) -> None:
+    """Background task: refresh Google & Outlook tokens every 45 minutes."""
+    while True:
+        for args in _provider_args(config):
+            try:
+                _refresh_if_expired(*args)
+            except Exception as e:
+                logger.warning("[auth] %s token refresh failed: %s", args[3], e)
+        await asyncio.sleep(45 * 60)
