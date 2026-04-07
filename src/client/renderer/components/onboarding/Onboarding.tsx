@@ -3,10 +3,12 @@ import { AdvancedLLMSection } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 import {
   startGoogleSignIn,
+  getGoogleUser,
   startGoogleAuth,
   startOutlookAuth,
   checkNotificationsPermission,
   checkFilesystemPermission,
+  checkBrowserCookiesPermission,
   updateSettings,
   completeOnboarding,
 } from "../../api/client";
@@ -44,7 +46,13 @@ function PermModal({
   useEffect(() => {
     if (grantedState) return;
     const id = setInterval(async () => {
-      const ok = await window.powernap.checkConnectorPermission(connectorName);
+      let ok: boolean;
+      if (connectorName === "browser_cookies") {
+        const res = await checkBrowserCookiesPermission();
+        ok = res.granted;
+      } else {
+        ok = await window.powernap.checkConnectorPermission(connectorName);
+      }
       if (ok) { clearInterval(id); handleGranted(); }
     }, 1500);
     return () => clearInterval(id);
@@ -139,11 +147,23 @@ export function Onboarding() {
   const [fsAvailable, setFsAvailable] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [fsEnabled, setFsEnabled] = useState(false);
+  const [accessibilityGranted, setAccessibilityGranted] = useState(false);
+  const [browserCookiesGranted, setBrowserCookiesGranted] = useState(false);
   const [connectingGoogle, setConnectingGoogle] = useState<string | null>(null);
   const [connectingOutlook, setConnectingOutlook] = useState(false);
 
+  // Restore saved Google user on mount; if already signed in, resume at step 2
+  useEffect(() => {
+    getGoogleUser().then(user => {
+      if (user) {
+        setGoogleUser(user);
+        setStep(2);
+      }
+    }).catch(() => {});
+  }, []);
+
   // Model + API key state
-  const [model, setModel] = useState("anthropic/claude-haiku-4-5-20251001");
+  const [model, setModel] = useState("gemini/gemini-3.1-flash-lite-preview");
   const [tinkerModel, setTinkerModel] = useState("Qwen/Qwen3-VL-30B-A3B-Instruct");
   const [geminiKey, setGeminiKey] = useState("");
   const [tinkerKey, setTinkerKey] = useState("");
@@ -156,11 +176,7 @@ export function Onboarding() {
     if (step !== 2) return;
     async function checkScreen() {
       const status = await window.powernap.checkScreenPermission();
-      const granted = status === "granted";
-      setScreenGranted(granted);
-      if (!granted) {
-        setPermModal({ name: "screen", onGranted: () => setScreenGranted(true) });
-      }
+      setScreenGranted(status === "granted");
     }
     checkScreen();
 
@@ -171,6 +187,10 @@ export function Onboarding() {
       const { granted: fs } = await checkFilesystemPermission();
       setFsAvailable(fs);
       if (fs) setFsEnabled(true);
+      const accOk = await window.powernap.checkConnectorPermission("accessibility");
+      setAccessibilityGranted(accOk);
+      const { granted: cookiesOk } = await checkBrowserCookiesPermission();
+      setBrowserCookiesGranted(cookiesOk);
     }
     checkAvailability();
   }, [step]);
@@ -226,7 +246,7 @@ export function Onboarding() {
       if (v.trim()) advanced[k] = v.trim();
     }
     const settings: Record<string, unknown> = {
-      reward_llm: model || "anthropic/claude-haiku-4-5-20251001",
+      reward_llm: model || "gemini/gemini-3.1-flash-lite-preview",
       model: tinkerModel || undefined,
       default_llm_api_key: geminiKey.trim(),
       ...advanced,
@@ -328,7 +348,6 @@ export function Onboarding() {
           <div className="btn-row">
             <button className="btn btn-ghost" onClick={() => setStep(0)}>Back</button>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {!googleUser && <button className="btn btn-ghost" onClick={() => setStep(2)}>Skip</button>}
               <button className="btn btn-primary" disabled={!googleUser} onClick={() => setStep(2)}>Continue</button>
             </div>
           </div>
@@ -362,36 +381,19 @@ export function Onboarding() {
                 </div>
               </div>
 
-              {/* Google Calendar */}
+              {/* Google (Calendar + Gmail) */}
               <div className="connector-row">
                 <div className="connector-icon">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.3"/><path d="M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
                 </div>
                 <div className="connector-info">
-                  <div className="connector-name">Google Calendar</div>
-                  <div className="connector-desc">Read your upcoming events for context</div>
+                  <div className="connector-name">Google</div>
+                  <div className="connector-desc">Calendar + Email</div>
                 </div>
                 <div className="connector-action">
                   {calendarConnected
                     ? <span className="connected-badge">Connected</span>
                     : <button className="btn btn-outline btn-sm" disabled={connectingGoogle === "calendar"} onClick={() => handleConnectGoogle("calendar")}>{connectingGoogle === "calendar" ? "Connecting..." : "Connect"}</button>
-                  }
-                </div>
-              </div>
-
-              {/* Gmail */}
-              <div className="connector-row">
-                <div className="connector-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M1.5 4.5L8 9l6.5-4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </div>
-                <div className="connector-info">
-                  <div className="connector-name">Gmail</div>
-                  <div className="connector-desc">Read recent emails for context</div>
-                </div>
-                <div className="connector-action">
-                  {gmailConnected
-                    ? <span className="connected-badge">Connected</span>
-                    : <button className="btn btn-outline btn-sm" disabled={connectingGoogle === "gmail"} onClick={() => handleConnectGoogle("gmail")}>{connectingGoogle === "gmail" ? "Connecting..." : "Connect"}</button>
                   }
                 </div>
               </div>
@@ -403,7 +405,7 @@ export function Onboarding() {
                 </div>
                 <div className="connector-info">
                   <div className="connector-name">Outlook</div>
-                  <div className="connector-desc">Calendar + Email (shared auth)</div>
+                  <div className="connector-desc">Calendar + Email</div>
                 </div>
                 <div className="connector-action">
                   {outlookConnected
@@ -413,44 +415,61 @@ export function Onboarding() {
                 </div>
               </div>
 
-              {/* Notifications */}
-              <div className="connector-row">
-                <div className="connector-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6a4 4 0 018 0v3l1.5 2H2.5L4 9V6z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M6.5 13a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3"/></svg>
-                </div>
-                <div className="connector-info">
-                  <div className="connector-name">Notifications</div>
-                  <div className="connector-desc">Read macOS notification history</div>
-                </div>
-                <div className="connector-action">
-                  {notifAvailable
-                    ? <label className="toggle"><input type="checkbox" checked={notifEnabled} onChange={(e) => setNotifEnabled(e.target.checked)}/><span className="toggle-slider"></span></label>
-                    : <button className="btn btn-outline btn-sm" onClick={() => setPermModal({ name: "notifications", onGranted: () => { setNotifAvailable(true); setNotifEnabled(true); } })}>Grant Access</button>
-                  }
-                </div>
-              </div>
-
-              {/* Filesystem */}
+              {/* Disk Access (Notifications + Filesystem) */}
               <div className="connector-row">
                 <div className="connector-icon">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
                 </div>
                 <div className="connector-info">
-                  <div className="connector-name">Filesystem</div>
-                  <div className="connector-desc">Watch Desktop, Documents, Downloads</div>
+                  <div className="connector-name">Disk Access</div>
+                  <div className="connector-desc">Notifications, Desktop, Documents, Downloads</div>
                 </div>
                 <div className="connector-action">
-                  <label className="toggle">
-                    <input type="checkbox" checked={fsEnabled} disabled={!fsAvailable} onChange={(e) => setFsEnabled(e.target.checked)}/>
-                    <span className="toggle-slider"></span>
-                  </label>
+                  {notifAvailable && fsAvailable
+                    ? <span className="perm-badge granted">Granted</span>
+                    : <button className="btn btn-outline btn-sm" onClick={() => setPermModal({ name: "notifications", onGranted: () => { setNotifAvailable(true); setNotifEnabled(true); setFsAvailable(true); setFsEnabled(true); } })}>Grant Access</button>
+                  }
+                </div>
+              </div>
+
+              {/* Browser Cookies */}
+              <div className="connector-row">
+                <div className="connector-icon">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M2 8h12M8 2c-2 2-2 10 0 12M8 2c2 2 2 10 0 12" stroke="currentColor" strokeWidth="1.3"/></svg>
+                </div>
+                <div className="connector-info">
+                  <div className="connector-name">Browser Cookies <span className="required-tag">Required</span></div>
+                  <div className="connector-desc">Let the agent browse the internet</div>
+                </div>
+                <div className="connector-action">
+                  {browserCookiesGranted
+                    ? <span className="perm-badge granted">Granted</span>
+                    : <button className="btn btn-outline btn-sm" onClick={() => setPermModal({ name: "browser_cookies", onGranted: () => setBrowserCookiesGranted(true) })}>Grant Access</button>
+                  }
+                </div>
+              </div>
+
+              {/* Accessibility (Tabracadabra) */}
+              <div className="connector-row">
+                <div className="connector-icon">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="5.5" r="1" fill="currentColor"/><path d="M5.5 7.5h5M8 7.5v4M6.5 11.5L8 9.5l1.5 2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </div>
+                <div className="connector-info">
+                  <div className="connector-name">Accessibility <span className="required-tag">Required</span></div>
+                  <div className="connector-desc">Tab autocomplete (Tabracadabra)</div>
+                </div>
+                <div className="connector-action">
+                  {accessibilityGranted
+                    ? <span className="perm-badge granted">Granted</span>
+                    : <button className="btn btn-outline btn-sm" onClick={() => setPermModal({ name: "accessibility", onGranted: () => setAccessibilityGranted(true) })}>Grant Access</button>
+                  }
                 </div>
               </div>
             </div>
           </div>
           <div className="btn-row">
             <button className="btn btn-ghost" onClick={() => setStep(1)}>Back</button>
-            <button className="btn btn-primary" disabled={!screenGranted} onClick={() => setStep(3)}>Continue</button>
+            <button className="btn btn-primary" disabled={!screenGranted || !browserCookiesGranted || !accessibilityGranted} onClick={() => setStep(3)}>Continue</button>
           </div>
         </div>
       )}

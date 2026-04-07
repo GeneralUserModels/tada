@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -225,7 +226,7 @@ async def run_context_logging_service(state) -> None:
             requires_auth=None,
             uses_notifications=True,  # server pushes when labeling is done; no polling
             connector=MCPConnector(
-                command="python",
+                command=sys.executable,
                 args=["-m", "connectors.screen.server"],
                 tool_name="fetch_screen",
                 subscribe_uri="screen://activity",
@@ -244,7 +245,7 @@ async def run_context_logging_service(state) -> None:
             name="gmail", interval=300, log_subdir="email",
             requires_auth="google",
             connector=MCPConnector(
-                command="python",
+                command=sys.executable,
                 args=["-m", "connectors.gmail.server"],
                 tool_name="fetch_emails",
                 env={"GOOGLE_TOKEN_PATH": config.google_token_path},
@@ -254,7 +255,7 @@ async def run_context_logging_service(state) -> None:
             name="notifications", interval=0, log_subdir="notifications",
             uses_notifications=True,
             connector=MCPConnector(
-                command="python",
+                command=sys.executable,
                 args=["-m", "connectors.notifications.server"],
                 tool_name="fetch_notifications",
                 subscribe_uri="notifications://activity",
@@ -264,7 +265,7 @@ async def run_context_logging_service(state) -> None:
             name="filesystem", interval=0, log_subdir="filesys",
             uses_notifications=True,
             connector=MCPConnector(
-                command="python",
+                command=sys.executable,
                 args=["-m", "connectors.filesystem.server"],
                 tool_name="fetch_changes",
                 subscribe_uri="filesystem://changes",
@@ -275,7 +276,7 @@ async def run_context_logging_service(state) -> None:
             filter=False,
             requires_auth="google",
             connector=MCPConnector(
-                command="python",
+                command=sys.executable,
                 args=["-m", "connectors.calendar.server"],
                 tool_name="fetch_events",
                 env={"GOOGLE_TOKEN_PATH": config.google_token_path},
@@ -285,7 +286,7 @@ async def run_context_logging_service(state) -> None:
             name="outlook_email", interval=300, log_subdir="outlook_email",
             requires_auth="outlook",
             connector=MCPConnector(
-                command="python",
+                command=sys.executable,
                 args=["-m", "connectors.outlook_email.server"],
                 tool_name="fetch_emails",
                 env={"OUTLOOK_TOKEN_PATH": config.outlook_token_path},
@@ -296,7 +297,7 @@ async def run_context_logging_service(state) -> None:
             filter=False,
             requires_auth="outlook",
             connector=MCPConnector(
-                command="python",
+                command=sys.executable,
                 args=["-m", "connectors.outlook_calendar.server"],
                 tool_name="fetch_events",
                 env={"OUTLOOK_TOKEN_PATH": config.outlook_token_path},

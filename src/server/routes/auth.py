@@ -221,15 +221,35 @@ async def google_signin():
     code = await _oauth_loopback(auth_url, port)
     _, user_info = _google_oauth_exchange(client_id, client_secret, code, redirect_uri)
 
+    name = user_info.get("name", "")
+    email = user_info.get("email", "")
+
     _supabase_upsert(
         cfg.get("supabase_url", ""),
         cfg.get("supabase_anon_key", ""),
-        user_info.get("name", ""),
-        user_info.get("email", ""),
+        name,
+        email,
         user_info.get("sub", ""),
     )
 
-    return {"name": user_info.get("name", ""), "email": user_info.get("email", "")}
+    # Persist to config so the app remembers across restarts
+    cfg["google_user_name"] = name
+    cfg["google_user_email"] = email
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+
+    return {"name": name, "email": email}
+
+
+@router.get("/google/user")
+async def google_user():
+    """Return the saved Google user, or null if not signed in."""
+    cfg = _get_app_config()
+    name = cfg.get("google_user_name", "")
+    email = cfg.get("google_user_email", "")
+    if name or email:
+        return {"name": name, "email": email}
+    return None
 
 
 @router.post("/google/start")
