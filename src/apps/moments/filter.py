@@ -16,7 +16,9 @@ from apps.moments._incremental import read_checkpoint, write_checkpoint
 from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
 
 INSTRUCTION_TEMPLATE = """\
-You are incrementally filtering task candidates and copying good ones to {tada_dir}/.
+You are a strict filter. Your job is to incrementally select only the BEST task candidates and copy \
+them to {tada_dir}/. Be very picky — most candidates should be rejected. Only pass through tasks that \
+are clearly high-value, specific, and grounded in real observed behavior.
 
 ## Source directories
 
@@ -29,14 +31,29 @@ You are incrementally filtering task candidates and copying good ones to {tada_d
 
 ## Agent capabilities (for judging whether a task is completable)
 
-The agent that will execute these tasks can:
-- Run shell commands on macOS (bash)
-- Read/write/edit any local file
-- Web search
-- Browse websites with the user's Chrome cookies (GitHub, Gmail, Slack, etc.)
+The agent that will execute these tasks is powerful. It can:
+- Search the web, crawl pages, and fetch live data
+- Browse authenticated websites (GitHub, Gmail, Twitter/X, YouTube, Slack, Google Docs, etc.) using the user's Chrome cookies
+- Do deep research and analysis — read papers, compare approaches, synthesize across dozens of sources
+- Read files on the user's machine for context
+- Run shell commands, scripts, git operations, Python/Node code
+- Pre-draft emails, Slack messages, documents, and code for the user to review
+- Generate reports, build slide decks, create static HTML interfaces to present results
+- Spawn subagents to parallelize work across different data sources
 - Read local logs: notifications, calendar, email, filesystem changes, screen sessions
 
+The agent CANNOT: call LLMs at runtime in its output, modify arbitrary files on the user's machine, \
+or build interactive interfaces that require a backend. It produces static artifacts (HTML, markdown, \
+drafts) that the user reviews.
+
 Every task is run as a one-shot execution (not a daemon). "Daily digest" means "generate one now."
+
+**When ranking, prioritize tasks that amplify the user's abilities:**
+- **Information foraging and synthesis** — deep research, comparing tools/approaches, reading \
+papers/docs, compiling structured knowledge. This is where the agent provides the most value.
+- **Complex multi-step workflows** — ambitious tasks that chain many operations together.
+- **"Extra-mile" work** — things the user would benefit from but never gets around to doing.
+Deprioritize simple, shallow tasks that a human could do in a few minutes.
 
 ## Steps
 
@@ -45,10 +62,16 @@ Every task is run as a one-shot execution (not a daemon). "Daily digest" means "
 them in parallel — each subagent should read a batch of files and return a summary of each \
 (title, source dir, what it does, and a 1-10 quality score based on: grounded in real behavior, \
 genuinely useful, completable by the agent).
-3. For each candidate, decide whether to copy it. Skip tasks that are: duplicates of tasks already \
-in {tada_dir}/, vague fluff, require macOS accessibility/window-management APIs, cannot produce \
-concrete output, or are reactive/trigger-based ("when X happens, do Y"). Prefer diversity — avoid \
-copying tasks that do essentially the same thing as existing ones in {tada_dir}/.
+3. For each candidate, decide whether to copy it. Default to REJECTING — only copy tasks that pass \
+ALL of these bars:
+  - Clearly grounded in specific observed user behavior (not generic productivity advice)
+  - Produces a concrete, useful artifact (summary, draft, report, analysis)
+  - Completable by the agent with its available tools in a single run
+  - Not a duplicate or near-duplicate of a task already in {tada_dir}/
+  - Not vague, fluffy, or overly broad
+  - Not reactive/trigger-based ("when X happens, do Y")
+  - Does not require macOS accessibility/window-management APIs
+  Prefer diversity — avoid copying tasks that overlap with existing ones in {tada_dir}/.
 4. Copy the good candidates to {tada_dir}/<filename>.md using write_file. Aim to keep up to {n} \
 total tasks in {tada_dir}/. Do NOT delete any files — not from source dirs and not from {tada_dir}/.
 5. Print which tasks you copied and why, and which you skipped and why.

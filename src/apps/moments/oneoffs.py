@@ -23,13 +23,28 @@ implementation details on its own.
 
 Unlike recurring automation tasks, these are situational — things the user is currently working on, researching, or planning where the agent can jump in and produce something useful in a single run. Tasks should be informational only (research, summaries, drafts, context) — never instrumental actions that change the user's state.
 
-The AI agent that will execute these tasks can:
-- Search the web and fetch live data
+The AI agent that will execute these tasks is powerful. It can:
+- Search the web, crawl pages, and fetch live data
 - Browse authenticated websites (GitHub, Gmail, Twitter/X, YouTube, Slack, Google Docs, etc.) using the user's Chrome cookies
-- Read, write, and edit files on the user's machine
-- Run shell commands, scripts, git operations
-- Do research, compile summaries, draft documents
-- Execute multi-step workflows end-to-end
+- Do deep research and analysis — read papers, compare approaches, synthesize across dozens of sources
+- Read files on the user's machine for context
+- Run shell commands, scripts, git operations, Python/Node code
+- Pre-draft emails, Slack messages, documents, and code for the user to review
+- Generate reports, build slide decks, create static HTML interfaces to present results
+- Spawn subagents to parallelize work across different data sources
+
+The agent CANNOT: call LLMs at runtime in its output, modify arbitrary files on the user's machine, \
+or build interactive interfaces that require a backend. It produces static artifacts (HTML, markdown, \
+drafts) that the user reviews.
+
+**Prioritize tasks that amplify the user's abilities:**
+- **Information foraging and synthesis** — the agent's biggest advantage is reading, comparing, and \
+synthesizing across many sources faster than any human. Prioritize tasks where the agent does deep \
+research the user wouldn't have time for.
+- **Complex multi-step work** — prefer ambitious tasks that chain together many operations. \
+The agent thrives on tasks that are too tedious or time-consuming for a human to bother with.
+- **Preparation and context-building** — upcoming meetings, ongoing projects, open questions — \
+the agent can do the legwork so the user walks in prepared.
 
 ## Log files to read (all in {logs_dir}/)
 
