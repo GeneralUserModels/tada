@@ -334,6 +334,19 @@ async def run_context_logging_service(state) -> None:
         if cfg.name in config.connector_errors:
             cfg.connector.error = config.connector_errors[cfg.name]
 
+    # Re-enable auth-error connectors whose tokens were refreshed at startup
+    auth_token_paths = {"google": config.google_token_path, "outlook": config.outlook_token_path}
+    for cfg in connector_configs:
+        if not cfg.requires_auth or not cfg.connector.paused:
+            continue
+        token_path = auth_token_paths.get(cfg.requires_auth, "")
+        if token_path and Path(token_path).exists():
+            cfg.connector.resume()
+            if cfg.name in config.disabled_connectors:
+                config.disabled_connectors.remove(cfg.name)
+            config.connector_errors.pop(cfg.name, None)
+    config.save()
+
     logger.info("Context logging service started")
     filter_api_key = config.resolve_api_key("filter_model_api_key")
 
