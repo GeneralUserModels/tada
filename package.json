@@ -44,6 +44,7 @@
       "dist/main/**/*",
       "dist/preload/**/*",
       "dist/renderer/**/*",
+      "dist/shared/**/*",
       "package.json"
     ],
     "mac": {
@@ -52,7 +53,7 @@
         "dmg",
         "zip"
       ],
-      "afterSign": "scripts/notarize.cjs",
+      "notarize": false,
       "extendInfo": {
         "NSScreenCaptureUsageDescription": "PowerNap needs screen recording to observe your workflow.",
         "NSAccessibilityUsageDescription": "PowerNap needs accessibility access to track input events."
@@ -60,8 +61,28 @@
     },
     "extraResources": [
       {
+        "from": "./src/server",
+        "to": "python-src/server"
+      },
+      {
         "from": "./src/connectors",
         "to": "python-src/connectors"
+      },
+      {
+        "from": "./src/user_models",
+        "to": "python-src/user_models"
+      },
+      {
+        "from": "./src/apps",
+        "to": "python-src/apps"
+      },
+      {
+        "from": "./src/agent",
+        "to": "python-src/agent"
+      },
+      {
+        "from": "./src/retrievers",
+        "to": "python-src/retrievers"
       },
       {
         "from": "./bootstrap/requirements.txt",
@@ -70,6 +91,10 @@
       {
         "from": "./pyproject.toml",
         "to": "python-src/pyproject.toml"
+      },
+      {
+        "from": "./powernap-config.defaults.json",
+        "to": "powernap-config.defaults.json"
       }
     ],
     "publish": {

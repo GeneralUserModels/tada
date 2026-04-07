@@ -8,20 +8,30 @@ from pydantic import BaseModel, Field
 
 CONFIG_PATH = Path(os.environ.get("POWERNAP_CONFIG_PATH", "powernap-config.json"))
 
-# Fields that are user-settable via the API and persisted to disk.
-# CLI-arg fields (log_dir, token paths, etc.) are excluded — they always win.
-_PERSISTED_FIELDS = {
+# Default model identifiers — single source of truth for Python.
+DEFAULT_LLM_MODEL = "gemini/gemini-3.1-flash-lite-preview"
+DEFAULT_TINKER_MODEL = "Qwen/Qwen3-VL-30B-A3B-Instruct"
+DEFAULT_AGENT_MODEL = "anthropic/claude-sonnet-4-6"
+
+# Fields exposed via GET/PUT /api/settings (the UI settings panel).
+SETTINGS_API_FIELDS: frozenset[str] = frozenset({
     "default_llm_api_key", "tinker_api_key", "hf_token", "wandb_api_key",
     "model", "reward_llm", "reward_llm_api_key",
     "label_model", "label_model_api_key",
     "filter_model", "filter_model_api_key",
     "fps", "num_generations",
     "learning_rate", "batch_size", "past_len", "future_len", "loss_mode",
+    "moments_enabled", "moments_agent_model", "moments_agent_api_key",
+    "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
+})
+
+# All fields that are user-settable and persisted to disk.
+# Superset of SETTINGS_API_FIELDS — includes internal fields not shown in the UI.
+_PERSISTED_FIELDS = SETTINGS_API_FIELDS | {
     "model_type",
     "disabled_connectors", "connector_errors", "mcp_connectors",
     "onboarding_complete",
-    "tada_dir", "moments_agent_model", "moments_agent_api_key", "moments_discovery_interval", "moments_enabled",
-    "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
+    "tada_dir", "moments_discovery_interval",
     "agent_model", "agent_api_key",
 }
 
@@ -76,9 +86,9 @@ class ServerConfig(BaseModel):
     precision: str = "accurate"
 
     # Labeler
-    label_model: str = "gemini/gemini-3.1-flash-lite-preview"
+    label_model: str = DEFAULT_LLM_MODEL
     label_model_api_key: str = ""
-    filter_model: str = "gemini/gemini-3.1-flash-lite-preview"
+    filter_model: str = DEFAULT_LLM_MODEL
     filter_model_api_key: str = ""
     chunk_workers: int = 4
 
@@ -90,8 +100,8 @@ class ServerConfig(BaseModel):
         return self.tabracadabra_model
 
     # Trainer
-    model: str = "Qwen/Qwen3-VL-30B-A3B-Instruct"
-    reward_llm: str = "gemini/gemini-3.1-flash-lite-preview"
+    model: str = DEFAULT_TINKER_MODEL
+    reward_llm: str = DEFAULT_LLM_MODEL
     reward_llm_api_key: str = ""
     num_generations: int = 4
     learning_rate: float = 5e-5
@@ -107,12 +117,12 @@ class ServerConfig(BaseModel):
     predict_every_n_seconds: int = 10
 
     # Tabracadabra
-    tabracadabra_enabled: bool = True
-    tabracadabra_model: str = "gemini/gemini-3.1-flash-lite-preview"
+    tabracadabra_enabled: bool = False
+    tabracadabra_model: str = DEFAULT_LLM_MODEL
     tabracadabra_api_key: str = ""
 
     # Agent
-    agent_model: str = "anthropic/claude-sonnet-4-6"
+    agent_model: str = DEFAULT_AGENT_MODEL
     agent_api_key: str = ""
 
     # Logging
@@ -138,7 +148,7 @@ class ServerConfig(BaseModel):
 
     # Moments
     tada_dir: str = Field(default_factory=lambda: os.getenv("POWERNAP_TADA_DIR", "./logs-tada"))
-    moments_agent_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_AGENT_MODEL", "gemini/gemini-3.1-flash-preview"))
+    moments_agent_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_AGENT_MODEL", DEFAULT_LLM_MODEL))
     moments_discovery_interval: int = 86400  # 24 hours
     moments_agent_api_key: str = ""
     moments_enabled: bool = True

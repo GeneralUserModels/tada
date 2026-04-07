@@ -4,72 +4,32 @@ import asyncio
 import logging
 import os
 import sys
+from typing import Optional
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel
+from pydantic import create_model
+
+from server.config import ServerConfig, SETTINGS_API_FIELDS
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["settings"])
 
+# Auto-generate SettingsUpdate from ServerConfig's field definitions so the
+# field list is never duplicated.  Each field becomes Optional[T] = None.
+_update_fields: dict = {}
+for _name, _info in ServerConfig.model_fields.items():
+    if _name in SETTINGS_API_FIELDS:
+        _update_fields[_name] = (Optional[_info.annotation], None)
 
-class SettingsUpdate(BaseModel):
-    default_llm_api_key: str | None = None
-    tinker_api_key: str | None = None
-    hf_token: str | None = None
-    wandb_api_key: str | None = None
-    model: str | None = None
-    reward_llm: str | None = None
-    reward_llm_api_key: str | None = None
-    label_model: str | None = None
-    label_model_api_key: str | None = None
-    filter_model: str | None = None
-    filter_model_api_key: str | None = None
-    fps: int | None = None
-    num_generations: int | None = None
-    learning_rate: float | None = None
-    batch_size: int | None = None
-    past_len: int | None = None
-    future_len: int | None = None
-    loss_mode: str | None = None
-    moments_enabled: bool | None = None
-    moments_agent_model: str | None = None
-    moments_agent_api_key: str | None = None
-    tabracadabra_enabled: bool | None = None
-    tabracadabra_model: str | None = None
-    tabracadabra_api_key: str | None = None
+SettingsUpdate = create_model("SettingsUpdate", **_update_fields)
 
 
 @router.get("/settings")
 async def get_settings(request: Request):
     state = request.app.state.server
     cfg = state.config
-    return {
-        "default_llm_api_key": cfg.default_llm_api_key,
-        "tinker_api_key": cfg.tinker_api_key,
-        "hf_token": cfg.hf_token,
-        "wandb_api_key": cfg.wandb_api_key,
-        "model": cfg.model,
-        "reward_llm": cfg.reward_llm,
-        "reward_llm_api_key": cfg.reward_llm_api_key,
-        "label_model": cfg.label_model,
-        "label_model_api_key": cfg.label_model_api_key,
-        "filter_model": cfg.filter_model,
-        "filter_model_api_key": cfg.filter_model_api_key,
-        "fps": cfg.fps,
-        "num_generations": cfg.num_generations,
-        "learning_rate": cfg.learning_rate,
-        "batch_size": cfg.batch_size,
-        "past_len": cfg.past_len,
-        "future_len": cfg.future_len,
-        "loss_mode": cfg.loss_mode,
-        "moments_enabled": cfg.moments_enabled,
-        "moments_agent_model": cfg.moments_agent_model,
-        "moments_agent_api_key": cfg.moments_agent_api_key,
-        "tabracadabra_enabled": cfg.tabracadabra_enabled,
-        "tabracadabra_model": cfg.tabracadabra_model,
-        "tabracadabra_api_key": cfg.tabracadabra_api_key,
-    }
+    return {f: getattr(cfg, f) for f in SETTINGS_API_FIELDS}
 
 
 @router.put("/settings")

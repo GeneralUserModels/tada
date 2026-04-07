@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAppContext, HistoryItem } from "../../context/AppContext";
+import * as api from "../../api/client";
 import { useConnectors } from "../../hooks/useConnectors";
 import { ConnectorItem, CONNECTOR_META } from "../connectors/ConnectorItem";
 
@@ -10,16 +11,30 @@ const BADGE_CLASS: Record<HistoryItem["type"], string> = {
 };
 
 export function ConnectorsView() {
-  const { state } = useAppContext();
+  const { state, dispatch } = useAppContext();
   const { connectors, loading, load, toggle, toggling, connectGoogle, connectOutlook, retry } = useConnectors();
   const [connectingName, setConnectingName] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load connectors when server becomes ready
+  // Poll for services_started when connected but services not ready
   useEffect(() => {
-    if (state.connected) {
+    if (state.connected && !state.servicesReady) {
+      pollRef.current = setInterval(async () => {
+        const status = await api.getStatus() as Record<string, unknown>;
+        if (status.services_started) {
+          dispatch({ type: "STATUS_UPDATE", data: status as never });
+        }
+      }, 2000);
+      return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    }
+  }, [state.connected, state.servicesReady, dispatch]);
+
+  // Load connectors when services become ready
+  useEffect(() => {
+    if (state.servicesReady) {
       load();
     }
-  }, [state.connected, load]);
+  }, [state.servicesReady, load]);
 
   const calendarOn = !!(connectors.calendar?.enabled && connectors.calendar?.available);
   const gmailOn = !!(connectors.gmail?.enabled && connectors.gmail?.available);
@@ -42,7 +57,12 @@ export function ConnectorsView() {
         <div className="card-header">
           <h2>Connectors</h2>
         </div>
-        {loading ? (
+        {!state.servicesReady ? (
+          <div style={{ color: "#9BA896", fontSize: 13, padding: "24px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="spinner" />
+            Starting up...
+          </div>
+        ) : loading ? (
           <div style={{ color: "#9BA896", fontSize: 12, padding: 12 }}>Loading...</div>
         ) : Object.keys(connectors).length === 0 ? (
           <div style={{ color: "#9BA896", fontSize: 12, padding: 12 }}>

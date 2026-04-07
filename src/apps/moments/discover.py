@@ -112,6 +112,11 @@ produces a complete result. No continuous monitoring, no event listeners, no "wa
 - confidence reflects how strongly the logs support this task existing
 - usefulness reflects how much time/effort/value the automation would provide
 
+### Existing tasks:
+Read ALL existing task files in {logs_dir}/tasks/ — you must not duplicate any existing task. Your job \
+is to find NEW tasks that aren't already covered. If a new session reveals a variation or extension \
+of an existing task, note that in a new task file rather than modifying the existing one.
+
 When you are done, run `ls -la {logs_dir}/tasks/` to verify all task files exist and are non-empty. Read a few back to confirm they have real content, not placeholder text.
 """
 
@@ -137,10 +142,6 @@ to reveal something new.
 These files may contain both old and new entries. Prioritize entries dated AFTER {last_discovery_date}, \
 but don't ignore older entries — they can still reveal patterns.
 
-### Existing tasks:
-Read ALL existing task files in {logs_dir}/tasks/ — you must not duplicate any existing task. Your job \
-is to find NEW tasks that aren't already covered. If a new session reveals a variation or extension \
-of an existing task, note that in a new task file rather than modifying the existing one.
 """
 
 
