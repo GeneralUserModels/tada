@@ -20,7 +20,7 @@ _PERSISTED_FIELDS = {
     "model_type",
     "disabled_connectors", "connector_errors", "mcp_connectors",
     "onboarding_complete",
-    "tada_dir", "moments_agent_model", "moments_agent_api_key", "moments_discovery_interval", "moments_enabled",
+    "tada_dir", "moments_agent_model", "moments_agent_api_key", "moments_discovery_schedule", "moments_enabled",
     "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
     "agent_model", "agent_api_key",
 }
@@ -139,7 +139,7 @@ class ServerConfig(BaseModel):
     # Moments
     tada_dir: str = Field(default_factory=lambda: os.getenv("POWERNAP_TADA_DIR", "./logs-tada"))
     moments_agent_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_AGENT_MODEL", "gemini/gemini-3.1-flash-preview"))
-    moments_discovery_interval: int = 86400  # 24 hours
+    moments_discovery_schedule: str = "daily at 2am"
     moments_agent_api_key: str = ""
     moments_enabled: bool = True
 
