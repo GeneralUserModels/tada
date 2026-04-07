@@ -695,14 +695,11 @@ class TabracadabraService:
 
     # ------------- Event Tap Callback -------------
     def _callback(self, proxy, event_type, event, refcon):
-        if event_type == Quartz.kCGEventTapDisabledByTimeout:
-            print("[tabracadabra] Event tap was disabled by timeout, re-enabling...")
-            if self._tap_ref is not None:
-                Quartz.CGEventTapEnable(self._tap_ref, True)
+        if self._stop_event.is_set():
             return event
 
-        if event_type == Quartz.kCGEventTapDisabledByUserInput:
-            print("[tabracadabra] Event tap was disabled by user input, re-enabling...")
+        if event_type in (Quartz.kCGEventTapDisabledByTimeout, Quartz.kCGEventTapDisabledByUserInput):
+            print(f"[tabracadabra] Event tap was disabled ({event_type}), re-enabling...")
             if self._tap_ref is not None:
                 Quartz.CGEventTapEnable(self._tap_ref, True)
             return event
