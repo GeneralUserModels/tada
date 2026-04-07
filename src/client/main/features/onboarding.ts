@@ -6,10 +6,11 @@
  */
 
 import * as path from "path";
-import { app, BrowserWindow, desktopCapturer, ipcMain, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { isDev } from "../paths";
 import { IPC } from "../ipc";
 import * as api from "../api";
+import { connectorPermissions } from "../connectors/permissions";
 
 export function runOnboarding(): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -38,52 +39,18 @@ export function runOnboarding(): Promise<void> {
       win.webContents.send(IPC.SERVER_READY, { url: api.getServerUrl() });
     });
 
-    const handleCheckPermission = async () => {
-      const status = systemPreferences.getMediaAccessStatus("screen");
-      if (status !== "granted") return status;
-      // Verify with a real capture — getMediaAccessStatus can lie in dev builds
-      // (inherits terminal permission) and on macOS Sequoia+.
-      try {
-        const sources = await desktopCapturer.getSources({
-          types: ["screen"],
-          thumbnailSize: { width: 1, height: 1 },
-        });
-        if (!sources.length) return "denied";
-        const bmp = sources[0].thumbnail.toBitmap();
-        if (bmp.length === 0) return "denied";
-        for (let i = 3; i < bmp.length; i += 4) {
-          if (bmp[i] !== 0) return "granted";
-        }
-        return "denied";
-      } catch {
-        return "denied";
-      }
-    };
+    const screen = connectorPermissions.screen!;
+    const fda = connectorPermissions.notifications!;
 
-    const handleRequestScreenPermission = async () => {
-      try {
-        await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 320, height: 240 } });
-      } catch {}
-      const status = systemPreferences.getMediaAccessStatus("screen");
-      if (status !== "granted") {
-        shell.openExternal(
-          "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-        );
-      }
-      return status;
-    };
+    const handleCheckPermission = async () =>
+      (await screen.check()) ? "granted" : "denied";
 
-    const handleOpenSettings = () => {
-      shell.openExternal(
-        "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-      );
-    };
+    const handleRequestScreenPermission = async () =>
+      (await screen.request!()) ? "granted" : "denied";
 
-    const handleOpenFdaSettings = () => {
-      shell.openExternal(
-        "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
-      );
-    };
+    const handleOpenSettings = () => shell.openExternal(screen.fixUrl);
+
+    const handleOpenFdaSettings = () => shell.openExternal(fda.fixUrl);
 
     let submitted = false;
 
