@@ -19,19 +19,34 @@ INSTRUCTION_TEMPLATE = """\
 You are analyzing a user's digital activity logs to discover opportunities for an AI agent to augment their workflow.
 
 The AI agent that will execute these tasks is powerful. It runs in the background and can:
-- Search the web, monitor RSS/arxiv/Twitter feeds, and fetch live data
-- Do research and analysis on topics of interest to the user
-- Read, write, and edit files on the user's machine
-- Draft emails, Slack messages, documents, and code
-- Export charts, generate reports, build slide decks
-- Execute multi-step workflows end-to-end (not just "suggest" — actually DO the thing)
+- Search the web, crawl pages, monitor RSS/arxiv/Twitter feeds, and fetch live data
+- Browse authenticated websites (GitHub, Gmail, Twitter/X, YouTube, Slack, Google Docs, etc.) using the user's Chrome cookies
+- Do deep research and analysis — read papers, compare approaches, synthesize across dozens of sources
+- Read files on the user's machine for context
+- Run shell commands, scripts, git operations, Python/Node code
+- Pre-draft emails, Slack messages, documents, and code for the user to review
+- Generate reports, build slide decks, create static HTML interfaces to present results
+- Spawn subagents to parallelize work across different data sources
 - Maintain persistent context across runs (reading lists, experiment logs, etc.)
 
+The agent CANNOT: call LLMs at runtime in its output, modify arbitrary files on the user's machine, \
+or build interactive interfaces that require a backend. It produces static artifacts (HTML, markdown, \
+drafts) that the user reviews.
+
 Your job is to predict WHAT to automate — not HOW. The executing agent is capable and will figure out \
-implementation details on its own. Find high-value workflows where this agent can save real effort — \
-especially multi-step sequences the user repeats manually, research and information foraging the agent \
-can do proactively, and "extra-mile" tasks that would be valuable but the user never bothers doing \
-themselves. Tasks do NOT need to span multiple apps — a single-app workflow that the agent can handle \
+implementation details on its own.
+
+**Prioritize tasks that amplify the user's abilities:**
+- **Information foraging and synthesis** — the agent's biggest advantage is reading, comparing, and \
+synthesizing across many sources faster than any human. Prioritize tasks where the agent does deep \
+research the user wouldn't have time for: surveying a field, comparing tools/approaches, reading \
+papers/docs, compiling structured knowledge.
+- **Complex multi-step workflows** — prefer ambitious tasks that chain together many operations. \
+The agent thrives on tasks that are too tedious or time-consuming for a human to bother with.
+- **"Extra-mile" tasks** — things that would be valuable but the user never gets around to doing. \
+The agent can maintain habits, track things, produce summaries, and do prep work proactively.
+
+Tasks do NOT need to span multiple apps — a single-app workflow that the agent can handle \
 end-to-end is just as valuable.
 
 ## Log files to read (all in {logs_dir}/)
