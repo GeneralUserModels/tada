@@ -3,10 +3,11 @@ import React from "react";
 import { ModelDropdown, LLM_MODELS, ModelOption } from "./ModelDropdown";
 
 export const ADVANCED_ROWS: { label: string; modelKey: string; apiKeyKey: string }[] = [
-  { label: "Reward LM",      modelKey: "reward_llm",          apiKeyKey: "reward_llm_api_key" },
-  { label: "Labeling LM",    modelKey: "label_model",         apiKeyKey: "label_model_api_key" },
-  { label: "Filter LM",      modelKey: "filter_model",        apiKeyKey: "filter_model_api_key" },
-  { label: "Tabracadabra LM",  modelKey: "tabracadabra_model",  apiKeyKey: "tabracadabra_api_key" },
+  { label: "Reward LM",        modelKey: "reward_llm",            apiKeyKey: "reward_llm_api_key" },
+  { label: "Labeling LM",      modelKey: "label_model",           apiKeyKey: "label_model_api_key" },
+  { label: "Filter LM",        modelKey: "filter_model",          apiKeyKey: "filter_model_api_key" },
+  { label: "Ta-Da LM",         modelKey: "moments_agent_model",   apiKeyKey: "moments_agent_api_key" },
+  { label: "Tabracadabra LM",  modelKey: "tabracadabra_model",    apiKeyKey: "tabracadabra_api_key" },
 ];
 
 interface ModelApiKeyRowProps {
