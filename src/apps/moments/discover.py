@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -11,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.builder import build_agent
-from apps.moments._incremental import read_checkpoint, write_checkpoint, classify_sessions
+from apps.moments._incremental import read_checkpoint, write_checkpoint, sessions_with_new_content
 from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
 
 INSTRUCTION_TEMPLATE = """\
@@ -84,7 +85,7 @@ Use your tools aggressively:
 4. **Write tasks**: Only AFTER completing steps 1-3, write the task files one at a time using write_file. Update your todos as you complete each file.
 
 ## Output
-IMPORTANT: All output files MUST be written to {logs_dir}/tasks/. Create this directory first with bash, then use write_file to write each task file there. Write at least 20 markdown files (ideally more), one per discovered task.
+IMPORTANT: All output files MUST be written to {logs_dir}/tasks/. Create this directory first with bash, then use write_file to write each task file there. Write one markdown file per discovered task.
 
 Filename: slugified title + .md (e.g., wandb-experiment-monitoring.md)
 
@@ -111,6 +112,7 @@ something the agent can execute on a schedule — a batch of work it runs at a f
 produces a complete result. No continuous monitoring, no event listeners, no "watch for changes."
 - confidence reflects how strongly the logs support this task existing
 - usefulness reflects how much time/effort/value the automation would provide
+- Do NOT delete any existing files, tasks, or data
 
 ### Existing tasks:
 Read ALL existing task files in {logs_dir}/tasks/ — you must not duplicate any existing task. Your job \
@@ -123,24 +125,13 @@ When you are done, run `ls -la {logs_dir}/tasks/` to verify all task files exist
 
 INCREMENTAL_SECTION = """\
 
-## Incremental Discovery — Prioritize New Activity
+## Incremental Discovery
 
-This is a RE-RUN. The last discovery was on **{last_discovery_date}**. You should still read all sessions, \
-but prioritize finding new patterns from recent activity.
+This is a RE-RUN. The last discovery was on **{last_discovery_date}**. Prioritize labels with \
+`start_time` after this date, but analyze ALL sessions thoroughly.
 
-### New sessions since last discovery (prioritize these):
-{new_sessions_list}
-
-### Previously analyzed sessions:
-{old_sessions_list}
-
-Read all sessions, but weight your analysis toward the new ones. Old sessions have already been mined \
-for tasks — look for patterns there only if they weren't caught before or if they combine with new activity \
-to reveal something new.
-
-### Non-session logs (email, calendar, notifications, filesystem):
-These files may contain both old and new entries. Prioritize entries dated AFTER {last_discovery_date}, \
-but don't ignore older entries — they can still reveal patterns.
+### Sessions with new content since last discovery:
+{sessions_with_new_content_list}
 
 """
 
@@ -151,27 +142,24 @@ def run(logs_dir: str, model: str, api_key: str | None = None) -> str:
     checkpoint_path = logs_path / "tasks" / ".last_discovery"
 
     last_discovery = read_checkpoint(checkpoint_path)
-    new_sessions, old_sessions = classify_sessions(logs_dir, last_discovery)
+    new_content_sessions = sessions_with_new_content(logs_dir, last_discovery)
 
-    instruction = INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    instruction = f"Current date and time: **{now}**\n\n" + INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir)
 
-    if last_discovery is not None and new_sessions:
-        new_list = "\n".join(f"- {s}/labels.jsonl" for s in new_sessions)
-        old_list = "\n".join(f"- {s}/labels.jsonl" for s in old_sessions) if old_sessions else "- (none)"
+    if last_discovery is not None and new_content_sessions:
+        sessions_list = "\n".join(f"- {s}/labels.jsonl" for s in new_content_sessions)
         instruction += INCREMENTAL_SECTION.format(
             last_discovery_date=last_discovery.strftime("%Y-%m-%d %H:%M"),
-            new_sessions_list=new_list,
-            old_sessions_list=old_list,
-            logs_dir=logs_dir,
+            sessions_with_new_content_list=sessions_list,
         )
-    elif last_discovery is not None and not new_sessions:
+    elif last_discovery is not None and not new_content_sessions:
         instruction += (
             f"\n\n## Note\n\nThe last discovery was on "
-            f"**{last_discovery.strftime('%Y-%m-%d %H:%M')}** and there are NO new session "
-            f"directories since then. Check existing non-session logs (email, calendar, "
-            f"notifications, filesystem) for new entries since that date. If nothing "
-            f"substantial is new, it's fine to produce no new tasks — just verify existing "
-            f"tasks are still relevant and exit."
+            f"**{last_discovery.strftime('%Y-%m-%d %H:%M')}** and there are no new labels "
+            f"in any session since then. Analyze all existing sessions and non-session logs "
+            f"(email, calendar, notifications, filesystem) thoroughly for tasks that may "
+            f"have been missed."
         )
 
     agent, _ = build_agent(model, logs_dir, api_key=api_key)

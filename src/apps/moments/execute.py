@@ -322,9 +322,10 @@ def run(
     effective_frequency = frequency_override or fm.get("frequency", "")
     effective_schedule = schedule_override or fm.get("schedule", "")
 
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
     existing_index = Path(output_dir) / "index.html"
     if existing_index.exists():
-        instruction = UPDATE_INSTRUCTION_TEMPLATE.format(
+        instruction = f"Current date and time: **{now}**\n\n" + UPDATE_INSTRUCTION_TEMPLATE.format(
             task_content=task_content,
             output_dir=output_dir,
             logs_dir=logs_dir,
@@ -332,7 +333,7 @@ def run(
             schedule=effective_schedule,
         )
     else:
-        instruction = INSTRUCTION_TEMPLATE.format(
+        instruction = f"Current date and time: **{now}**\n\n" + INSTRUCTION_TEMPLATE.format(
             task_content=task_content,
             output_dir=output_dir,
             logs_dir=logs_dir,

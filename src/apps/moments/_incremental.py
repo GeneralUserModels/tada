@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from pathlib import Path
 
 SESSION_RE = re.compile(r"^session_(\d{8}_\d{6})$")
 SESSION_TIME_FMT = "%Y%m%d_%H%M%S"
+LABEL_TIME_FMT = "%Y-%m-%d_%H-%M-%S-%f"
 CHECKPOINT_TIME_FMT = "%Y-%m-%dT%H:%M:%S"
 
 
@@ -27,10 +29,26 @@ def write_checkpoint(checkpoint_path: Path) -> None:
     checkpoint_path.write_text(datetime.now().strftime(CHECKPOINT_TIME_FMT) + "\n")
 
 
-def classify_sessions(logs_dir: str, since: datetime | None) -> tuple[list[str], list[str]]:
-    """Return (new_sessions, old_sessions) directory names, sorted chronologically.
+def _last_label_time(labels_path: Path) -> datetime | None:
+    """Read the last line of a labels.jsonl file and parse its start_time."""
+    last_line = None
+    for line in labels_path.open():
+        line = line.strip()
+        if line:
+            last_line = line
+    if last_line is None:
+        return None
+    entry = json.loads(last_line)
+    st = entry.get("start_time")
+    if not st:
+        return None
+    return datetime.strptime(st, LABEL_TIME_FMT)
 
-    If since is None, all sessions are 'new' and old is empty.
+
+def sessions_with_new_content(logs_dir: str, since: datetime | None) -> list[str]:
+    """Return session directory names that have labels after *since*, sorted chronologically.
+
+    If since is None, returns all session directories.
     """
     logs_path = Path(logs_dir)
     all_sessions: list[tuple[datetime, str]] = []
@@ -45,8 +63,14 @@ def classify_sessions(logs_dir: str, since: datetime | None) -> tuple[list[str],
     all_sessions.sort(key=lambda x: x[0])
 
     if since is None:
-        return [name for _, name in all_sessions], []
+        return [name for _, name in all_sessions]
 
-    new = [name for ts, name in all_sessions if ts > since]
-    old = [name for ts, name in all_sessions if ts <= since]
-    return new, old
+    result = []
+    for _, name in all_sessions:
+        labels_path = logs_path / name / "labels.jsonl"
+        if not labels_path.exists():
+            continue
+        last_time = _last_label_time(labels_path)
+        if last_time is not None and last_time > since:
+            result.append(name)
+    return result
