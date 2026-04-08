@@ -1,66 +1,11 @@
-# PowerNap
-A system that labels interaction data with your computer use, and trains a model on that data in real-time to predict what you'll do next.
+# Tada! 🎉
 
-## Install
+Tada is a platform that allows us to quickly test interaction ideas on the thesis that our *future* models will deeply know our contexts and who we are---so well that they'll be able to _predict_ what we'll do next. 
 
-```bash
-cd powernap
-npm run install:electron
-```
+We've designed Tada to enable prototyping of interaction ideas that build on some of our papers.
 
-## Environment
+You might be here to test out:
 
-Copy the example env file and fill in your keys:
+## Tabracadabra 🎩
 
-```bash
-cp .env.example .env
-```
-
-| Variable | Description |
-|----------|-------------|
-| `GEMINI_API_KEY` | for litellm labeling & reward model |
-| `TINKER_API_KEY` | for tinker OAI inference endpoint |
-| `WANDB_API_KEY` | (optional) for wandb logging |
-
-> **Note:** tinker service must be running for training + inference
-
-## Run
-
-```bash
-npm run dev
-```
-
-The desktop app starts the Python server automatically and opens the dashboard. Use **Ctrl+H** to toggle the prediction overlay.
-
-## Output
-
-All data saved to `logs-app/session_YYYYMMDD_HHMMSS/`:
-
-```
-├── screenshots/           # JPEGs from recorder
-├── raw_aggregations.jsonl # event burst aggregations
-├── input_events.jsonl     # raw mouse/keyboard events
-├── screenshots.jsonl      # screenshot metadata
-├── labels.jsonl           # litellm action captions
-└── predictions.jsonl      # inference predictions (think, revise, actions)
-```
-
-## Advanced: headless server
-
-To run the pipeline without the desktop app:
-
-```bash
-uv run run_server.py
-```
-
-With options:
-
-```bash
-uv run run_server.py \
-  --port 8000 \
-  --log-dir ./logs \
-  --save-recordings \
-  --resume-from-checkpoint auto \
-  --loss-mode llm_judge \
-  --log-to-wandb --wandb-project longnap-online
-```
+Visit the site: **https://generalusermodels.github.io/tada/**
