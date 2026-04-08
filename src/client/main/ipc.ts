@@ -38,11 +38,8 @@ export const IPC = {
   GET_SERVER_URL: "get:server-url",
   MOMENT_COMPLETED: "moment:completed",
 
-  // Auto-update
-  UPDATE_DOWNLOADED: "update:downloaded",
-  UPDATE_ERROR: "update:error",
-  UPDATE_INSTALL_NOW: "update:install-now",
-  UPDATE_INSTALL_ON_QUIT: "update:install-on-quit",
+  // Update check
+  UPDATE_AVAILABLE: "update:available",
   UPDATE_DISMISS: "update:dismiss",
   UPDATE_CHECK: "update:check",
 } as const;

@@ -15,7 +15,6 @@
     "reset": "rm -f tada-config.json ~/.config/tada/google-token.json ~/.config/tada/outlook-token.json"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3",
     "eventsource": "^3.0.7",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",

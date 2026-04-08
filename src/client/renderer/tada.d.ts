@@ -113,12 +113,9 @@ interface TadaAPI {
   getServerUrl: () => Promise<string>;
   onMomentCompleted: (cb: (data: MomentResult) => void) => void;
 
-  // Auto-update
-  onUpdateDownloaded: (cb: (data: UpdateData) => void) => void;
-  onUpdateError: (cb: (msg: string) => void) => void;
-  installNow: () => Promise<unknown>;
-  installOnNextLaunch: () => Promise<unknown>;
-  dismissUpdate: () => Promise<unknown>;
+  // Update check
+  onUpdateAvailable: (cb: (data: UpdateData) => void) => void;
+  dismissUpdate: () => void;
   checkForUpdates: () => Promise<unknown>;
 
   // Bootstrap (setup window)
