@@ -477,6 +477,8 @@ class TabracadabraService:
         """Wait briefly so asynchronous backspaces are applied before first content."""
         if POST_SPINNER_DRAIN_S > 0:
             time.sleep(POST_SPINNER_DRAIN_S)
+
+    @staticmethod
     @retry(
         stop=stop_after_attempt(2),
         wait=wait_exponential_jitter(initial=1, max=20, jitter=2),
