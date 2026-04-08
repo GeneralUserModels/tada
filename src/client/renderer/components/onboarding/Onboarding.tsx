@@ -102,7 +102,9 @@ export function Onboarding() {
       if (fs) setFsEnabled(true);
       const accOk = await window.tada.checkConnectorPermission("accessibility");
       setAccessibilityGranted(accOk);
-      const { granted: cookiesOk } = await checkBrowserCookiesPermission();
+      // Use a non-invasive check on load. Real cookie/keychain access only runs
+      // after explicit user action via the "Grant Access" modal.
+      const cookiesOk = await window.tada.checkConnectorPermission("browser_cookies");
       setBrowserCookiesGranted(cookiesOk);
     }
     checkAvailability();
