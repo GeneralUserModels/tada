@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { updateConnector } from "../../api/client";
 
 interface Props {

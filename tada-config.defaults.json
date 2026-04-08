@@ -2,5 +2,21 @@
   "google_client_id": "892882352791-i0nh6262vjj6lvg26h94j2shfmodbkfu.apps.googleusercontent.com",
   "google_client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
   "supabase_url": "https://gicxeybsowfhdanooxdc.supabase.co",
-  "supabase_anon_key": "YOUR_SUPABASE_ANON_KEY"
+  "supabase_anon_key": "YOUR_SUPABASE_ANON_KEY",
+  "feature_flags": {
+    "moments": false,
+    "tabracadabra": true,
+    "connector_screen": true,
+    "connector_gmail": false,
+    "connector_calendar": false,
+    "connector_outlook_email": false,
+    "connector_outlook_calendar": false,
+    "connector_notifications": false,
+    "connector_filesystem": false,
+    "permission_screen": true,
+    "permission_notifications": false,
+    "permission_accessibility": false,
+    "permission_browser_cookies": false,
+    "tinker": false
+  }
 }

@@ -1,3 +1,4 @@
+import React from "react";
 import { TrainingState } from "../../hooks/useTraining";
 
 const stateLabels: Record<TrainingState, string> = {

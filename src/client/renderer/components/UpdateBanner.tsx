@@ -1,3 +1,5 @@
+import React from "react";
+
 const DOWNLOAD_URL = "https://github.com/GeneralUserModels/tada-release/releases/latest";
 
 interface Props {
