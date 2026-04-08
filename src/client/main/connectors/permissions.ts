@@ -84,11 +84,11 @@ const screenPermission: PermissionDescriptor = {
 
   fixUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
   title: "Screen Recording Required",
-  body: "PowerNap needs Screen Recording permission to observe your workflow.",
+  body: "Tada needs Screen Recording permission to observe your workflow.",
   steps: [
     "Open System Settings → Privacy & Security → Screen Recording",
-    'Toggle on "PowerNap"',
-    "Restart PowerNap if prompted",
+    'Toggle on "Tada"',
+    "Restart Tada if prompted",
   ],
 };
 
@@ -120,11 +120,11 @@ const notificationsPermission: PermissionDescriptor = {
 
   fixUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
   title: "Full Disk Access Required",
-  body: "PowerNap needs Full Disk Access to read notifications, files, and browser data.",
+  body: "Tada needs Full Disk Access to read notifications, files, and browser data.",
   steps: [
     "Open System Settings → Privacy & Security → Full Disk Access",
     'Click the "+" button',
-    'Select "PowerNap"',
+    'Select "Tada"',
     "Toggle the switch on",
   ],
 };
@@ -147,10 +147,10 @@ const accessibilityPermission: PermissionDescriptor = {
 
   fixUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
   title: "Accessibility Required",
-  body: "PowerNap needs Accessibility permission for Tab autocomplete (Tabracadabra).",
+  body: "Tada needs Accessibility permission for Tab autocomplete (Tabracadabra).",
   steps: [
     "Open System Settings → Privacy & Security → Accessibility",
-    'Click the "+" button and select "PowerNap"',
+    'Click the "+" button and select "Tada"',
     "Toggle the switch on",
   ],
 };
@@ -182,11 +182,11 @@ const browserCookiesPermission: PermissionDescriptor = {
 
   fixUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
   title: "Full Disk Access Required",
-  body: "PowerNap needs Full Disk Access to read Chrome cookies for web browsing.",
+  body: "Tada needs Full Disk Access to read Chrome cookies for web browsing.",
   steps: [
     "Open System Settings → Privacy & Security → Full Disk Access",
     'Click the "+" button',
-    'Select "PowerNap"',
+    'Select "Tada"',
     "Toggle the switch on",
   ],
 };

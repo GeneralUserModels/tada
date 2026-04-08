@@ -78,7 +78,7 @@ export function Onboarding() {
   useEffect(() => {
     if (step !== 2) return;
     async function checkScreen() {
-      const status = await window.powernap.checkScreenPermission();
+      const status = await window.tada.checkScreenPermission();
       setScreenGranted(status === "granted");
     }
     checkScreen();
@@ -90,7 +90,7 @@ export function Onboarding() {
       const { granted: fs } = await checkFilesystemPermission();
       setFsAvailable(fs);
       if (fs) setFsEnabled(true);
-      const accOk = await window.powernap.checkConnectorPermission("accessibility");
+      const accOk = await window.tada.checkConnectorPermission("accessibility");
       setAccessibilityGranted(accOk);
       const { granted: cookiesOk } = await checkBrowserCookiesPermission();
       setBrowserCookiesGranted(cookiesOk);
@@ -159,7 +159,7 @@ export function Onboarding() {
 
     await updateSettings(settings);
     await completeOnboarding();
-    window.powernap.onboardingComplete();
+    window.tada.onboardingComplete();
   };
 
   return (
@@ -199,7 +199,7 @@ export function Onboarding() {
                 </linearGradient>
               </defs>
             </svg>
-            <span>powerNAP</span>
+            <span>Tada</span>
           </div>
           <p className="welcome-subtitle">A few quick steps to get you up and running. This only takes a minute.</p>
           <div className="glass-card">
@@ -208,7 +208,7 @@ export function Onboarding() {
                 <div className="wf-icon">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
                 </div>
-                <span>Grant screen recording permission so PowerNap can observe your workflow</span>
+                <span>Grant screen recording permission so Tada can observe your workflow</span>
               </div>
               <div className="welcome-feature">
                 <div className="wf-icon">
@@ -273,7 +273,7 @@ export function Onboarding() {
             <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M6 2v3H3v6h3v3h4v-3h3V5h-3V2H6z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
           </div>
           <div className="page-title">Connectors</div>
-          <p className="page-desc">Choose which data sources PowerNap can access to learn your patterns.</p>
+          <p className="page-desc">Choose which data sources Tada can access to learn your patterns.</p>
           <div className="glass-card" style={{ padding: 16 }}>
             <div className="connector-list">
               {/* Screen Recording */}

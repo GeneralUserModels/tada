@@ -16,7 +16,7 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 MAX_RESULTS = 100
 
 
-mcp = FastMCP("powernap-outlook-email")
+mcp = FastMCP("tada-outlook-email")
 
 
 @mcp.tool()

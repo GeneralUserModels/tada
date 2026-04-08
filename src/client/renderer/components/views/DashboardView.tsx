@@ -26,8 +26,8 @@ export function DashboardView() {
 
   const handleGenerate = async () => {
     dispatch({ type: "PREDICTION_REQUESTED" });
-    await window.powernap.startInference();
-    await window.powernap.requestPrediction();
+    await window.tada.startInference();
+    await window.tada.requestPrediction();
   };
 
   return (

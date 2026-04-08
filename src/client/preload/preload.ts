@@ -9,7 +9,7 @@ ipcRenderer.once("server:ready", (_e, data: { url: string }) => {
   serverReadyCache = data;
 });
 
-contextBridge.exposeInMainWorld("powernap", {
+contextBridge.exposeInMainWorld("tada", {
   // App lifecycle
   onServerReady: (cb: (data: { url: string }) => void) => {
     if (serverReadyCache) {

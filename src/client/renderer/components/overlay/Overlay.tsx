@@ -25,22 +25,22 @@ export function Overlay() {
   useEffect(() => {
     if (!overlayRef.current) return;
     const height = Math.max(80, Math.min(500, overlayRef.current.scrollHeight + 8));
-    window.powernap.resizeOverlay(height);
+    window.tada.resizeOverlay(height);
   });
 
   useEffect(() => {
     if (registered.current) return;
     registered.current = true;
 
-    window.powernap.onOverlayWaiting(() => {
+    window.tada.onOverlayWaiting(() => {
       setState({ status: "waiting", actions: [] });
     });
 
-    window.powernap.onOverlayFlushing(() => {
+    window.tada.onOverlayFlushing(() => {
       setState({ status: "flushing", actions: [] });
     });
 
-    window.powernap.onOverlayPrediction((data) => {
+    window.tada.onOverlayPrediction((data) => {
       if (data.error || !data.actions) {
         setState({ status: "waiting", actions: [] });
         return;

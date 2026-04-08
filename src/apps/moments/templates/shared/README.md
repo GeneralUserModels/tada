@@ -1,4 +1,4 @@
-# PowerNap Moments — Shared Component Library
+# Tada Moments — Shared Component Library
 
 React 18 component library for building moment interfaces. No JSX or build step required — uses `React.createElement` via the `h` shorthand.
 

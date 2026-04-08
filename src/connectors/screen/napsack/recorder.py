@@ -16,10 +16,10 @@ DEFAULT_TARGET_DPI = 100
 
 ## A bit unfortunate that we have some tabracadabra dependenceis here... 
 # Flag file created by tabracadabra to suppress aggregation during active streaming
-TABRACADABRA_SUPPRESS_FLAG = os.path.join(tempfile.gettempdir(), "powernap_tab_active")
+TABRACADABRA_SUPPRESS_FLAG = os.path.join(tempfile.gettempdir(), "tada_tab_active")
 
 # Latest frame from napsack screenshot loop (atomic PNG) for Tabracadabra — same process as screen MCP only
-TABRACADABRA_LATEST_FRAME_PNG = os.path.join(tempfile.gettempdir(), "powernap_tab_latest.png")
+TABRACADABRA_LATEST_FRAME_PNG = os.path.join(tempfile.gettempdir(), "tada_tab_latest.png")
 
 # Default event types to disable for online recording (mouse move is too noisy)
 DEFAULT_DISABLE = ["move"]
@@ -69,7 +69,7 @@ class OnlineRecorder(ScreenRecorder):
             super().__init__(*args, **kwargs)
         self.aggregation_queue = Queue(maxsize=queue_maxsize)
 
-        # always redirect session_dir into powernap/logs (or custom log_dir)
+        # always redirect session_dir into logs (or custom log_dir)
         base = Path(log_dir) if log_dir else self.DEFAULT_LOG_DIR
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.session_dir = base / f"session_{timestamp}"
