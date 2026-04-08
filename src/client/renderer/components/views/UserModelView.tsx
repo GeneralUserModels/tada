@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { useTraining } from "../../hooks/useTraining";
 import { requestPrediction } from "../../api/client";

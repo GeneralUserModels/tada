@@ -1,3 +1,4 @@
+import React from "react";
 import { createRoot } from "react-dom/client";
 import { Onboarding } from "./components/onboarding/Onboarding";
 import { setServerUrl } from "./api/client";

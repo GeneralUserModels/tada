@@ -7,6 +7,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from server.feature_flags import is_enabled
+
 logger = logging.getLogger(__name__)
 
 
@@ -100,7 +102,7 @@ async def run_moments_discovery(state) -> None:
                 logger.info("Next discovery run at %s (in %.0fs)", next_run, delay)
                 await asyncio.sleep(delay)
 
-            if not state.config.moments_enabled:
+            if not (is_enabled(state.config, "moments") and state.config.moments_enabled):
                 continue
 
             cfg = state.config

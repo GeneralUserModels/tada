@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.state import ServerState
+from server.feature_flags import is_enabled
 from server.routes import settings, status, events
 from server.routes.auth import router as auth_router, refresh_expired_tokens, run_token_refresh
 from server.routes.onboarding import router as onboarding_router
@@ -51,10 +52,11 @@ async def start_services(state: ServerState) -> None:
     state.token_refresh_task = asyncio.create_task(run_token_refresh(state.config))
 
     # Moments services
-    from apps.moments.scheduler import run_moments_scheduler
-    from apps.moments.discovery import run_moments_discovery
-    state.moments_scheduler_task = asyncio.create_task(run_moments_scheduler(state))
-    state.moments_discovery_task = asyncio.create_task(run_moments_discovery(state))
+    if is_enabled(state.config, "moments") and state.config.moments_enabled:
+        from apps.moments.scheduler import run_moments_scheduler
+        from apps.moments.discovery import run_moments_discovery
+        state.moments_scheduler_task = asyncio.create_task(run_moments_scheduler(state))
+        state.moments_discovery_task = asyncio.create_task(run_moments_discovery(state))
 
     # Initialize predictor and start training loop
     await init_model(state)
@@ -62,7 +64,7 @@ async def start_services(state: ServerState) -> None:
     logger.info("Training service started (%s mode)", state.config.model_type)
 
     # Tabracadabra event tap service (macOS only)
-    if sys.platform == "darwin" and state.config.tabracadabra_enabled:
+    if sys.platform == "darwin" and is_enabled(state.config, "tabracadabra") and state.config.tabracadabra_enabled:
         state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
         try:
             from apps.tabracadabra.main import TabracadabraService, load_prompt

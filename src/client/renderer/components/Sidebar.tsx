@@ -1,4 +1,6 @@
+import React from "react";
 import { ActiveView } from "../context/AppContext";
+import { useFeatureFlags, getFlag } from "../featureFlags";
 
 interface Props {
   activeView: ActiveView;
@@ -48,7 +50,19 @@ const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
   },
 ];
 
+const FLAG_FOR_VIEW: Partial<Record<ActiveView, string>> = {
+  tada: "moments",
+};
+
 export function Sidebar({ activeView, connected, onNavigate }: Props) {
+  const featureFlags = useFeatureFlags();
+
+  const visibleItems = navItems.filter(({ view }) => {
+    const flag = FLAG_FOR_VIEW[view];
+    if (flag && !getFlag(featureFlags, flag)) return false;
+    return true;
+  });
+
   return (
     <nav id="sidebar">
       <div className="sidebar-brand">
@@ -72,7 +86,7 @@ export function Sidebar({ activeView, connected, onNavigate }: Props) {
       </div>
 
       <div className="sidebar-nav">
-        {navItems.map(({ view, label, icon }) => (
+        {visibleItems.map(({ view, label, icon }) => (
           <button
             key={view}
             className={`nav-item${activeView === view ? " active" : ""}`}

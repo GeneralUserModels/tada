@@ -12,6 +12,7 @@ from litellm import completion as litellm_completion
 from pydantic import BaseModel
 
 from connectors.mcp import MCPConnector
+from server.feature_flags import is_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -322,6 +323,12 @@ async def run_context_logging_service(state) -> None:
                 exclude_from_serialization=mcp_def.exclude_from_serialization,
             ),
         ))
+
+    # Drop connectors whose feature flag is disabled
+    connector_configs = [
+        c for c in connector_configs
+        if is_enabled(config, f"connector_{c.name}")
+    ]
 
     # Expose connectors on state so routes can pause/resume them
     state.connectors = {c.name: c.connector for c in connector_configs}
