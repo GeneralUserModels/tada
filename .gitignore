@@ -17,6 +17,7 @@ data/
 
 # Onboarding config (dev mode)
 tada-config.json
+tada-config-backup.json
 .onboarding-complete
 
 # Electron / DMG build

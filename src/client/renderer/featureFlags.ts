@@ -1,27 +1,11 @@
 import { useAppContext } from "./context/AppContext";
 
-export const FEATURE_FLAG_DEFAULTS: Record<string, boolean> = {
-  moments: true,
-  tabracadabra: true,
-  tinker: false,
-  connector_screen: true,
-  connector_gmail: true,
-  connector_calendar: true,
-  connector_outlook_email: true,
-  connector_outlook_calendar: true,
-  connector_notifications: true,
-  connector_filesystem: true,
-  permission_screen: true,
-  permission_notifications: true,
-  permission_accessibility: true,
-  permission_browser_cookies: true,
-};
-
 export function getFlag(
   flags: Record<string, boolean> | undefined,
   name: string,
 ): boolean {
-  return flags?.[name] ?? FEATURE_FLAG_DEFAULTS[name] ?? true;
+  // Frontend does not define fallback defaults; backend is source-of-truth.
+  return flags?.[name] === true;
 }
 
 export function useFeatureFlag(name: string): boolean {

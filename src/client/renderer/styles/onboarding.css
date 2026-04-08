@@ -194,6 +194,37 @@ button, input, select, textarea, a {
   box-shadow: 0 0 0 3px rgba(var(--sage-rgb), 0.08);
 }
 
+.field textarea {
+  padding: 9px 12px;
+  background: rgba(255,255,255,0.6);
+  border: 1px solid rgba(var(--sage-rgb), 0.12);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+  width: 100%;
+  resize: none;
+}
+
+.field textarea::placeholder { color: var(--text-tertiary); }
+.field textarea:focus {
+  outline: none;
+  border-color: rgba(var(--sage-rgb), 0.4);
+  box-shadow: 0 0 0 3px rgba(var(--sage-rgb), 0.08);
+}
+
+.tutorial-box {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.tutorial-hint.done {
+  color: var(--active-green);
+  font-weight: 600;
+}
+
 .perm-row {
   display: flex;
   align-items: center;
