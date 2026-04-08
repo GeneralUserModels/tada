@@ -16,7 +16,7 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 MAX_RESULTS = 20
 
 
-mcp = FastMCP("powernap-outlook-calendar")
+mcp = FastMCP("tada-outlook-calendar")
 
 
 @mcp.tool()

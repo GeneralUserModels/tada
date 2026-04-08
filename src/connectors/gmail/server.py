@@ -37,7 +37,7 @@ def _extract_body(payload: dict) -> str:
     return ""
 
 
-mcp = FastMCP("powernap-gmail")
+mcp = FastMCP("tada-gmail")
 
 
 @mcp.tool()

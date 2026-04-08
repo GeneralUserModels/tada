@@ -70,7 +70,7 @@ async def lifespan(_server: FastMCP) -> AsyncIterator[None]:  # type: ignore[typ
     _observer.join()
 
 
-mcp = FastMCP("powernap-filesystem", lifespan=lifespan)
+mcp = FastMCP("tada-filesystem", lifespan=lifespan)
 
 
 @mcp._mcp_server.subscribe_resource()

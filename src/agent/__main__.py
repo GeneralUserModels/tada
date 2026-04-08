@@ -23,10 +23,10 @@ SLASH_COMMANDS = {
 
 
 def main():
-    parser = argparse.ArgumentParser(description="PowerNap agent")
+    parser = argparse.ArgumentParser(description="Tada agent")
     parser.add_argument("query", nargs="*", help="One-shot query (omit for REPL)")
-    parser.add_argument("-m", "--model", default=os.environ["POWERNAP_AGENT_MODEL"])
-    parser.add_argument("--data-dir", default=os.environ.get("POWERNAP_DATA_DIR", "."))
+    parser.add_argument("-m", "--model", default=os.environ["TADA_AGENT_MODEL"])
+    parser.add_argument("--data-dir", default=os.environ.get("TADA_DATA_DIR", "."))
     args = parser.parse_args()
 
     model = args.model
@@ -42,7 +42,7 @@ def main():
         return
 
     # REPL
-    print(f"PowerNap agent  model={model}")
+    print(f"Tada agent  model={model}")
     print(f"Commands: {', '.join(SLASH_COMMANDS)}  |  q to quit\n")
 
     while True:

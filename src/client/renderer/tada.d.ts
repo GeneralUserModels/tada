@@ -1,4 +1,4 @@
-/** Global type for the powernap context bridge exposed by preload.ts */
+/** Global type for the tada context bridge exposed by preload.ts */
 
 declare global {
 
@@ -83,7 +83,7 @@ interface MomentResult {
   frequency_override: string | null;
 }
 
-interface PowerNapAPI {
+interface TadaAPI {
   // App lifecycle
   onServerReady: (cb: (data: { url: string }) => void) => void;
   onPredictionRequested: (cb: () => void) => void;
@@ -113,12 +113,9 @@ interface PowerNapAPI {
   getServerUrl: () => Promise<string>;
   onMomentCompleted: (cb: (data: MomentResult) => void) => void;
 
-  // Auto-update
-  onUpdateDownloaded: (cb: (data: UpdateData) => void) => void;
-  onUpdateError: (cb: (msg: string) => void) => void;
-  installNow: () => Promise<unknown>;
-  installOnNextLaunch: () => Promise<unknown>;
-  dismissUpdate: () => Promise<unknown>;
+  // Update check
+  onUpdateAvailable: (cb: (data: UpdateData) => void) => void;
+  dismissUpdate: () => void;
   checkForUpdates: () => Promise<unknown>;
 
   // Bootstrap (setup window)
@@ -130,7 +127,7 @@ interface PowerNapAPI {
 }
 
   interface Window {
-    powernap: PowerNapAPI;
+    tada: TadaAPI;
   }
 
 } // end declare global

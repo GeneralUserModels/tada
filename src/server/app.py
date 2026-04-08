@@ -70,7 +70,7 @@ async def start_services(state: ServerState) -> None:
             config = {
                 "model": state.config.tabracadabra_model,
                 "api_key": state.config.resolve_api_key("tabracadabra_api_key"),
-                "powernap_base_url": f"http://localhost:{os.environ.get('POWERNAP_PORT', '8000')}",
+                "tada_base_url": f"http://localhost:{os.environ.get('TADA_PORT', '8000')}",
             }
             service = TabracadabraService(config=config, prompt_text=load_prompt())
             service.start()
@@ -78,7 +78,7 @@ async def start_services(state: ServerState) -> None:
         except Exception:
             logger.warning("Tabracadabra service failed to start", exc_info=True)
 
-    logger.info("PowerNap server started")
+    logger.info("Tada server started")
 
 
 @asynccontextmanager
@@ -136,11 +136,11 @@ async def lifespan(app: FastAPI):
         return_exceptions=True,
     )
 
-    logger.info("PowerNap server stopped")
+    logger.info("Tada server stopped")
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="PowerNap Server", lifespan=lifespan)
+    app = FastAPI(title="Tada Server", lifespan=lifespan)
 
     # CORS — allow Electron client from any origin
     app.add_middleware(

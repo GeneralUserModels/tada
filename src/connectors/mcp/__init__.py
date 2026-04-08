@@ -1,4 +1,4 @@
-"""MCPConnector — wraps any MCP server (local or community) as a powernap Connector."""
+"""MCPConnector — wraps any MCP server (local or community) as a Tada Connector."""
 
 from __future__ import annotations
 

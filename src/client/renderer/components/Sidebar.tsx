@@ -65,7 +65,7 @@ export function Sidebar({ activeView, connected, onNavigate }: Props) {
             </defs>
           </svg>
         </div>
-        <span className="brand-name">powerNAP</span>
+        <span className="brand-name">Tada</span>
         <div id="connection-status" className={`conn-badge ${connected ? "connected" : "disconnected"}`}>
           <span className="conn-dot"></span>
         </div>
