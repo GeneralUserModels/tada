@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 from pydantic import create_model
 
 from server.config import ServerConfig, SETTINGS_API_FIELDS
+from server.feature_flags import is_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ async def update_settings(update: SettingsUpdate, request: Request):
     cfg.save()
 
     # Live stop/start tabracadabra service when toggled
-    if "tabracadabra_enabled" in updated and sys.platform == "darwin":
+    if "tabracadabra_enabled" in updated and sys.platform == "darwin" and is_enabled(cfg, "tabracadabra"):
         if cfg.tabracadabra_enabled:
             # Start if not already running
             if state.tabracadabra_service is None:

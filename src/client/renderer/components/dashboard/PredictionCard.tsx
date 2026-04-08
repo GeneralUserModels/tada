@@ -1,3 +1,5 @@
+import React from "react";
+
 interface Props {
   prediction: { actions?: string; error?: string; timestamp?: string } | null;
 }

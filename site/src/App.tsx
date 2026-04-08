@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import React, { type ReactNode, useEffect, useState } from "react";
 
 const REPO = "GeneralUserModels/tada";
 const RELEASE_URL = `https://github.com/${REPO}/releases/latest`;

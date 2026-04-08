@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AdvancedLLMSection } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 import { PermissionModal } from "../modals/PermissionModal";
+import { getFlag } from "../../featureFlags";
 import {
   startGoogleSignIn,
   getGoogleUser,
@@ -10,6 +11,7 @@ import {
   checkNotificationsPermission,
   checkFilesystemPermission,
   checkBrowserCookiesPermission,
+  getSettings,
   updateSettings,
   completeOnboarding,
 } from "../../api/client";
@@ -36,6 +38,10 @@ export function Onboarding() {
   const [step, setStep] = useState(0);
   const [permModal, setPermModal] = useState<{ name: string; onGranted: () => void } | null>(null);
 
+  // Feature flags (loaded from server settings)
+  const [ff, setFf] = useState<Record<string, boolean> | undefined>(undefined);
+  const flag = (name: string) => getFlag(ff, name);
+
   // Google login state
   const [googleUser, setGoogleUser] = useState<{ name: string; email: string } | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -55,8 +61,12 @@ export function Onboarding() {
   const [connectingGoogle, setConnectingGoogle] = useState<string | null>(null);
   const [connectingOutlook, setConnectingOutlook] = useState(false);
 
-  // Restore saved Google user on mount; if already signed in, resume at step 2
+  // Load feature flags + restore saved Google user on mount
   useEffect(() => {
+    getSettings()
+      .then((s) => setFf((s as Record<string, unknown>).feature_flags as Record<string, boolean> | undefined))
+      .catch(() => {});
+
     getGoogleUser().then(user => {
       if (user) {
         setGoogleUser(user);
@@ -277,6 +287,7 @@ export function Onboarding() {
           <div className="glass-card" style={{ padding: 16 }}>
             <div className="connector-list">
               {/* Screen Recording */}
+              {flag("permission_screen") && (
               <div className="connector-row">
                 <div className="connector-icon">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
@@ -292,8 +303,10 @@ export function Onboarding() {
                   }
                 </div>
               </div>
+              )}
 
               {/* Google (Calendar + Gmail) */}
+              {(flag("connector_gmail") || flag("connector_calendar")) && (
               <div className="connector-row">
                 <div className="connector-icon">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.3"/><path d="M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
@@ -309,8 +322,10 @@ export function Onboarding() {
                   }
                 </div>
               </div>
+              )}
 
               {/* Outlook (shared auth for calendar + email) */}
+              {(flag("connector_outlook_email") || flag("connector_outlook_calendar")) && (
               <div className="connector-row">
                 <div className="connector-icon">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.3"/><path d="M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
@@ -326,8 +341,10 @@ export function Onboarding() {
                   }
                 </div>
               </div>
+              )}
 
               {/* Disk Access (Notifications + Filesystem) */}
+              {flag("permission_notifications") && (
               <div className="connector-row">
                 <div className="connector-icon">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
@@ -343,8 +360,10 @@ export function Onboarding() {
                   }
                 </div>
               </div>
+              )}
 
               {/* Browser Cookies */}
+              {flag("permission_browser_cookies") && (
               <div className="connector-row">
                 <div className="connector-icon">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M2 8h12M8 2c-2 2-2 10 0 12M8 2c2 2 2 10 0 12" stroke="currentColor" strokeWidth="1.3"/></svg>
@@ -360,8 +379,10 @@ export function Onboarding() {
                   }
                 </div>
               </div>
+              )}
 
               {/* Accessibility (Tabracadabra) */}
+              {flag("permission_accessibility") && (
               <div className="connector-row">
                 <div className="connector-icon">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="5.5" r="1" fill="currentColor"/><path d="M5.5 7.5h5M8 7.5v4M6.5 11.5L8 9.5l1.5 2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -377,11 +398,16 @@ export function Onboarding() {
                   }
                 </div>
               </div>
+              )}
             </div>
           </div>
           <div className="btn-row">
             <button className="btn btn-ghost" onClick={() => setStep(1)}>Back</button>
-            <button className="btn btn-primary" disabled={!screenGranted || !browserCookiesGranted || !accessibilityGranted} onClick={() => setStep(3)}>Continue</button>
+            <button className="btn btn-primary" disabled={
+              (flag("permission_screen") && !screenGranted)
+              || (flag("permission_browser_cookies") && !browserCookiesGranted)
+              || (flag("permission_accessibility") && !accessibilityGranted)
+            } onClick={() => setStep(3)}>Continue</button>
           </div>
         </div>
       )}
@@ -414,6 +440,7 @@ export function Onboarding() {
               </div>
             </div>
             <AdvancedLLMSection values={advancedValues} setValues={setAdvancedValues} />
+            {flag("tinker") && (
             <div className="model-row">
               <span className="model-row-label">Tinker <span className="optional-tag">optional</span></span>
               <div className="model-row-fields">
@@ -429,6 +456,7 @@ export function Onboarding() {
                 </div>
               </div>
             </div>
+            )}
             <div className="model-row">
               <span className="model-row-label">W&amp;B <span className="optional-tag">optional</span></span>
               <div className="model-row-fields">
@@ -442,7 +470,7 @@ export function Onboarding() {
           </div>
           <div className="btn-row">
             <button className="btn btn-ghost" onClick={() => setStep(2)}>Back</button>
-            <button className="btn btn-primary" disabled={!model.trim() || !geminiKey.trim() || !!tinkerError} onClick={handleSubmit}>Finish Setup</button>
+            <button className="btn btn-primary" disabled={!model.trim() || !geminiKey.trim() || (flag("tinker") && !!tinkerError)} onClick={handleSubmit}>Finish Setup</button>
           </div>
         </div>
       )}

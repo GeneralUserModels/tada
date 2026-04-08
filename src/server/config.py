@@ -23,6 +23,7 @@ SETTINGS_API_FIELDS: frozenset[str] = frozenset({
     "learning_rate", "batch_size", "past_len", "future_len", "loss_mode",
     "moments_enabled", "moments_agent_model", "moments_agent_api_key",
     "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
+    "feature_flags",
 })
 
 # All fields that are user-settable and persisted to disk.
@@ -34,6 +35,7 @@ _PERSISTED_FIELDS = SETTINGS_API_FIELDS | {
     "tada_dir", "moments_agent_model", "moments_agent_api_key", "moments_discovery_schedule", "moments_enabled",
     "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
     "agent_model", "agent_api_key",
+    "feature_flags",
 }
 
 
@@ -118,7 +120,7 @@ class ServerConfig(BaseModel):
     predict_every_n_seconds: int = 10
 
     # Tabracadabra
-    tabracadabra_enabled: bool = False
+    tabracadabra_enabled: bool = True
     tabracadabra_model: str = DEFAULT_LLM_MODEL
     tabracadabra_api_key: str = ""
 
@@ -168,6 +170,9 @@ class ServerConfig(BaseModel):
 
     # Onboarding completion flag (set by POST /api/onboarding/complete)
     onboarding_complete: bool = False
+
+    # Feature flags (deployment-level gates for entire features/connectors/permissions)
+    feature_flags: dict[str, bool] = Field(default_factory=dict)
 
     def resolve_api_key(self, key: str) -> str | None:
         """Return the feature-specific API key, falling back to default_llm_api_key."""
