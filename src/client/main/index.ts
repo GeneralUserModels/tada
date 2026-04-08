@@ -354,9 +354,6 @@ async function runBootstrap(): Promise<void> {
 // ── App lifecycle ────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-  if (isDev()) {
-    app.dock?.setIcon(path.join(__dirname, "..", "..", "src", "client", "build", "icon.icns"));
-  }
   app.dock?.show();
   ensureConfigDefaults();
   setupIpc();
