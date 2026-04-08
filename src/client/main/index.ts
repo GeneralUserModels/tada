@@ -6,6 +6,7 @@ import {
   globalShortcut,
   ipcMain,
   screen,
+  shell,
 } from "electron";
 import * as fs from "fs";
 import * as path from "path";
@@ -195,6 +196,11 @@ function createDashboard() {
     dashboardWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
   }
 
+  dashboardWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+
   dashboardWindow.on("close", (event) => {
     if (!isQuitting) {
       event.preventDefault();
@@ -379,7 +385,7 @@ app.whenReady().then(async () => {
   createOverlay();
   setupSseForwarding();
 
-  if (!isDev() && dashboardWindow) {
+  if (dashboardWindow) {
     initUpdateChecker(dashboardWindow);
   }
 

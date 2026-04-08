@@ -6,7 +6,7 @@ import { IPC } from "../ipc";
 let mainWindow: BrowserWindow | null = null;
 
 const GITHUB_OWNER = "GeneralUserModels";
-const GITHUB_REPO = "tada-release";
+const GITHUB_REPO = "tada";
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 interface GitHubRelease {
@@ -27,6 +27,7 @@ function fetchLatestRelease(): Promise<string | null> {
     let body = "";
     request.on("response", (response) => {
       if (response.statusCode !== 200) {
+        console.log(`[updater] GitHub API returned ${response.statusCode}`);
         resolve(null);
         response.on("data", () => {});
         return;
@@ -41,16 +42,17 @@ function fetchLatestRelease(): Promise<string | null> {
         }
       });
     });
-    request.on("error", () => resolve(null));
+    request.on("error", (err) => { console.log(`[updater] request error:`, err); resolve(null); });
     request.end();
   });
 }
 
 export async function checkForUpdates(): Promise<void> {
-  const latest = await fetchLatestRelease();
+  const latest = process.env.TADA_LATEST_OVERRIDE ?? await fetchLatestRelease();
+  const current = process.env.TADA_VERSION_OVERRIDE ?? app.getVersion();
+  console.log(`[updater] latest=${latest}, current=${current}`);
   if (!latest) return;
 
-  const current = app.getVersion();
   if (latest !== current) {
     console.log(`[updater] new version available: ${latest} (current: ${current})`);
     mainWindow?.webContents.send(IPC.UPDATE_AVAILABLE, { version: latest });

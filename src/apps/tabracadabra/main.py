@@ -34,6 +34,8 @@ JOINER = "\u2060"  # WORD JOINER (plays nice with Backspace)
 SPINNER_FRAMES_HOLDING = ["◐", "◓", "◑", "◒"]
 SPINNER_PROGRESS_DURATION_S = 9.0
 SPINNER_TICK_INTERVAL_S = 0.12
+# Give macOS a brief chance to apply posted backspaces before first content.
+POST_SPINNER_DRAIN_S = 0.04
 
 # Keycodes
 KC_TAB = 48       # 0x30
@@ -468,6 +470,12 @@ class TabracadabraService:
             self._last_char_space = False
 
     @staticmethod
+    def _drain_posted_key_events():
+        """Wait briefly so asynchronous backspaces are applied before first content."""
+        if POST_SPINNER_DRAIN_S > 0:
+            time.sleep(POST_SPINNER_DRAIN_S)
+
+    @staticmethod
     def _log_usage(usage):
         details = getattr(usage, "prompt_tokens_details", None)
         cached = getattr(details, "cached_tokens", None) if details else None
@@ -525,6 +533,7 @@ class TabracadabraService:
                     if t and t.is_alive():
                         t.join()
                     self._cleanup_spinner_if_present()
+                    self._drain_posted_key_events()
                     self._content_started = True
                 self._safe_type_piece(piece)
         finally:

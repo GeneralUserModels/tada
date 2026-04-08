@@ -1,6 +1,6 @@
 import React from "react";
 
-const DOWNLOAD_URL = "https://github.com/GeneralUserModels/tada-release/releases/latest";
+const DOWNLOAD_URL = "https://github.com/GeneralUserModels/tada/releases/latest";
 
 interface Props {
   version: string;
@@ -8,6 +8,11 @@ interface Props {
 }
 
 export function UpdateBanner({ version, onDismiss }: Props) {
+  const openDownload = (e: React.MouseEvent) => {
+    e.preventDefault();
+    window.open(DOWNLOAD_URL);
+  };
+
   return (
     <div className="update-banner">
       <span className="update-banner-text">
@@ -16,8 +21,7 @@ export function UpdateBanner({ version, onDismiss }: Props) {
       <a
         className="pill-btn pill-start update-banner-link"
         href={DOWNLOAD_URL}
-        target="_blank"
-        rel="noopener noreferrer"
+        onClick={openDownload}
       >
         Download
       </a>
