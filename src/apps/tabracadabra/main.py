@@ -13,7 +13,10 @@ import urllib.error
 from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
+import httpx
+import litellm
 from litellm import completion as litellm_completion
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter, before_sleep_log
 
 logger = logging.getLogger(__name__)
 
@@ -468,6 +471,22 @@ class TabracadabraService:
             self._last_char_space = False
 
     @staticmethod
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential_jitter(initial=1, max=20, jitter=2),
+        retry=retry_if_exception_type((
+            litellm.RateLimitError,
+            litellm.APIConnectionError,
+            litellm.InternalServerError,
+            litellm.Timeout,
+            httpx.ReadTimeout,
+        )),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+    )
+    def _completion_with_retry(**kwargs):
+        return litellm_completion(**kwargs)
+
+    @staticmethod
     def _log_usage(usage):
         details = getattr(usage, "prompt_tokens_details", None)
         cached = getattr(details, "cached_tokens", None) if details else None
@@ -495,7 +514,7 @@ class TabracadabraService:
         logger.info("[llm] tabracadabra")
         t_llm = time.perf_counter()
         try:
-            stream = litellm_completion(
+            stream = self._completion_with_retry(
                 model=self._model,
                 messages=messages,
                 stream=True,
@@ -532,6 +551,13 @@ class TabracadabraService:
                 f"[tabracadabra] timing llm stream_total_ms={(time.perf_counter() - t_llm) * 1000:.1f}",
                 flush=True,
             )
+            if not first_piece_seen_local:
+                first_piece_event.set()
+                t = self._spinner_thread
+                if t and t.is_alive():
+                    t.join()
+                self._cleanup_spinner_if_present()
+                self._clear_suppress_flag()
             first_piece_event.set()
             self._finish_session()
 
