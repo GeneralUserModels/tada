@@ -1,6 +1,6 @@
 {
   "name": "tada",
-  "version": "0.0.1-alpha",
+  "version": "0.0.2-alpha",
   "description": "Tada — predict what you'll do next",
   "author": "Tada",
   "main": "dist/main/index.js",
@@ -47,6 +47,7 @@
       "package.json"
     ],
     "mac": {
+      "icon": "src/client/build/icon.icns",
       "category": "public.app-category.productivity",
       "target": [
         "dmg",
@@ -99,7 +100,7 @@
     "publish": {
       "provider": "github",
       "owner": "GeneralUserModels",
-      "repo": "tada-release"
+      "repo": "tada"
     },
     "dmg": {
       "title": "Tada",
