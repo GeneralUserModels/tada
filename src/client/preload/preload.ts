@@ -9,7 +9,7 @@ ipcRenderer.once("server:ready", (_e, data: { url: string }) => {
   serverReadyCache = data;
 });
 
-contextBridge.exposeInMainWorld("powernap", {
+contextBridge.exposeInMainWorld("tada", {
   // App lifecycle
   onServerReady: (cb: (data: { url: string }) => void) => {
     if (serverReadyCache) {
@@ -49,14 +49,10 @@ contextBridge.exposeInMainWorld("powernap", {
   requestConnectorPermission: (name: string) => ipcRenderer.invoke("connector:request-permission", name),
   checkConnectorPermission: (name: string) => ipcRenderer.invoke("connector:check-permission", name),
 
-  // Auto-update
-  onUpdateDownloaded: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("update:downloaded", (_e, data) => cb(data)),
-  onUpdateError: (cb: (msg: string) => void) =>
-    ipcRenderer.on("update:error", (_e, msg) => cb(msg)),
-  installNow: () => ipcRenderer.invoke("update:install-now"),
-  installOnNextLaunch: () => ipcRenderer.invoke("update:install-on-quit"),
-  dismissUpdate: () => ipcRenderer.invoke("update:dismiss"),
+  // Update check
+  onUpdateAvailable: (cb: (data: { version: string }) => void) =>
+    ipcRenderer.on("update:available", (_e, data) => cb(data)),
+  dismissUpdate: () => ipcRenderer.send("update:dismiss"),
   checkForUpdates: () => ipcRenderer.invoke("update:check"),
 
   // Moments (Ta-Da)

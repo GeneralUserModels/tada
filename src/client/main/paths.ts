@@ -43,9 +43,9 @@ export function getRgPath(): string {
 }
 
 export function getOutlookTokenPath(): string {
-  return path.join(os.homedir(), ".config", "powernap", "outlook-token.json");
+  return path.join(os.homedir(), ".config", "tada", "outlook-token.json");
 }
 
 export function getGoogleTokenPath(): string {
-  return path.join(os.homedir(), ".config", "powernap", "google-token.json");
+  return path.join(os.homedir(), ".config", "tada", "google-token.json");
 }

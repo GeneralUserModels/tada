@@ -1,4 +1,4 @@
-/* PowerNap — macOS Tahoe / Liquid Greenhouse */
+/* Tada — macOS Tahoe / Liquid Greenhouse */
 
 @font-face {
   font-family: 'Tahoe';
@@ -213,53 +213,36 @@ body {
   color: var(--sage);
 }
 
-/* ── Update modal ─────────────────────────────────────────── */
+/* ── Update banner ────────────────────────────────────────── */
 
-.update-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+.update-banner {
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 1000;
+  gap: 10px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  background: var(--glass);
+  backdrop-filter: blur(30px) saturate(1.3);
+  -webkit-backdrop-filter: blur(30px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
   -webkit-app-region: no-drag;
 }
 
-.update-modal {
-  background: var(--surface);
-  border: 1px solid rgba(var(--sage-rgb), 0.25);
-  border-radius: var(--r-md);
-  padding: 24px 28px;
-  width: 300px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.update-modal-title {
-  font-size: 14px;
-  font-weight: 650;
-  color: var(--text);
-}
-
-.update-modal-message {
+.update-banner-text {
   font-size: 12.5px;
   color: var(--text-secondary);
-  margin-bottom: 8px;
 }
 
-.update-modal-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+.update-banner-link {
+  text-decoration: none;
+  font-size: 12px;
 }
 
-.update-dismiss {
+.update-banner-dismiss {
   background: none;
   border: none;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--text-secondary);
   cursor: pointer;
   padding: 4px 8px;
@@ -268,7 +251,7 @@ body {
   margin-left: auto;
 }
 
-.update-dismiss:hover {
+.update-banner-dismiss:hover {
   background: rgba(var(--sage-rgb), 0.12);
 }
 

@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 
-const REPO = "GeneralUserModels/powernap";
+const REPO = "GeneralUserModels/tada";
 const RELEASE_URL = `https://github.com/${REPO}/releases/latest`;
 
 const SPINNER_FRAMES = ["◐", "◓", "◑", "◒"];

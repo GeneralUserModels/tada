@@ -1,4 +1,4 @@
-/** REST client — thin fetch wrapper for the PowerNap server. */
+/** REST client — thin fetch wrapper for the Tada server. */
 
 export { setServerUrl, getServerUrl } from "../shared/api-core";
 import { request, getServerUrl } from "../shared/api-core";

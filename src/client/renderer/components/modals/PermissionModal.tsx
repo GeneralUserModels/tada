@@ -35,12 +35,12 @@ export function PermissionModal({
     let cancelled = false;
 
     async function init() {
-      const permInfo = await window.powernap.getConnectorPermissionInfo(connectorName);
+      const permInfo = await window.tada.getConnectorPermissionInfo(connectorName);
       if (cancelled || !permInfo) return;
       setInfo(permInfo);
 
       if (permInfo.hasRequest) {
-        const ok = await window.powernap.requestConnectorPermission(connectorName);
+        const ok = await window.tada.requestConnectorPermission(connectorName);
         if (cancelled) return;
         if (ok) {
           handleGranted();
@@ -56,7 +56,7 @@ export function PermissionModal({
   useEffect(() => {
     if (granted) return;
 
-    const poll = checkPermission ?? (() => window.powernap.checkConnectorPermission(connectorName));
+    const poll = checkPermission ?? (() => window.tada.checkConnectorPermission(connectorName));
     const id = setInterval(async () => {
       const ok = await poll();
       if (ok) {
@@ -135,7 +135,7 @@ export function PermissionModal({
           {useClassButtons ? (
             <>
               <button className="btn btn-outline btn-sm" style={{ flex: 1 }}
-                onClick={() => window.powernap.openFdaSettings(connectorName)}>Open Settings</button>
+                onClick={() => window.tada.openFdaSettings(connectorName)}>Open Settings</button>
               <button className="btn btn-ghost btn-sm" onClick={onClose}>Skip</button>
             </>
           ) : (
@@ -147,7 +147,7 @@ export function PermissionModal({
                   background: "rgba(199,234,187,0.2)", fontSize: 11.5,
                   fontWeight: 600, color: "#84B179", cursor: "pointer", fontFamily: "inherit",
                 }}
-                onClick={() => window.powernap.openFdaSettings(connectorName)}
+                onClick={() => window.tada.openFdaSettings(connectorName)}
               >
                 Open Settings
               </button>

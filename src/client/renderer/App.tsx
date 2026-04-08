@@ -4,7 +4,7 @@ import { ConnectorsView } from "./components/views/ConnectorsView";
 import { UserModelView } from "./components/views/UserModelView";
 import { SettingsView } from "./components/views/SettingsView";
 import { TadaView } from "./components/views/TadaView";
-import { UpdateModal } from "./components/modals/UpdateModal";
+import { UpdateBanner } from "./components/UpdateBanner";
 
 export function App() {
   const { state, dispatch } = useAppContext();
@@ -24,7 +24,7 @@ export function App() {
       />
       <main id="content">
         {state.updateVersion && (
-          <UpdateModal
+          <UpdateBanner
             version={state.updateVersion}
             onDismiss={() => dispatch({ type: "UPDATE_DISMISSED" })}
           />

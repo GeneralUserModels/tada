@@ -1,8 +1,8 @@
 {
-  "name": "powernap",
+  "name": "tada",
   "version": "0.0.1-alpha",
-  "description": "PowerNap — predict what you'll do next",
-  "author": "PowerNap",
+  "description": "Tada — predict what you'll do next",
+  "author": "Tada",
   "main": "dist/main/index.js",
   "scripts": {
     "build:main": "tsc -p tsconfig.json",
@@ -12,10 +12,9 @@
     "dev": "node scripts/dev-supervisor.cjs",
     "dist": "npm run build && npx electron-builder --mac --publish never",
     "release": "npm run build && npx electron-builder --mac --publish always",
-    "reset": "rm -f powernap-config.json ~/.config/powernap/google-token.json ~/.config/powernap/outlook-token.json"
+    "reset": "rm -f tada-config.json ~/.config/tada/google-token.json ~/.config/tada/outlook-token.json"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3",
     "eventsource": "^3.0.7",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
@@ -35,8 +34,8 @@
     "wait-on": "^9.0.4"
   },
   "build": {
-    "appId": "com.powernap.app",
-    "productName": "PowerNap",
+    "appId": "com.tada.app",
+    "productName": "Tada",
     "directories": {
       "output": "release"
     },
@@ -55,8 +54,8 @@
       ],
       "notarize": false,
       "extendInfo": {
-        "NSScreenCaptureUsageDescription": "PowerNap needs screen recording to observe your workflow.",
-        "NSAccessibilityUsageDescription": "PowerNap needs accessibility access to track input events."
+        "NSScreenCaptureUsageDescription": "Tada needs screen recording to observe your workflow.",
+        "NSAccessibilityUsageDescription": "Tada needs accessibility access to track input events."
       }
     },
     "extraResources": [
@@ -93,17 +92,17 @@
         "to": "python-src/pyproject.toml"
       },
       {
-        "from": "./powernap-config.defaults.json",
-        "to": "powernap-config.defaults.json"
+        "from": "./tada-config.defaults.json",
+        "to": "tada-config.defaults.json"
       }
     ],
     "publish": {
       "provider": "github",
       "owner": "GeneralUserModels",
-      "repo": "powernap-release"
+      "repo": "tada-release"
     },
     "dmg": {
-      "title": "PowerNap",
+      "title": "Tada",
       "iconSize": 80,
       "window": {
         "width": 540,

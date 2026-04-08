@@ -6,7 +6,7 @@ import { setServerUrl } from "./api/client";
 // useEffect hooks (e.g. getGoogleUser) can reach the Python server.
 const root = document.getElementById("root")!;
 const reactRoot = createRoot(root);
-window.powernap.onServerReady((data) => {
+window.tada.onServerReady((data) => {
   setServerUrl(data.url);
   reactRoot.render(<Onboarding />);
 });

@@ -54,7 +54,7 @@ class CostCallback(CustomLogger):
 
     def _record(self, kwargs, response_obj):
         metadata = (kwargs.get("litellm_params") or {}).get("metadata") or {}
-        app = metadata.get("app") or os.environ.get("POWERNAP_COST_APP", "unknown")
+        app = metadata.get("app") or os.environ.get("TADA_COST_APP", "unknown")
         model = kwargs.get("model", "unknown")
         cost = kwargs.get("response_cost") or 0.0
 

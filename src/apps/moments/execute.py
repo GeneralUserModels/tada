@@ -62,7 +62,7 @@ interact with the results.
 Write these files to `{output_dir}/` (create the directory with `mkdir -p {output_dir}`):
 
 1. **`{output_dir}/index.html`** — The main entry point. Keep this file small — it should load \
-your CSS and JS from separate files. This renders in an iframe inside the PowerNap desktop app.
+your CSS and JS from separate files. This renders in an iframe inside the Tada desktop app.
 
 2. **`{output_dir}/styles.css`** — All CSS styles in a separate file. Link from index.html.
 
@@ -130,7 +130,7 @@ can be borrowed by future moments. Think of each new component as a potential ad
 
 You have full creative freedom to modify templates, combine elements from multiple templates, \
 or build entirely new interfaces. The only requirement is that your output uses the same design \
-language (colors, glass cards, typography, radii) so it feels native to PowerNap. Use \
+language (colors, glass cards, typography, radii) so it feels native to Tada. Use \
 `{templates_dir}/shared/base.css` as the canonical design system reference.
 
 ## Writable directories

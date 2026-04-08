@@ -17,17 +17,17 @@ import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogle
 import * as bootstrap from "./features/bootstrap";
 import { runOnboarding } from "./features/onboarding";
 import { setupConnectorIpc } from "./connectors/manager";
-import { initAutoUpdater, installNow, installOnNextLaunch, dismissUpdate, checkForUpdates } from "./features/updater";
+import { initUpdateChecker, checkForUpdates } from "./features/updater";
 
 let serverProc: ChildProcess | null = null;
 
 // ── Config seeding ───────────────────────────────────────────
 
 function ensureConfigDefaults(): void {
-  const configPath = path.join(getDataDir(), "powernap-config.json");
+  const configPath = path.join(getDataDir(), "tada-config.json");
   const defaultsPath = isDev()
-    ? path.join(getDataDir(), "powernap-config.defaults.json")
-    : path.join(process.resourcesPath!, "powernap-config.defaults.json");
+    ? path.join(getDataDir(), "tada-config.defaults.json")
+    : path.join(process.resourcesPath!, "tada-config.defaults.json");
 
   let defaults: Record<string, unknown> = {};
   try { defaults = JSON.parse(fs.readFileSync(defaultsPath, "utf-8")); } catch { return; }
@@ -63,7 +63,7 @@ function startServer(port: number): void {
   const logDirPath = getLogDir();
   const pythonPath = getPythonPath();
   const pythonSrcDir = getPythonSrcDir();
-  const configPath = path.join(getDataDir(), "powernap-config.json");
+  const configPath = path.join(getDataDir(), "tada-config.json");
 
   const googleTokenPath = getGoogleTokenPath();
   const outlookTokenPath = getOutlookTokenPath();
@@ -80,7 +80,7 @@ function startServer(port: number): void {
       "--save-recordings",
       "--resume-from-checkpoint", "auto",
       "--log-to-wandb",
-    ], { cwd: projectRoot, env: { ...process.env, POWERNAP_CONFIG_PATH: configPath } });
+    ], { cwd: projectRoot, env: { ...process.env, TADA_CONFIG_PATH: configPath } });
   } else {
     // Packaged mode: use venv python directly
     serverProc = spawn(pythonPath, [
@@ -96,7 +96,7 @@ function startServer(port: number): void {
       env: {
         ...process.env,
         PYTHONPATH: pythonSrcDir,
-        POWERNAP_CONFIG_PATH: configPath,
+        TADA_CONFIG_PATH: configPath,
       },
     });
   }
@@ -157,7 +157,7 @@ function createSetupWindow(): BrowserWindow {
   setupWindow = new BrowserWindow({
     width: 500,
     height: 350,
-    title: "PowerNap",
+    title: "Tada",
     titleBarStyle: "hiddenInset",
     backgroundColor: "#F4F2EE",
     resizable: false,
@@ -179,7 +179,7 @@ function createDashboard() {
   dashboardWindow = new BrowserWindow({
     width: 900,
     height: 700,
-    title: "PowerNap",
+    title: "Tada",
     titleBarStyle: "hiddenInset",
     backgroundColor: "#F4F2EE",
     webPreferences: {
@@ -302,10 +302,7 @@ function setupIpc() {
     resizeOverlay(height);
   });
 
-  // Auto-update
-  ipcMain.handle(IPC.UPDATE_INSTALL_NOW, () => installNow());
-  ipcMain.handle(IPC.UPDATE_INSTALL_ON_QUIT, () => installOnNextLaunch());
-  ipcMain.handle(IPC.UPDATE_DISMISS, () => dismissUpdate());
+  // Update check
   ipcMain.handle(IPC.UPDATE_CHECK, () => checkForUpdates());
 }
 
@@ -363,7 +360,7 @@ app.whenReady().then(async () => {
 
   // In dev, the supervisor starts the server and provides the URL.
   // In packaged mode, Electron owns server lifecycle directly.
-  const externalDevServerUrl = isDev() ? process.env.POWERNAP_SERVER_URL : undefined;
+  const externalDevServerUrl = isDev() ? process.env.TADA_SERVER_URL : undefined;
   if (externalDevServerUrl) {
     api.setServerUrl(externalDevServerUrl);
   } else {
@@ -383,7 +380,7 @@ app.whenReady().then(async () => {
   setupSseForwarding();
 
   if (!isDev() && dashboardWindow) {
-    initAutoUpdater(dashboardWindow);
+    initUpdateChecker(dashboardWindow);
   }
 
   // Re-send SERVER_READY whenever the SSE (re)connects (covers sleep/wake).

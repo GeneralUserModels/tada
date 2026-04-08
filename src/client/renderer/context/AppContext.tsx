@@ -50,7 +50,7 @@ type AppAction =
   | { type: "SEED_HISTORY"; history: TrainingStepData[] }
   | { type: "SEED_LABEL_HISTORY"; history: { text: string; timestamp: number }[] }
   | { type: "LOAD_SETTINGS"; settings: Record<string, unknown> }
-  | { type: "UPDATE_DOWNLOADED"; version: string }
+  | { type: "UPDATE_AVAILABLE"; version: string }
   | { type: "UPDATE_DISMISSED" };
 
 let historyCounter = 0;
@@ -184,7 +184,7 @@ function reducer(state: AppState, action: AppAction): AppState {
     case "LOAD_SETTINGS":
       return { ...state, settings: action.settings };
 
-    case "UPDATE_DOWNLOADED":
+    case "UPDATE_AVAILABLE":
       return { ...state, updateVersion: action.version };
 
     case "UPDATE_DISMISSED":
@@ -229,7 +229,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sse.on("label",         (data) => dispatch({ type: "LABEL", data: data as LabelData }));
 
     // server:ready — main sends URL once server is up; we initialize api + sse then seed state
-    window.powernap.onServerReady(async ({ url }: { url: string }) => {
+    window.tada.onServerReady(async ({ url }: { url: string }) => {
       api.setServerUrl(url);
       sse.connect();
 
@@ -260,12 +260,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
 
     // IPC events — native OS operations that can only come from main
-    window.powernap.onPredictionRequested(() => {
+    window.tada.onPredictionRequested(() => {
       dispatch({ type: "PREDICTION_REQUESTED" });
     });
 
-    window.powernap.onUpdateDownloaded((data) => {
-      dispatch({ type: "UPDATE_DOWNLOADED", version: (data as { version: string }).version });
+    window.tada.onUpdateAvailable((data) => {
+      dispatch({ type: "UPDATE_AVAILABLE", version: data.version });
     });
   }, []);
 
