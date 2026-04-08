@@ -2,11 +2,16 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 
-// Cache server:ready so late-registering renderers (e.g. after Vite JS load)
+// Cache one-shot IPCs so late-registering renderers (e.g. after Vite JS load)
 // still get the payload even if the IPC fired before React mounted.
 let serverReadyCache: { url: string } | null = null;
 ipcRenderer.once("server:ready", (_e, data: { url: string }) => {
   serverReadyCache = data;
+});
+
+let updateAvailableCache: { version: string } | null = null;
+ipcRenderer.on("update:available", (_e, data: { version: string }) => {
+  updateAvailableCache = data;
 });
 
 contextBridge.exposeInMainWorld("tada", {
@@ -50,8 +55,10 @@ contextBridge.exposeInMainWorld("tada", {
   checkConnectorPermission: (name: string) => ipcRenderer.invoke("connector:check-permission", name),
 
   // Update check
-  onUpdateAvailable: (cb: (data: { version: string }) => void) =>
-    ipcRenderer.on("update:available", (_e, data) => cb(data)),
+  onUpdateAvailable: (cb: (data: { version: string }) => void) => {
+    if (updateAvailableCache) cb(updateAvailableCache);
+    ipcRenderer.on("update:available", (_e, data) => cb(data));
+  },
   dismissUpdate: () => ipcRenderer.send("update:dismiss"),
   checkForUpdates: () => ipcRenderer.invoke("update:check"),
 
