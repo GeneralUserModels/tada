@@ -158,7 +158,6 @@ function createSetupWindow(): BrowserWindow {
     width: 500,
     height: 350,
     title: "Tada",
-    icon: path.join(__dirname, "..", "..", "build", "icon.icns"),
     titleBarStyle: "hiddenInset",
     backgroundColor: "#F4F2EE",
     resizable: false,
@@ -181,7 +180,6 @@ function createDashboard() {
     width: 900,
     height: 700,
     title: "Tada",
-    icon: path.join(__dirname, "..", "..", "build", "icon.icns"),
     titleBarStyle: "hiddenInset",
     backgroundColor: "#F4F2EE",
     webPreferences: {
@@ -350,7 +348,9 @@ async function runBootstrap(): Promise<void> {
 // ── App lifecycle ────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-  app.dock?.setIcon(path.join(__dirname, "..", "..", "build", "icon.icns"));
+  if (isDev()) {
+    app.dock?.setIcon(path.join(__dirname, "..", "..", "src", "client", "build", "icon.icns"));
+  }
   app.dock?.show();
   ensureConfigDefaults();
   setupIpc();
