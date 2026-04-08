@@ -15,7 +15,7 @@
     "connector_filesystem": false,
     "permission_screen": true,
     "permission_notifications": false,
-    "permission_accessibility": false,
+    "permission_accessibility": true,
     "permission_browser_cookies": false,
     "tinker": false
   }
