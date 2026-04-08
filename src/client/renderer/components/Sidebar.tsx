@@ -52,19 +52,7 @@ export function Sidebar({ activeView, connected, onNavigate }: Props) {
   return (
     <nav id="sidebar">
       <div className="sidebar-brand">
-        <div className="brand-icon">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <text x="1" y="17" fontFamily="sans-serif" fontWeight="bold" fontSize="11" fill="url(#brandGrad)">Z</text>
-            <text x="7" y="13" fontFamily="sans-serif" fontWeight="bold" fontSize="8" fill="url(#brandGrad)" opacity="0.75">z</text>
-            <text x="12" y="9" fontFamily="sans-serif" fontWeight="bold" fontSize="6" fill="url(#brandGrad)" opacity="0.5">z</text>
-            <defs>
-              <linearGradient id="brandGrad" x1="2" y1="2" x2="18" y2="18">
-                <stop stopColor="#84B179"/>
-                <stop offset="1" stopColor="#A2CB8B"/>
-              </linearGradient>
-            </defs>
-          </svg>
-        </div>
+        <div className="brand-icon">🎉</div>
         <span className="brand-name">Tada</span>
         <div id="connection-status" className={`conn-badge ${connected ? "connected" : "disconnected"}`}>
           <span className="conn-dot"></span>
