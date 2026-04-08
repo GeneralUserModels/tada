@@ -71,10 +71,12 @@ class CompactTool(BaseTool):
             "— these are the hardest to recover after compaction.\n\n"
             f"Conversation to summarize:\n{conv_text}"
         )
-        return [
-            {"role": "user", "content": f"[Compressed. Transcript: {path}]\n{summary}"},
-            {"role": "assistant", "content": "Understood. Continuing with summary context."},
-        ]
+        original_instruction = messages[0] if messages else None
+        compacted = []
+        if original_instruction:
+            compacted.append(original_instruction)
+        compacted.append({"role": "user", "content": f"[Compressed. Transcript: {path}]\n{summary}"})
+        return compacted
 
     def run(self, **kwargs):
         """Called by agent loop with messages passed directly, not via schema."""

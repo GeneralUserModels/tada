@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -11,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.builder import build_agent
-from apps.moments._incremental import read_checkpoint, write_checkpoint, classify_sessions
+from apps.moments._incremental import read_checkpoint, write_checkpoint, sessions_with_new_content
 from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
 
 INSTRUCTION_TEMPLATE = """\
@@ -22,13 +23,28 @@ implementation details on its own.
 
 Unlike recurring automation tasks, these are situational — things the user is currently working on, researching, or planning where the agent can jump in and produce something useful in a single run. Tasks should be informational only (research, summaries, drafts, context) — never instrumental actions that change the user's state.
 
-The AI agent that will execute these tasks can:
-- Search the web and fetch live data
+The AI agent that will execute these tasks is powerful. It can:
+- Search the web, crawl pages, and fetch live data
 - Browse authenticated websites (GitHub, Gmail, Twitter/X, YouTube, Slack, Google Docs, etc.) using the user's Chrome cookies
-- Read, write, and edit files on the user's machine
-- Run shell commands, scripts, git operations
-- Do research, compile summaries, draft documents
-- Execute multi-step workflows end-to-end
+- Do deep research and analysis — read papers, compare approaches, synthesize across dozens of sources
+- Read files on the user's machine for context
+- Run shell commands, scripts, git operations, Python/Node code
+- Pre-draft emails, Slack messages, documents, and code for the user to review
+- Generate reports, build slide decks, create static HTML interfaces to present results
+- Spawn subagents to parallelize work across different data sources
+
+The agent CANNOT: call LLMs at runtime in its output, modify arbitrary files on the user's machine, \
+or build interactive interfaces that require a backend. It produces static artifacts (HTML, markdown, \
+drafts) that the user reviews.
+
+**Prioritize tasks that amplify the user's abilities:**
+- **Information foraging and synthesis** — the agent's biggest advantage is reading, comparing, and \
+synthesizing across many sources faster than any human. Prioritize tasks where the agent does deep \
+research the user wouldn't have time for.
+- **Complex multi-step work** — prefer ambitious tasks that chain together many operations. \
+The agent thrives on tasks that are too tedious or time-consuming for a human to bother with.
+- **Preparation and context-building** — upcoming meetings, ongoing projects, open questions — \
+the agent can do the legwork so the user walks in prepared.
 
 ## Log files to read (all in {logs_dir}/)
 
@@ -103,6 +119,11 @@ After the frontmatter, include:
 - confidence reflects how clearly the logs show the user needs this
 - usefulness reflects how valuable the one-time output would be
 - Focus on recency — what is the user doing NOW or in the last few sessions?
+- Do NOT delete any existing files, tasks, or data
+
+### Existing one-off tasks:
+Read files in {logs_dir}/oneoffs/ to see what was already proposed. Do not duplicate these — find NEW \
+situational opportunities.
 
 When you are done, run `ls -la {logs_dir}/oneoffs/` to verify all task files exist and are non-empty.
 """
@@ -110,26 +131,14 @@ When you are done, run `ls -la {logs_dir}/oneoffs/` to verify all task files exi
 
 INCREMENTAL_SECTION = """\
 
-## Incremental Discovery — Prioritize Recent Activity
+## Incremental Discovery
 
-This is a RE-RUN. The last one-off discovery was on **{last_discovery_date}**. You should still read all \
-sessions, but prioritize finding new opportunities from recent activity.
+This is a RE-RUN. The last one-off discovery was on **{last_discovery_date}**. Prioritize labels with \
+`start_time` after this date, but analyze ALL sessions thoroughly.
 
-### New sessions since last discovery (prioritize these):
-{new_sessions_list}
+### Sessions with new content since last discovery:
+{sessions_with_new_content_list}
 
-### Previously analyzed sessions:
-{old_sessions_list}
-
-Read all sessions, but weight your analysis toward the new ones — one-off tasks are most valuable when \
-they reflect what the user is doing NOW. Old sessions may still have useful context.
-
-### Non-session logs (email, calendar, notifications, filesystem):
-Prioritize entries dated AFTER {last_discovery_date}, but don't ignore older entries if they provide useful context.
-
-### Existing one-off tasks:
-Read files in {logs_dir}/oneoffs/ to see what was already proposed. Do not duplicate these — find NEW \
-situational opportunities.
 """
 
 
@@ -139,25 +148,24 @@ def run(logs_dir: str, model: str, api_key: str | None = None) -> str:
     checkpoint_path = Path(logs_dir) / "oneoffs" / ".last_discovery"
 
     last_discovery = read_checkpoint(checkpoint_path)
-    new_sessions, old_sessions = classify_sessions(logs_dir, last_discovery)
+    new_content_sessions = sessions_with_new_content(logs_dir, last_discovery)
 
-    instruction = INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    instruction = f"Current date and time: **{now}**\n\n" + INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir)
 
-    if last_discovery is not None and new_sessions:
-        new_list = "\n".join(f"- {s}/labels.jsonl" for s in new_sessions)
-        old_list = "\n".join(f"- {s}/labels.jsonl" for s in old_sessions) if old_sessions else "- (none)"
+    if last_discovery is not None and new_content_sessions:
+        sessions_list = "\n".join(f"- {s}/labels.jsonl" for s in new_content_sessions)
         instruction += INCREMENTAL_SECTION.format(
             last_discovery_date=last_discovery.strftime("%Y-%m-%d %H:%M"),
-            new_sessions_list=new_list,
-            old_sessions_list=old_list,
-            logs_dir=logs_dir,
+            sessions_with_new_content_list=sessions_list,
         )
-    elif last_discovery is not None and not new_sessions:
+    elif last_discovery is not None and not new_content_sessions:
         instruction += (
             f"\n\n## Note\n\nThe last one-off discovery was on "
-            f"**{last_discovery.strftime('%Y-%m-%d %H:%M')}** and there are NO new session "
-            f"directories since then. Check non-session logs for recent entries. If nothing "
-            f"substantial is new, it's fine to produce no new tasks."
+            f"**{last_discovery.strftime('%Y-%m-%d %H:%M')}** and there are no new labels "
+            f"in any session since then. Analyze all existing sessions and non-session logs "
+            f"(email, calendar, notifications, filesystem) thoroughly for tasks that may "
+            f"have been missed."
         )
 
     agent, _ = build_agent(model, logs_dir, api_key=api_key)
