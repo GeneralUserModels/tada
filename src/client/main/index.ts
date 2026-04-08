@@ -17,7 +17,7 @@ import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogle
 import * as bootstrap from "./features/bootstrap";
 import { runOnboarding } from "./features/onboarding";
 import { setupConnectorIpc } from "./connectors/manager";
-import { initAutoUpdater, installNow, installOnNextLaunch, dismissUpdate, checkForUpdates } from "./features/updater";
+import { initUpdateChecker, checkForUpdates } from "./features/updater";
 
 let serverProc: ChildProcess | null = null;
 
@@ -302,10 +302,7 @@ function setupIpc() {
     resizeOverlay(height);
   });
 
-  // Auto-update
-  ipcMain.handle(IPC.UPDATE_INSTALL_NOW, () => installNow());
-  ipcMain.handle(IPC.UPDATE_INSTALL_ON_QUIT, () => installOnNextLaunch());
-  ipcMain.handle(IPC.UPDATE_DISMISS, () => dismissUpdate());
+  // Update check
   ipcMain.handle(IPC.UPDATE_CHECK, () => checkForUpdates());
 }
 
@@ -383,7 +380,7 @@ app.whenReady().then(async () => {
   setupSseForwarding();
 
   if (!isDev() && dashboardWindow) {
-    initAutoUpdater(dashboardWindow);
+    initUpdateChecker(dashboardWindow);
   }
 
   // Re-send SERVER_READY whenever the SSE (re)connects (covers sleep/wake).
