@@ -176,61 +176,87 @@ def _supabase_upsert(supabase_url: str, anon_key: str, name: str, email: str, go
         logger.warning(f"Supabase upsert failed (non-fatal): {e}")
 
 
-# ── Google endpoints ───────────────────────────────────────────
-
-def _google_oauth_exchange(client_id: str, client_secret: str, code: str, redirect_uri: str) -> tuple[dict, dict]:
-    """Exchange an auth code for tokens; returns (token_data, user_info)."""
-    token_data = _http_post("https://oauth2.googleapis.com/token", {
-        "code": code,
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "redirect_uri": redirect_uri,
-        "grant_type": "authorization_code",
+def _supabase_rpc(supabase_url: str, anon_key: str, access_token: str, fn_name: str) -> None:
+    """Call a Supabase RPC function using the authenticated user's JWT."""
+    url = f"{supabase_url}/rest/v1/rpc/{fn_name}"
+    req = urllib.request.Request(url, data=b"{}", headers={
+        "Content-Type": "application/json",
+        "apikey": anon_key,
+        "Authorization": f"Bearer {access_token}",
     })
-    id_token = token_data.get("id_token", "")
-    payload_b64 = id_token.split(".")[1] if "." in id_token else ""
-    padding = "=" * (-len(payload_b64) % 4)
-    user_info = json.loads(base64.b64decode(payload_b64 + padding)) if payload_b64 else {}
-    return token_data, user_info
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+    except Exception as e:
+        logger.warning(f"Supabase RPC {fn_name} failed (non-fatal): {e}")
+
+
+def _supabase_pkce_exchange(supabase_url: str, anon_key: str, code: str, code_verifier: str) -> dict:
+    """Exchange a PKCE auth code for a Supabase session."""
+    url = f"{supabase_url}/auth/v1/token?grant_type=pkce"
+    body = json.dumps({"auth_code": code, "code_verifier": code_verifier}).encode()
+    req = urllib.request.Request(url, data=body, headers={
+        "Content-Type": "application/json",
+        "apikey": anon_key,
+    })
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read())
+
+
+# ── Google endpoints ───────────────────────────────────────────
 
 
 @router.post("/google/signin")
 async def google_signin():
-    """Identity-only Google OAuth (openid/email/profile). No data scopes requested.
+    """Google sign-in via Supabase OAuth (PKCE flow).
 
-    Returns the user's name and email; records them in Supabase. Does not write
-    a connector token — use /google/start to grant calendar/gmail access.
+    Opens the browser to Supabase's Google OAuth page, captures the auth code
+    via a loopback server, exchanges it for a Supabase session, and extracts
+    the user's name and email.
     """
     cfg = _get_app_config()
-    client_id = cfg.get("google_client_id", "")
-    client_secret = cfg.get("google_client_secret", "")
-    if not client_id or not client_secret:
-        raise HTTPException(status_code=400, detail="Google client credentials not configured")
+    supabase_url = cfg.get("supabase_url", "")
+    anon_key = cfg.get("supabase_anon_key", "")
+    if not supabase_url or not anon_key:
+        raise HTTPException(status_code=400, detail="Supabase credentials not configured")
+
+    # PKCE challenge (same pattern as the Outlook flow)
+    code_verifier = secrets.token_urlsafe(32)
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).rstrip(b"=").decode()
 
     port = _free_port()
     redirect_uri = f"http://localhost:{port}"
 
-    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "scope": " ".join(GOOGLE_AUTH_SCOPES),
-        "access_type": "online",
+    auth_url = f"{supabase_url}/auth/v1/authorize?" + urllib.parse.urlencode({
+        "provider": "google",
+        "redirect_to": redirect_uri,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+        "flow_type": "pkce",
     })
 
     code = await _oauth_loopback(auth_url, port)
-    _, user_info = _google_oauth_exchange(client_id, client_secret, code, redirect_uri)
+    session = _supabase_pkce_exchange(supabase_url, anon_key, code, code_verifier)
 
-    name = user_info.get("name", "")
-    email = user_info.get("email", "")
+    user = session.get("user", {})
+    meta = user.get("user_metadata", {})
+    name = meta.get("full_name", meta.get("name", ""))
+    email = user.get("email", meta.get("email", ""))
 
     _supabase_upsert(
-        cfg.get("supabase_url", ""),
-        cfg.get("supabase_anon_key", ""),
+        supabase_url,
+        anon_key,
         name,
         email,
-        user_info.get("sub", ""),
+        meta.get("sub", user.get("id", "")),
     )
+
+    # Record login via RPC (increments counter, etc.)
+    access_token = session.get("access_token", "")
+    if access_token:
+        _supabase_rpc(supabase_url, anon_key, access_token, "record_login")
 
     # Persist to config so the app remembers across restarts
     cfg["google_user_name"] = name
