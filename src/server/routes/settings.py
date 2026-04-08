@@ -59,7 +59,7 @@ async def update_settings(update: SettingsUpdate, request: Request):
                     tab_config = {
                         "model": cfg.tabracadabra_model,
                         "api_key": cfg.resolve_api_key("tabracadabra_api_key"),
-                        "powernap_base_url": f"http://localhost:{os.environ.get('POWERNAP_PORT', '8000')}",
+                        "tada_base_url": f"http://localhost:{os.environ.get('TADA_PORT', '8000')}",
                     }
                     service = TabracadabraService(config=tab_config, prompt_text=load_prompt())
                     service.start()

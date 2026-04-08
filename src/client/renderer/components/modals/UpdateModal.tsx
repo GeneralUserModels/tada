@@ -6,16 +6,16 @@ interface Props {
 export function UpdateModal({ version, onDismiss }: Props) {
   const handleInstallNow = () => {
     onDismiss();
-    window.powernap.installNow();
+    window.tada.installNow();
   };
 
   const handleNextLaunch = () => {
-    window.powernap.installOnNextLaunch();
+    window.tada.installOnNextLaunch();
     onDismiss();
   };
 
   const handleLater = () => {
-    window.powernap.dismissUpdate();
+    window.tada.dismissUpdate();
     onDismiss();
   };
 

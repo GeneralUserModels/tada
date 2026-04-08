@@ -18,7 +18,7 @@ from .browser import (
 )
 
 SKILLS_DIR = Path(__file__).parent.parent / "skills"
-TASKS_DIR = Path("/tmp/powernap_tasks")
+TASKS_DIR = Path("/tmp/tada_tasks")
 
 _bg_manager = BackgroundManager()
 _task_manager = TaskManager(TASKS_DIR)

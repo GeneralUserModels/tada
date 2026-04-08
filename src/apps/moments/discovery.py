@@ -134,9 +134,9 @@ def main():
     import os
 
     parser = argparse.ArgumentParser(description="Run moments discovery pipeline")
-    parser.add_argument("--logs-dir", default=os.getenv("POWERNAP_LOG_DIR", "./logs"),
-                        help="Path to logs directory (default: $POWERNAP_LOG_DIR or ./logs)")
-    parser.add_argument("--model", default=os.getenv("POWERNAP_AGENT_MODEL", "anthropic/claude-sonnet-4-20250514"),
+    parser.add_argument("--logs-dir", default=os.getenv("TADA_LOG_DIR", "./logs"),
+                        help="Path to logs directory (default: $TADA_LOG_DIR or ./logs)")
+    parser.add_argument("--model", default=os.getenv("TADA_AGENT_MODEL", "anthropic/claude-sonnet-4-20250514"),
                         help="Model to use for discovery")
     parser.add_argument("--api-key", default=os.getenv("ANTHROPIC_API_KEY", ""),
                         help="API key (default: $ANTHROPIC_API_KEY)")

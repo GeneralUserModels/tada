@@ -80,7 +80,7 @@ export function ConnectorItem({
     if (!waitingPermission) return;
 
     const id = setInterval(async () => {
-      const ok = await window.powernap.checkConnectorPermission(name);
+      const ok = await window.tada.checkConnectorPermission(name);
       if (ok) {
         clearInterval(id);
         setWaitingPermission(false);
@@ -94,9 +94,9 @@ export function ConnectorItem({
   async function handlePermissionClick() {
     setWaitingPermission(true);
     if (name === "screen") {
-      await window.powernap.requestConnectorPermission("screen");
+      await window.tada.requestConnectorPermission("screen");
     } else {
-      window.powernap.openFdaSettings(name);
+      window.tada.openFdaSettings(name);
     }
   }
 

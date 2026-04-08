@@ -76,7 +76,7 @@ class Labeler:
             model: Gemini model name for labeling (default: gemini-3.1-flash-lite-preview).
         """
         self.max_workers = max_workers
-        resolved_api_key = api_key or os.environ.get("POWERNAP_LABEL_API_KEY") or None
+        resolved_api_key = api_key or os.environ.get("TADA_LABEL_API_KEY") or None
         with contextlib.redirect_stdout(sys.stderr):
             self.client = LiteLLMClient(model_name=model or "gemini/gemini-3.1-flash-lite-preview", api_key=resolved_api_key)
         self.prompt = self._load_prompt()

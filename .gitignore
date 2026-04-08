@@ -16,7 +16,7 @@ pack/
 data/
 
 # Onboarding config (dev mode)
-powernap-config.json
+tada-config.json
 .onboarding-complete
 
 # Electron / DMG build

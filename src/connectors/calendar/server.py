@@ -16,7 +16,7 @@ CALENDAR_BASE = "https://www.googleapis.com/calendar/v3"
 MAX_RESULTS = 20
 
 
-mcp = FastMCP("powernap-calendar")
+mcp = FastMCP("tada-calendar")
 
 
 @mcp.tool()

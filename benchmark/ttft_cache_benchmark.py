@@ -28,13 +28,13 @@ from pathlib import Path
 from typing import Any
 
 _CONFIG_CANDIDATES = [
-    Path("powernap-config.json"),
-    Path(__file__).resolve().parent.parent / "powernap-config.json",
+    Path("tada-config.json"),
+    Path(__file__).resolve().parent.parent / "tada-config.json",
 ]
 
 
 def _load_default_api_key() -> str:
-    """Best-effort read of default_llm_api_key from powernap-config.json."""
+    """Best-effort read of default_llm_api_key from tada-config.json."""
     for p in _CONFIG_CANDIDATES:
         try:
             data = json.loads(p.read_text())
@@ -139,7 +139,7 @@ def run_call(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark TTFT for reused vs cache-busted prompt prefixes.")
     parser.add_argument("--model", default="gemini/gemini-3.1-flash-lite-preview")
-    parser.add_argument("--api-key", default="", help="Falls back to default_llm_api_key from powernap-config.json.")
+    parser.add_argument("--api-key", default="", help="Falls back to default_llm_api_key from tada-config.json.")
     parser.add_argument("--total-tokens", type=int, default=20000)
     parser.add_argument("--cached-tokens", type=int, default=15000)
     parser.add_argument("--runs", type=int, default=10)
@@ -166,9 +166,9 @@ def main() -> None:
     if not args.api_key:
         args.api_key = _load_default_api_key()
         if args.api_key:
-            print(f"Using default_llm_api_key from powernap-config.json (ends ...{args.api_key[-4:]})")
+            print(f"Using default_llm_api_key from tada-config.json (ends ...{args.api_key[-4:]})")
         else:
-            print("Warning: no API key provided and none found in powernap-config.json.")
+            print("Warning: no API key provided and none found in tada-config.json.")
 
     if args.total_tokens < 1:
         raise SystemExit("--total-tokens must be >= 1")

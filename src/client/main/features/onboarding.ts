@@ -17,7 +17,7 @@ export function runOnboarding(): Promise<void> {
     const win = new BrowserWindow({
       width: 580,
       height: 720,
-      title: "PowerNap",
+      title: "Tada",
       titleBarStyle: "hiddenInset",
       backgroundColor: "#F4F2EE",
       resizable: false,

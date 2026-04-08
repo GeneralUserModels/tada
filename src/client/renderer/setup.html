@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://127.0.0.1:*; style-src 'self' 'unsafe-inline'; script-src 'self'">
-  <title>PowerNap Setup</title>
+  <title>Tada Setup</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -106,7 +106,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>Setting up PowerNap</h1>
+    <h1>Setting up Tada</h1>
     <div class="status" id="status">Preparing...</div>
     <div class="progress-track">
       <div class="progress-bar indeterminate" id="progress"></div>
@@ -133,18 +133,18 @@
       logEl.scrollTop = logEl.scrollHeight;
     }
 
-    window.powernap.onBootstrapProgress((msg, pct) => {
+    window.tada.onBootstrapProgress((msg, pct) => {
       statusEl.textContent = msg;
       progressEl.classList.remove("indeterminate");
       progressEl.style.width = pct + "%";
       appendLog(msg, true);
     });
 
-    window.powernap.onBootstrapLog((line) => {
+    window.tada.onBootstrapLog((line) => {
       appendLog(line, false);
     });
 
-    window.powernap.onBootstrapError((errMsg) => {
+    window.tada.onBootstrapError((errMsg) => {
       statusEl.textContent = "Setup failed";
       progressEl.classList.remove("indeterminate");
       progressEl.style.width = "0%";
@@ -154,7 +154,7 @@
       appendLog("ERROR: " + errMsg, true);
     });
 
-    window.powernap.onBootstrapComplete(() => {
+    window.tada.onBootstrapComplete(() => {
       statusEl.textContent = "Setup complete! Launching...";
       progressEl.classList.remove("indeterminate");
       progressEl.style.width = "100%";
@@ -168,7 +168,7 @@
       progressEl.style.width = "";
       statusEl.textContent = "Retrying...";
       logEl.innerHTML = "";
-      window.powernap.retryBootstrap();
+      window.tada.retryBootstrap();
     });
   </script>
 </body>

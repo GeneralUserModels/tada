@@ -97,7 +97,7 @@ function maybeStartElectron(serverUrl) {
   electronStarted = true;
   console.log(`[dev-supervisor] starting Electron (server=${serverUrl})...`);
   spawnManaged("electron", "npx", ["electron", "dist/main/index.js"], {
-    env: { ...process.env, POWERNAP_SERVER_URL: serverUrl },
+    env: { ...process.env, TADA_SERVER_URL: serverUrl },
   });
 }
 
@@ -123,7 +123,7 @@ process.on("SIGHUP", () => shutdown(129));
   spawnManaged("vite", "npx", ["vite"]);
 
   console.log(`[dev-supervisor] starting server on ${serverUrl} ...`);
-  const tokenBase = path.join(os.homedir(), ".config", "powernap");
+  const tokenBase = path.join(os.homedir(), ".config", "tada");
   spawnManaged("server", "uv", [
     "run", "python", "-m", "server",
     "--port", String(port),
@@ -136,7 +136,7 @@ process.on("SIGHUP", () => shutdown(129));
   ], {
     detached: !isWin,
     cwd: repoRoot,
-    env: { ...process.env, POWERNAP_CONFIG_PATH: path.join(repoRoot, "powernap-config.json") },
+    env: { ...process.env, TADA_CONFIG_PATH: path.join(repoRoot, "tada-config.json") },
   });
 
   console.log("[dev-supervisor] waiting for renderer at http://localhost:5173 ...");

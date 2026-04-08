@@ -1,5 +1,5 @@
 /**
- * PowerNap Moments — Shared React Component Library
+ * Tada Moments — Shared React Component Library
  *
  * All components are exposed on the global `PN` namespace.
  * Uses React.createElement (no JSX, no Babel needed).

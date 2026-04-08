@@ -1,6 +1,6 @@
 # Blank Template
 
-Minimal scaffold with the PowerNap design system. Use as a starting point for custom interfaces that don't fit the other templates.
+Minimal scaffold with the Tada design system. Use as a starting point for custom interfaces that don't fit the other templates.
 
 ## DATA Schema
 

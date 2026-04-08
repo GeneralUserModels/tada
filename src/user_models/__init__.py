@@ -1,4 +1,4 @@
-"""Model implementations for PowerNap prediction."""
+"""Model implementations for Tada prediction."""
 from .base import BasePredictor
 
 __all__ = ["BasePredictor"]

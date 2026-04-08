@@ -79,16 +79,16 @@ async def lifespan(_server: FastMCP) -> AsyncIterator[None]:  # type: ignore[typ
     asyncio.create_task(run_cost_logger(tracker), name="screen-cost-logger")
 
     _labeled_queue = asyncio.Queue()
-    log_dir = os.environ["POWERNAP_LOG_DIR"]
+    log_dir = os.environ["TADA_LOG_DIR"]
     _recorder = OnlineRecorder(
-        fps=int(os.environ.get("POWERNAP_FPS", "5")),
-        buffer_seconds=int(os.environ.get("POWERNAP_BUFFER_SECONDS", "120")),
+        fps=int(os.environ.get("TADA_FPS", "5")),
+        buffer_seconds=int(os.environ.get("TADA_BUFFER_SECONDS", "120")),
         log_dir=log_dir,
     )
     _recorder.start()
     _labeler = Labeler(
         log_dir=f"{log_dir}/screen",
-        model=os.environ["POWERNAP_LABEL_MODEL"],
+        model=os.environ["TADA_LABEL_MODEL"],
     )
     asyncio.create_task(_labeling_loop(), name="screen-labeler")
     yield
@@ -96,7 +96,7 @@ async def lifespan(_server: FastMCP) -> AsyncIterator[None]:  # type: ignore[typ
         _recorder.stop()
 
 
-mcp = FastMCP("powernap-screen", lifespan=lifespan)
+mcp = FastMCP("tada-screen", lifespan=lifespan)
 
 
 @mcp._mcp_server.subscribe_resource()

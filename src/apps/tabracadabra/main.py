@@ -46,8 +46,8 @@ OUR_EVENT_TAG = 0xC0DEFEED
 _ZW_CHARS = ("\u200B", "\u2060")
 
 # Flag file to suppress screen connector aggregation during active streaming
-_SUPPRESS_FLAG = os.path.join(tempfile.gettempdir(), "powernap_tab_active")
-_DEBUG_RENDER_DIR = os.path.join(tempfile.gettempdir(), "powernap_tabracadabra_debug")
+_SUPPRESS_FLAG = os.path.join(tempfile.gettempdir(), "tada_tab_active")
+_DEBUG_RENDER_DIR = os.path.join(tempfile.gettempdir(), "tada_tabracadabra_debug")
 _DEBUG_RENDER_LATEST_PNG = os.path.join(_DEBUG_RENDER_DIR, "rendered_latest.png")
 
 
@@ -69,7 +69,7 @@ def capture_active_monitor_as_data_url(target_dpi=DEFAULT_TARGET_DPI):
     except OSError as e:
         raise RuntimeError(
             f"No shared frame at {TABRACADABRA_LATEST_FRAME_PNG}. "
-            "Run PowerNap with the screen connector (MCP) so the recorder can publish frames."
+            "Run Tada with the screen connector (MCP) so the recorder can publish frames."
         ) from e
     age_s = time.time() - st.st_mtime
     if age_s > max_age:
@@ -184,13 +184,13 @@ def _normalize_piece(piece: str) -> str:
 
 
 # ------------- Config fetch for standalone use -------------
-def _fetch_powernap_config(base_url: str = "http://localhost:8000") -> dict:
-    """Fetch tabracadabra config from PowerNap settings. Falls back to env vars on error."""
+def _fetch_tada_config(base_url: str = "http://localhost:8000") -> dict:
+    """Fetch tabracadabra config from Tada settings. Falls back to env vars on error."""
     defaults = {
         "model": os.getenv("MODEL", "gemini/gemini-3.1-flash-lite-preview"),
         "api_key": os.getenv("LLM_API_KEY", ""),
         "hold_threshold": float(os.getenv("HOLD_THRESHOLD", "0.35")),
-        "powernap_base_url": base_url,
+        "tada_base_url": base_url,
     }
     try:
         req = urllib.request.Request(
@@ -205,7 +205,7 @@ def _fetch_powernap_config(base_url: str = "http://localhost:8000") -> dict:
             data.get("tabracadabra_hold_threshold") or defaults["hold_threshold"]
         )
     except Exception as e:
-        print(f"[tabracadabra] Could not fetch config from PowerNap ({e}), using defaults.")
+        print(f"[tabracadabra] Could not fetch config from Tada ({e}), using defaults.")
     return defaults
 
 
@@ -216,7 +216,7 @@ class TabracadabraService:
         self._model = config["model"]
         self._api_key = config.get("api_key", "")
         self._hold_threshold = float(config.get("hold_threshold", 1.0))
-        self._powernap_base_url = config.get("powernap_base_url", "http://localhost:8000")
+        self._tada_base_url = config.get("tada_base_url", "http://localhost:8000")
         self._prompt_text = prompt_text
         self._placeholder = placeholder
 
@@ -351,12 +351,12 @@ class TabracadabraService:
         self._inserted_len += len(piece)
         self._last_char_space = (piece[-1] == " ")
 
-    # ------------- PowerNap prediction context -------------
+    # ------------- Tada prediction context -------------
     def _fetch_predictor_messages(self) -> list | None:
         """Fetch the predictor's full conversation to use as cached prefix."""
         try:
             req = urllib.request.Request(
-                f"{self._powernap_base_url}/api/user_models/latest_prediction",
+                f"{self._tada_base_url}/api/user_models/latest_prediction",
                 headers={"Accept": "application/json"},
             )
             with urllib.request.urlopen(req, timeout=2) as resp:
@@ -781,8 +781,8 @@ if __name__ == "__main__":
     parser.add_argument("--placeholder", action="store_true", help="Use fake LLM responses instead of real calls")
     args = parser.parse_args()
 
-    base_url = os.getenv("POWERNAP_BASE_URL", "http://localhost:8000")
-    config = _fetch_powernap_config(base_url)
+    base_url = os.getenv("TADA_BASE_URL", "http://localhost:8000")
+    config = _fetch_tada_config(base_url)
     prompt_text = load_prompt()
     service = TabracadabraService(config=config, prompt_text=prompt_text, placeholder=args.placeholder)
     service.start()

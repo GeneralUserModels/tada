@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "powernap"
+name = "tada"
 version = "0.1.0"
-description = "PowerNap training and retrieval utilities."
+description = "Tada training and retrieval utilities."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [
@@ -46,8 +46,8 @@ dependencies = [
 tinker-cookbook = { git = "https://github.com/thinking-machines-lab/tinker-cookbook" }
 
 [project.scripts]
-powernap-server = "server.__main__:main"
-powernap-bridge = "connectors.screen.napsack.bridge:main"
+tada-server = "server.__main__:main"
+tada-bridge = "connectors.screen.napsack.bridge:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

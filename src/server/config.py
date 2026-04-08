@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-CONFIG_PATH = Path(os.environ.get("POWERNAP_CONFIG_PATH", "powernap-config.json"))
+CONFIG_PATH = Path(os.environ.get("TADA_CONFIG_PATH", "tada-config.json"))
 
 # Default model identifiers — single source of truth for Python.
 DEFAULT_LLM_MODEL = "gemini/gemini-3.1-flash-lite-preview"
@@ -38,7 +38,7 @@ _PERSISTED_FIELDS = SETTINGS_API_FIELDS | {
 
 
 class MCPConnectorDef(BaseModel):
-    """Definition of a community or custom MCP server to use as a powernap connector."""
+    """Definition of a community or custom MCP server to use as a Tada connector."""
 
     name: str
     """Unique connector name (shown in /api/connectors)."""
@@ -127,32 +127,32 @@ class ServerConfig(BaseModel):
     agent_api_key: str = ""
 
     # Logging
-    log_dir: str = Field(default_factory=lambda: os.getenv("POWERNAP_LOG_DIR", "./logs"))
-    log_to_wandb: bool = Field(default_factory=lambda: os.getenv("POWERNAP_LOG_TO_WANDB", "") == "1")
-    wandb_project: str = Field(default_factory=lambda: os.getenv("POWERNAP_WANDB_PROJECT", "longnap-online"))
-    wandb_run_name: str = Field(default_factory=lambda: os.getenv("POWERNAP_WANDB_RUN_NAME", "longnap-online-env"))
+    log_dir: str = Field(default_factory=lambda: os.getenv("TADA_LOG_DIR", "./logs"))
+    log_to_wandb: bool = Field(default_factory=lambda: os.getenv("TADA_LOG_TO_WANDB", "") == "1")
+    wandb_project: str = Field(default_factory=lambda: os.getenv("TADA_WANDB_PROJECT", "longnap-online"))
+    wandb_run_name: str = Field(default_factory=lambda: os.getenv("TADA_WANDB_RUN_NAME", "longnap-online-env"))
 
     # Google token path (for Gmail / Calendar connectors)
-    google_token_path: str = Field(default_factory=lambda: os.getenv("POWERNAP_GOOGLE_TOKEN_PATH", ""))
+    google_token_path: str = Field(default_factory=lambda: os.getenv("TADA_GOOGLE_TOKEN_PATH", ""))
 
     # Outlook token path (for Outlook Email / Calendar connectors)
-    outlook_token_path: str = Field(default_factory=lambda: os.getenv("POWERNAP_OUTLOOK_TOKEN_PATH", ""))
+    outlook_token_path: str = Field(default_factory=lambda: os.getenv("TADA_OUTLOOK_TOKEN_PATH", ""))
 
     # Recording persistence
-    save_recordings: bool = Field(default_factory=lambda: os.getenv("POWERNAP_SAVE_RECORDINGS", "") == "1")
+    save_recordings: bool = Field(default_factory=lambda: os.getenv("TADA_SAVE_RECORDINGS", "") == "1")
 
     # Checkpointing
     checkpoint_every_n_steps: int = 2
-    resume_from_checkpoint: str | None = Field(default_factory=lambda: os.getenv("POWERNAP_RESUME_FROM_CHECKPOINT") or None)
-    retriever_checkpoint: str | None = Field(default_factory=lambda: os.getenv("POWERNAP_RETRIEVER_CHECKPOINT") or None)
+    resume_from_checkpoint: str | None = Field(default_factory=lambda: os.getenv("TADA_RESUME_FROM_CHECKPOINT") or None)
+    retriever_checkpoint: str | None = Field(default_factory=lambda: os.getenv("TADA_RETRIEVER_CHECKPOINT") or None)
     sampler_ttl_seconds: int = 60
 
     # Moments
     tada_dir: str = Field(default_factory=lambda: os.getenv(
-        "POWERNAP_TADA_DIR",
-        str(Path(os.getenv("POWERNAP_LOG_DIR", "./logs")).resolve().parent / "logs-tada"),
+        "TADA_TADA_DIR",
+        str(Path(os.getenv("TADA_LOG_DIR", "./logs")).resolve().parent / "logs-tada"),
     ))
-    moments_agent_model: str = Field(default_factory=lambda: os.getenv("POWERNAP_AGENT_MODEL", DEFAULT_LLM_MODEL))
+    moments_agent_model: str = Field(default_factory=lambda: os.getenv("TADA_AGENT_MODEL", DEFAULT_LLM_MODEL))
     moments_discovery_schedule: str = "daily at 2am"
     moments_agent_api_key: str = ""
     moments_enabled: bool = True

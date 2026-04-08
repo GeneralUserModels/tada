@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Uvicorn launcher for the PowerNap FastAPI server."""
+"""Uvicorn launcher for the Tada FastAPI server."""
 
 import argparse
 import logging
@@ -25,7 +25,7 @@ def _watch_parent():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="PowerNap FastAPI server")
+    parser = argparse.ArgumentParser(description="Tada FastAPI server")
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--reload", action="store_true")
@@ -51,23 +51,23 @@ def main():
     args = parser.parse_args()
 
     if args.save_recordings:
-        os.environ["POWERNAP_SAVE_RECORDINGS"] = "1"
+        os.environ["TADA_SAVE_RECORDINGS"] = "1"
     if args.resume_from_checkpoint:
-        os.environ["POWERNAP_RESUME_FROM_CHECKPOINT"] = args.resume_from_checkpoint
+        os.environ["TADA_RESUME_FROM_CHECKPOINT"] = args.resume_from_checkpoint
     if args.retriever_checkpoint:
-        os.environ["POWERNAP_RETRIEVER_CHECKPOINT"] = args.retriever_checkpoint
+        os.environ["TADA_RETRIEVER_CHECKPOINT"] = args.retriever_checkpoint
     if args.google_token_path:
-        os.environ["POWERNAP_GOOGLE_TOKEN_PATH"] = args.google_token_path
+        os.environ["TADA_GOOGLE_TOKEN_PATH"] = args.google_token_path
     if args.outlook_token_path:
-        os.environ["POWERNAP_OUTLOOK_TOKEN_PATH"] = args.outlook_token_path
-    os.environ["POWERNAP_LOG_DIR"] = args.log_dir
-    os.environ["POWERNAP_LOSS_MODE"] = args.loss_mode
-    os.environ["POWERNAP_MODEL_TYPE"] = args.model_type
+        os.environ["TADA_OUTLOOK_TOKEN_PATH"] = args.outlook_token_path
+    os.environ["TADA_LOG_DIR"] = args.log_dir
+    os.environ["TADA_LOSS_MODE"] = args.loss_mode
+    os.environ["TADA_MODEL_TYPE"] = args.model_type
     if (args.log_to_wandb or os.environ.get("WANDB_API_KEY")) and os.environ.get("WANDB_API_KEY"):
-        os.environ["POWERNAP_LOG_TO_WANDB"] = "1"
-    os.environ["POWERNAP_WANDB_PROJECT"] = args.wandb_project
-    os.environ["POWERNAP_WANDB_RUN_NAME"] = args.wandb_run_name
-    os.environ["POWERNAP_PORT"] = str(args.port)
+        os.environ["TADA_LOG_TO_WANDB"] = "1"
+    os.environ["TADA_WANDB_PROJECT"] = args.wandb_project
+    os.environ["TADA_WANDB_RUN_NAME"] = args.wandb_run_name
+    os.environ["TADA_PORT"] = str(args.port)
 
     threading.Thread(target=_watch_parent, daemon=True).start()
 
