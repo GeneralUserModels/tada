@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useAppContext, HistoryItem } from "../../context/AppContext";
+import { useFeatureFlags, getFlag } from "../../featureFlags";
 import * as api from "../../api/client";
 import { useConnectors } from "../../hooks/useConnectors";
 import { ConnectorItem, CONNECTOR_META } from "../connectors/ConnectorItem";
@@ -12,6 +13,7 @@ const BADGE_CLASS: Record<HistoryItem["type"], string> = {
 
 export function ConnectorsView() {
   const { state, dispatch } = useAppContext();
+  const featureFlags = useFeatureFlags();
   const { connectors, loading, load, toggle, toggling, connectGoogle, connectOutlook, retry } = useConnectors();
   const [connectingName, setConnectingName] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -71,7 +73,7 @@ export function ConnectorsView() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {Object.entries(connectors)
-              .filter(([name]) => CONNECTOR_META[name])
+              .filter(([name]) => CONNECTOR_META[name] && getFlag(featureFlags, `connector_${name}`))
               .sort(([a], [b]) => {
                 const keys = Object.keys(CONNECTOR_META);
                 return keys.indexOf(a) - keys.indexOf(b);

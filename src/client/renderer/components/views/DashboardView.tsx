@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { useTraining } from "../../hooks/useTraining";
+import { requestPrediction } from "../../api/client";
 import { TrainingTile, InferenceTile } from "../dashboard/PipelineTile";
 import { PredictionCard } from "../dashboard/PredictionCard";
 import { RewardsChart } from "../dashboard/RewardsChart";
@@ -26,8 +27,7 @@ export function DashboardView() {
 
   const handleGenerate = async () => {
     dispatch({ type: "PREDICTION_REQUESTED" });
-    await window.tada.startInference();
-    await window.tada.requestPrediction();
+    await requestPrediction();
   };
 
   return (

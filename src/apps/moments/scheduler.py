@@ -12,6 +12,7 @@ from pathlib import Path
 
 from apps.moments.execute import run as execute_moment, _parse_frontmatter as parse_frontmatter
 from apps.moments.state import load_state
+from server.feature_flags import is_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ async def run_moments_scheduler(state) -> None:
         try:
             await asyncio.sleep(SCAN_INTERVAL)
 
-            if not state.config.moments_enabled:
+            if not (is_enabled(state.config, "moments") and state.config.moments_enabled):
                 continue
 
             cfg = state.config

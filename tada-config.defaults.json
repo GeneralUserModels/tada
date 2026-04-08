@@ -2,5 +2,21 @@
   "google_client_id": "892882352791-i0nh6262vjj6lvg26h94j2shfmodbkfu.apps.googleusercontent.com",
   "google_client_secret": "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",
   "supabase_url": "https://gicxeybsowfhdanooxdc.supabase.co",
-  "supabase_anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdpY3hleWJzb3dmaGRhbm9veGRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNjU4ODEsImV4cCI6MjA4ODk0MTg4MX0.MW3S4rCAfQYiTuYvM1MJPL23mr191MPsZe8f6oFMM0I"
+  "supabase_anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdpY3hleWJzb3dmaGRhbm9veGRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNjU4ODEsImV4cCI6MjA4ODk0MTg4MX0.MW3S4rCAfQYiTuYvM1MJPL23mr191MPsZe8f6oFMM0I",
+  "feature_flags": {
+    "moments": false,
+    "tabracadabra": true,
+    "connector_screen": true,
+    "connector_gmail": false,
+    "connector_calendar": false,
+    "connector_outlook_email": false,
+    "connector_outlook_calendar": false,
+    "connector_notifications": false,
+    "connector_filesystem": false,
+    "permission_screen": true,
+    "permission_notifications": false,
+    "permission_accessibility": false,
+    "permission_browser_cookies": false,
+    "tinker": false
+  }
 }

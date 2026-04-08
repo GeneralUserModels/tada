@@ -1,4 +1,6 @@
+import React from "react";
 import { useAppContext } from "./context/AppContext";
+import { useFeatureFlag } from "./featureFlags";
 import { Sidebar } from "./components/Sidebar";
 import { ConnectorsView } from "./components/views/ConnectorsView";
 import { UserModelView } from "./components/views/UserModelView";
@@ -8,6 +10,7 @@ import { UpdateBanner } from "./components/UpdateBanner";
 
 export function App() {
   const { state, dispatch } = useAppContext();
+  const momentsEnabled = useFeatureFlag("moments");
 
   const navigate = (view: typeof state.activeView) => {
     dispatch({ type: "NAVIGATE", view });
@@ -30,7 +33,7 @@ export function App() {
           />
         )}
         {state.activeView === "connectors" && <ConnectorsView />}
-        {state.activeView === "tada" && <TadaView />}
+        {state.activeView === "tada" && momentsEnabled && <TadaView />}
         {state.activeView === "usermodel" && <UserModelView />}
         {state.activeView === "settings" && <SettingsView />}
       </main>
