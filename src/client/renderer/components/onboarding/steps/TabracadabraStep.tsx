@@ -61,14 +61,14 @@ export function TabracadabraStep({ onBack, onContinue }: Props) {
         <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M3 8h10M3 11.5h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M11.2 10.7 13.5 8.4l-2.3-2.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </div>
       <div className="page-title">Learning Tabracadabra</div>
-      <p className="page-desc">Try the demo text box and press Tab. This is a fake stream to mimic the real Tabracadabra feel.</p>
+      <p className="page-desc">Try the demo text box and press Tab to preview the Tabracadabra flow.</p>
       <div className="glass-card">
         <div className="field">
           <span className="field-label">Practice prompt</span>
           <textarea
             className="tutorial-box"
             value={text}
-            rows={6}
+            rows={8}
             onChange={(e) => {
               stopDemo();
               setText(e.target.value);
@@ -83,7 +83,7 @@ export function TabracadabraStep({ onBack, onContinue }: Props) {
                 }
                 return;
               }
-              const streamedParagraph = "Great work! This is placeholder text for now, but once you're done with onboarding, it'll complete from everything you've seen. You can also use this to ask an LLM questions in any text box! Just have a question right before, tab, and get the answer...";
+              const streamedParagraph = "Great work! Once onboarding is complete, Tabracadabra can complete text based on your context.\n\nYou can also ask a question in any text area (e.g. Google Docs! or your notes), hold Tab until the loading percentage appears, and let the text stream from an LLM. So a chat-based LLM everywhere :D";
               e.preventDefault();
               if (phase === "loading" || phase === "streaming" || tabDownRef.current) return;
               stopDemo();
@@ -145,14 +145,14 @@ export function TabracadabraStep({ onBack, onContinue }: Props) {
                 setPhase("idle");
               }
             }}
-            placeholder="Type a start here, then press Tab..."
+            placeholder="Focus on this textbox and press + hold tab."
             aria-label="Tabracadabra tutorial textbox"
           />
           <span className={`field-hint tutorial-hint${phase === "done" ? " done" : ""}`}>
             {(phase === "holding" || phase === "loading") && "Listening for hold..."}
             {phase === "streaming" && "Streaming suggestion..."}
-            {phase === "idle" && "Hold Tab (not tap) to trigger fake autocomplete."}
-            {phase === "done" && "Done. Fake local stream preview."}
+            {phase === "idle" && "Hold Tab (not tap) to trigger autocomplete."}
+            {phase === "done" && "Done. Preview complete."}
           </span>
         </div>
       </div>

@@ -218,6 +218,7 @@ button, input, select, textarea, a {
 
 .tutorial-box {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  min-height: 180px;
 }
 
 .tutorial-hint.done {
