@@ -24,6 +24,7 @@ import random
 import statistics
 import time
 import uuid
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -46,11 +47,28 @@ def _load_default_api_key() -> str:
     return ""
 
 
-def _tokenish_text(n_tokens: int, prefix: str) -> str:
-    """Create roughly token-proportional text for quick relative benchmarking."""
+@lru_cache(maxsize=4)
+def _get_tokenizer(tokenizer_name: str):
+    from transformers import AutoTokenizer
+
+    return AutoTokenizer.from_pretrained(tokenizer_name, use_fast=True)
+
+
+def _tokenish_text(n_tokens: int, prefix: str, tokenizer_name: str) -> str:
+    """Create text with approximately exact tokenizer token length."""
     if n_tokens <= 0:
         return ""
-    return " ".join(f"{prefix}_{i % 1000}" for i in range(n_tokens))
+    tok = _get_tokenizer(tokenizer_name)
+    token_ids: list[int] = []
+    i = 0
+    while len(token_ids) < n_tokens:
+        piece = f"{prefix}_{i % 1000}"
+        piece_text = piece if i == 0 else f" {piece}"
+        piece_ids = tok.encode(piece_text, add_special_tokens=False)
+        if piece_ids:
+            token_ids.extend(piece_ids)
+        i += 1
+    return tok.decode(token_ids[:n_tokens], skip_special_tokens=True).strip()
 
 
 def _safe_float(value: Any) -> float | None:
@@ -145,6 +163,11 @@ def main() -> None:
     parser.add_argument("--runs", type=int, default=10)
     parser.add_argument("--max-tokens", type=int, default=16)
     parser.add_argument(
+        "--tokenizer",
+        default="bert-base-uncased",
+        help="Hugging Face tokenizer used to construct token-length-controlled prompts.",
+    )
+    parser.add_argument(
         "--mode",
         choices=["plain", "anthropic_cache"],
         default="plain",
@@ -161,6 +184,17 @@ def main() -> None:
         raise SystemExit(
             "Missing dependency: litellm. Run this with your project Python environment "
             "(for example via `uv run` if you use uv)."
+        ) from exc
+    try:
+        _get_tokenizer(args.tokenizer)
+    except ModuleNotFoundError as exc:
+        raise SystemExit(
+            "Missing dependency: transformers. Install project dependencies before running this benchmark."
+        ) from exc
+    except Exception as exc:
+        raise SystemExit(
+            f"Failed to load tokenizer '{args.tokenizer}'. Choose a local/available HF tokenizer "
+            "or pre-download it first."
         ) from exc
 
     if not args.api_key:
@@ -183,8 +217,8 @@ def main() -> None:
     if not (0.0 <= args.trim_frac < 0.5):
         raise SystemExit("--trim-frac must be in [0.0, 0.5)")
 
-    static_prefix = _tokenish_text(args.cached_tokens, "cache")
-    dynamic_suffix = _tokenish_text(args.total_tokens - args.cached_tokens, "tail")
+    static_prefix = _tokenish_text(args.cached_tokens, "cache", args.tokenizer)
+    dynamic_suffix = _tokenish_text(args.total_tokens - args.cached_tokens, "tail", args.tokenizer)
 
     rng = random.Random(args.seed)
     reused_first = []

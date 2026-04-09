@@ -80,7 +80,7 @@ export function ModelsKeysStep(props: Props) {
       </div>
       <div className="btn-row">
         <button className="btn btn-ghost" onClick={props.onBack}>Back</button>
-        <button className="btn btn-primary" disabled={!props.model.trim() || !props.geminiKey.trim() || (props.flag("tinker") && !!props.tinkerError)} onClick={props.onFinish}>Finish Setup</button>
+        <button className="btn btn-primary" disabled={!props.model.trim() || !props.geminiKey.trim() || (props.flag("tinker") && !!props.tinkerError)} onClick={props.onFinish}>Continue</button>
       </div>
     </div>
   );

@@ -232,13 +232,6 @@ export function Onboarding() {
       )}
 
       {step === 3 && (
-        <TabracadabraStep
-          onBack={() => setStep(2)}
-          onContinue={() => setStep(4)}
-        />
-      )}
-
-      {step === 4 && (
         <ModelsKeysStep
           flag={flag}
           model={model}
@@ -255,8 +248,15 @@ export function Onboarding() {
           setWandbKey={setWandbKey}
           setAdvancedValues={setAdvancedValues}
           validateTinker={validateTinker}
+          onBack={() => setStep(2)}
+          onFinish={() => setStep(4)}
+        />
+      )}
+
+      {step === 4 && (
+        <TabracadabraStep
           onBack={() => setStep(3)}
-          onFinish={handleSubmit}
+          onContinue={handleSubmit}
         />
       )}
     </div>

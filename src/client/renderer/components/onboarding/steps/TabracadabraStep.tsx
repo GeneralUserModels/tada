@@ -61,7 +61,7 @@ export function TabracadabraStep({ onBack, onContinue }: Props) {
         <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M3 8h10M3 11.5h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M11.2 10.7 13.5 8.4l-2.3-2.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </div>
       <div className="page-title">Learning Tabracadabra</div>
-      <p className="page-desc">Try the demo text box and press Tab to preview the Tabracadabra flow.</p>
+      <p className="page-desc">In the text box below, focus and press + hold Tab.</p>
       <div className="glass-card">
         <div className="field">
           <span className="field-label">Practice prompt</span>
@@ -149,7 +149,8 @@ export function TabracadabraStep({ onBack, onContinue }: Props) {
             aria-label="Tabracadabra tutorial textbox"
           />
           <span className={`field-hint tutorial-hint${phase === "done" ? " done" : ""}`}>
-            {(phase === "holding" || phase === "loading") && "Listening for hold..."}
+            {phase === "holding" && "Listening for hold..."}
+            {phase === "loading" && "Loading... Once the % appears, you can release Tab."}
             {phase === "streaming" && "Streaming suggestion..."}
             {phase === "idle" && "Hold Tab (not tap) to trigger autocomplete."}
             {phase === "done" && "Done. Preview complete."}
@@ -158,7 +159,7 @@ export function TabracadabraStep({ onBack, onContinue }: Props) {
       </div>
       <div className="btn-row">
         <button className="btn btn-ghost" onClick={onBack}>Back</button>
-        <button className="btn btn-primary" onClick={onContinue}>Continue</button>
+        <button className="btn btn-primary" onClick={onContinue}>Finish Setup</button>
       </div>
     </div>
   );

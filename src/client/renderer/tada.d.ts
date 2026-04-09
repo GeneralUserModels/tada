@@ -3,6 +3,7 @@
 declare global {
 
 interface StatusData {
+  services_started?: boolean;
   training_active: boolean;
   labels_processed: number;
   step_count: number;
