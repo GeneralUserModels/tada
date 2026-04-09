@@ -16,7 +16,7 @@ type Props = {
   setGeminiKey: (v: string) => void;
   setTinkerKey: (v: string) => void;
   setWandbKey: (v: string) => void;
-  setAdvancedValues: (v: Record<string, string>) => void;
+  setAdvancedValues: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   validateTinker: (v: string) => boolean;
   onBack: () => void;
   onFinish: () => void;
