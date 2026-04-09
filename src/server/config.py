@@ -20,16 +20,21 @@ DEFAULT_TINKER_MODEL = "Qwen/Qwen3-VL-30B-A3B-Instruct"
 DEFAULT_AGENT_MODEL = "anthropic/claude-sonnet-4-6"
 
 MODEL_ALIASES: dict[str, str] = {
-    # Legacy/invalid aliases kept for backwards compatibility with older UI selections.
-    "openai/gpt-5.2-nano": "openai/gpt-5.4-nano",
-    "gpt-5.2-nano": "gpt-5.4-nano",
-    # Migrate prior GPT-5 nano selection to the new supported OpenAI option in UI.
-    "openai/gpt-5-nano": "openai/gpt-5.4-nano",
-    "gpt-5-nano": "gpt-5.4-nano",
+    # Legacy OpenAI aliases normalized to the single supported LLM.
+    "openai/gpt-5.4-nano": DEFAULT_LLM_MODEL,
+    "openai/gpt-4.1-nano": DEFAULT_LLM_MODEL,
+    "openai/gpt-5-nano": DEFAULT_LLM_MODEL,
+    "openai/gpt-5.2-nano": DEFAULT_LLM_MODEL,
+    "gpt-5.4-nano": DEFAULT_LLM_MODEL,
+    "gpt-4.1-nano": DEFAULT_LLM_MODEL,
+    "gpt-5-nano": DEFAULT_LLM_MODEL,
+    "gpt-5.2-nano": DEFAULT_LLM_MODEL,
 }
 
 
 def normalize_model_id(model_id: str) -> str:
+    if model_id.startswith("openai/"):
+        return DEFAULT_LLM_MODEL
     return MODEL_ALIASES.get(model_id, model_id)
 
 # Fields exposed via GET/PUT /api/settings (the UI settings panel).
