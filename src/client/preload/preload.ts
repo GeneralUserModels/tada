@@ -1,7 +1,6 @@
 /** Context bridge — exposes safe IPC methods to the renderer. */
 
 import { contextBridge, ipcRenderer } from "electron";
-import { IPC } from "../main/ipc";
 
 // Cache one-shot IPCs so late-registering renderers (e.g. after Vite JS load)
 // still get the payload even if the IPC fired before React mounted.
@@ -24,19 +23,6 @@ contextBridge.exposeInMainWorld("tada", {
       ipcRenderer.once("server:ready", (_e, data) => cb(data));
     }
   },
-  onPredictionRequested: (cb: () => void) =>
-    ipcRenderer.on("prediction:requested", () => cb()),
-
-  // Overlay
-  onOverlayPrediction: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("overlay:prediction", (_e, data) => cb(data)),
-  onOverlayWaiting: (cb: () => void) =>
-    ipcRenderer.on("overlay:waiting", () => cb()),
-  onOverlayFlushing: (cb: () => void) =>
-    ipcRenderer.on("overlay:flushing", () => cb()),
-  resizeOverlay: (height: number) =>
-    ipcRenderer.send("overlay:resize", height),
-
   // Onboarding — screen permission (Electron-only) + completion signal
   checkScreenPermission: () =>
     ipcRenderer.invoke("onboarding:check-screen-permission"),
@@ -64,7 +50,7 @@ contextBridge.exposeInMainWorld("tada", {
   checkForUpdates: () => ipcRenderer.invoke("update:check"),
 
   // External links
-  openExternalUrl: (url: string) => ipcRenderer.invoke(IPC.OPEN_EXTERNAL_URL, url),
+  openExternalUrl: (url: string) => ipcRenderer.invoke("external:open-url", url),
 
   // Moments (Ta-Da)
   getMomentsTasks: () => ipcRenderer.invoke("moments:get-tasks"),

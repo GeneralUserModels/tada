@@ -259,11 +259,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } catch (e) { console.error("[app] getStatus failed:", e); }
     });
 
-    // IPC events — native OS operations that can only come from main
-    window.tada.onPredictionRequested(() => {
-      dispatch({ type: "PREDICTION_REQUESTED" });
-    });
-
     window.tada.onUpdateAvailable((data) => {
       dispatch({ type: "UPDATE_AVAILABLE", version: data.version });
     });

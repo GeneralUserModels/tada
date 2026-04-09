@@ -3,12 +3,6 @@
 export const IPC = {
   // Main -> Dashboard
   SERVER_READY: "server:ready",
-  PREDICTION_REQUESTED: "prediction:requested",
-
-  // Main -> Overlay
-  OVERLAY_PREDICTION: "overlay:prediction",
-  OVERLAY_WAITING: "overlay:waiting",
-  OVERLAY_FLUSHING: "overlay:flushing",
 
   // Bootstrap (main -> setup window)
   BOOTSTRAP_PROGRESS: "bootstrap:progress",
