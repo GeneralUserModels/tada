@@ -1,6 +1,7 @@
 /** Context bridge — exposes safe IPC methods to the renderer. */
 
 import { contextBridge, ipcRenderer } from "electron";
+import { IPC } from "../main/ipc";
 
 // Cache one-shot IPCs so late-registering renderers (e.g. after Vite JS load)
 // still get the payload even if the IPC fired before React mounted.
@@ -61,6 +62,9 @@ contextBridge.exposeInMainWorld("tada", {
   },
   dismissUpdate: () => ipcRenderer.send("update:dismiss"),
   checkForUpdates: () => ipcRenderer.invoke("update:check"),
+
+  // External links
+  openExternalUrl: (url: string) => ipcRenderer.invoke(IPC.OPEN_EXTERNAL_URL, url),
 
   // Moments (Ta-Da)
   getMomentsTasks: () => ipcRenderer.invoke("moments:get-tasks"),

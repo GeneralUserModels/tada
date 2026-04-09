@@ -310,6 +310,13 @@ function setupIpc() {
 
   // Update check
   ipcMain.handle(IPC.UPDATE_CHECK, () => checkForUpdates());
+
+  // Open URLs in the OS default browser
+  ipcMain.handle(IPC.OPEN_EXTERNAL_URL, (_e, url: string) => {
+    if (typeof url !== "string" || !url.trim()) return false;
+    shell.openExternal(url);
+    return true;
+  });
 }
 
 // ── Bootstrap ────────────────────────────────────────────────

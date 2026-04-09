@@ -2,6 +2,8 @@ import React from "react";
 import { AdvancedLLMSection } from "../../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../../shared/ModelDropdown";
 
+const GOOGLE_AI_STUDIO_API_KEY_URL = "https://aistudio.google.com/app/apikey";
+
 type Props = {
   flag: (name: string) => boolean;
   model: string;
@@ -23,6 +25,11 @@ type Props = {
 };
 
 export function ModelsKeysStep(props: Props) {
+  const openApiKeyPage = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    void window.tada.openExternalUrl(GOOGLE_AI_STUDIO_API_KEY_URL);
+  };
+
   return (
     <div className="page active">
       <div className="page-icon">
@@ -48,6 +55,13 @@ export function ModelsKeysStep(props: Props) {
               <input type="password" placeholder="AIza..." value={props.geminiKey} onChange={(e) => props.setGeminiKey(e.target.value)}/>
             </div>
           </div>
+          <p className="onboarding-api-key-hint">
+            You can get your key at{" "}
+            <a href={GOOGLE_AI_STUDIO_API_KEY_URL} onClick={openApiKeyPage}>
+              Google AI Studio
+            </a>
+            {" "}. Make sure your account is upgraded from the free tier so you don't run into rate limits.
+          </p>
         </div>
         <AdvancedLLMSection values={props.advancedValues} setValues={props.setAdvancedValues} />
         {props.flag("tinker") && (

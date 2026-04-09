@@ -42,4 +42,7 @@ export const IPC = {
   UPDATE_AVAILABLE: "update:available",
   UPDATE_DISMISS: "update:dismiss",
   UPDATE_CHECK: "update:check",
+
+  // External URLs
+  OPEN_EXTERNAL_URL: "external:open-url",
 } as const;

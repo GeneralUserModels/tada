@@ -119,6 +119,9 @@ interface TadaAPI {
   dismissUpdate: () => void;
   checkForUpdates: () => Promise<unknown>;
 
+  // External links
+  openExternalUrl: (url: string) => Promise<boolean>;
+
   // Bootstrap (setup window)
   onBootstrapProgress: (cb: (msg: string, pct: number) => void) => void;
   onBootstrapLog: (cb: (line: string) => void) => void;

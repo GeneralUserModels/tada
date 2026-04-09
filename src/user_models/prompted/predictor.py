@@ -189,10 +189,11 @@ class PromptedPredictor(BasePredictor):
             "model": self.model,
         }
 
-        if self.predictions_file:
-            with open(self.predictions_file, "a") as f:
-                json.dump(result, f)
-                f.write("\n")
+        # NOTE: disable logging to file for now, this thing blows up...
+        # if self.predictions_file:
+        #     with open(self.predictions_file, "a") as f:
+        #         json.dump(result, f)
+        #         f.write("\n")
 
         return result
 

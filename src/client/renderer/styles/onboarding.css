@@ -445,6 +445,20 @@ button, input, select, textarea, a {
   gap: 10px;
 }
 .model-row-fields .field { margin-bottom: 0; }
+.onboarding-api-key-hint {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.onboarding-api-key-hint a {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: underline;
+}
+.onboarding-api-key-hint a:hover {
+  color: #1f2c1c;
+}
 
 /* Advanced toggle (shared with settings) */
 .advanced-toggle {
