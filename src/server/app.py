@@ -133,8 +133,10 @@ async def lifespan(app: FastAPI):
         state.model.data_manager.stop()
 
     # Stop all connectors so child MCP subprocesses are disconnected on shutdown.
+    for connector in state.connectors.values():
+        connector.stop()
     await asyncio.gather(
-        *[connector.stop() for connector in state.connectors.values()],
+        *[connector.disconnect_if_needed() for connector in state.connectors.values()],
         return_exceptions=True,
     )
 

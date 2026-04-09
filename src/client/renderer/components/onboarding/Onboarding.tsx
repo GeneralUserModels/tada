@@ -1,8 +1,14 @@
-import React, { useEffect, useRef, useState } from "react";
-import { AdvancedLLMSection } from "../shared/AdvancedLLMSection";
-import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
+/// <reference path="../../tada.d.ts" />
+import React, { useEffect, useState } from "react";
 import { PermissionModal } from "../modals/PermissionModal";
 import { getFlag } from "../../featureFlags";
+import { StepIndicator } from "./StepIndicator";
+import { WelcomeStep } from "./steps/WelcomeStep";
+import { GoogleSignInStep } from "./steps/GoogleSignInStep";
+import { ConnectorsStep } from "./steps/ConnectorsStep";
+import { TabracadabraStep } from "./steps/TabracadabraStep";
+import { ModelsKeysStep } from "./steps/ModelsKeysStep";
+import { LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 import {
   startGoogleSignIn,
   getGoogleUser,
@@ -15,22 +21,6 @@ import {
   updateSettings,
   completeOnboarding,
 } from "../../api/client";
-
-// ── Step indicator ────────────────────────────────────────────
-
-function StepIndicator({ current, total }: { current: number; total: number }) {
-  const items: JSX.Element[] = [];
-  for (let i = 0; i < total; i++) {
-    if (i > 0) items.push(<div key={`line-${i}`} className="step-line"></div>);
-    items.push(
-      <div
-        key={`dot-${i}`}
-        className={`step-dot${i === current ? " active" : i < current ? " done" : ""}`}
-      ></div>
-    );
-  }
-  return <div className="steps">{items}</div>;
-}
 
 // ── Main Onboarding component ─────────────────────────────────
 
@@ -160,8 +150,14 @@ export function Onboarding() {
     for (const [k, v] of Object.entries(advancedValues)) {
       if (v.trim()) advanced[k] = v.trim();
     }
+    const selectedLlmModel = model || LLM_MODELS[0].value;
     const settings: Record<string, unknown> = {
-      reward_llm: model || LLM_MODELS[0].value,
+      // Keep default LLM consumers aligned unless explicitly overridden in Advanced.
+      reward_llm: selectedLlmModel,
+      label_model: selectedLlmModel,
+      filter_model: selectedLlmModel,
+      moments_agent_model: selectedLlmModel,
+      tabracadabra_model: selectedLlmModel,
       model: tinkerModel || undefined,
       default_llm_api_key: geminiKey.trim(),
       ...advanced,
@@ -172,6 +168,10 @@ export function Onboarding() {
     await updateSettings(settings);
     await completeOnboarding();
     window.tada.onboardingComplete();
+  };
+
+  const openPermissionModal = (name: string, onGranted: () => void) => {
+    setPermModal({ name, onGranted });
   };
 
   return (
@@ -195,286 +195,75 @@ export function Onboarding() {
         />
       )}
 
-      <StepIndicator current={step} total={4} />
+      <StepIndicator current={step} total={5} />
 
-      {/* Page 0: Welcome */}
-      {step === 0 && (
-        <div className="page active">
-          <div className="welcome-brand">
-            <svg width="28" height="28" viewBox="0 0 20 20" fill="none">
-              <text x="1" y="17" fontFamily="sans-serif" fontWeight="bold" fontSize="11" fill="url(#bGrad)">Z</text>
-              <text x="7" y="13" fontFamily="sans-serif" fontWeight="bold" fontSize="8" fill="url(#bGrad)" opacity="0.75">z</text>
-              <text x="12" y="9" fontFamily="sans-serif" fontWeight="bold" fontSize="6" fill="url(#bGrad)" opacity="0.5">z</text>
-              <defs>
-                <linearGradient id="bGrad" x1="2" y1="2" x2="18" y2="18">
-                  <stop stopColor="#84B179"/><stop offset="1" stopColor="#A2CB8B"/>
-                </linearGradient>
-              </defs>
-            </svg>
-            <span>Tada</span>
-          </div>
-          <p className="welcome-subtitle">A few quick steps to get you up and running. This only takes a minute.</p>
-          <div className="glass-card">
-            <div className="welcome-features">
-              <div className="welcome-feature">
-                <div className="wf-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
-                </div>
-                <span>Grant screen recording permission so Tada can observe your workflow</span>
-              </div>
-              <div className="welcome-feature">
-                <div className="wf-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v4l3 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M2.5 8.5A5.5 5.5 0 1013.5 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                </div>
-                <span>Choose your prediction model</span>
-              </div>
-              <div className="welcome-feature">
-                <div className="wf-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 12V7M8 12V4M12 12V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                </div>
-                <span>Connect your API keys</span>
-              </div>
-            </div>
-          </div>
-          <div className="btn-row">
-            <div></div>
-            <button className="btn btn-primary" onClick={() => setStep(1)}>Get Started</button>
-          </div>
-        </div>
-      )}
+      {step === 0 && <WelcomeStep onStart={() => setStep(1)} />}
 
-      {/* Page 1: Google Login */}
       {step === 1 && (
-        <div className="page active">
-          <div className="page-icon">
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 2.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM8 13c-1.7 0-3.2-.9-4-2.2.02-1.3 2.7-2 4-2s3.98.7 4 2c-.8 1.3-2.3 2.2-4 2.2Z" fill="currentColor"/></svg>
-          </div>
-          <div className="page-title">Sign In</div>
-          <p className="page-desc">Sign in with your Google account so we know who you are.</p>
-          <div className="glass-card" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-            {!googleUser && (
-              <button
-                className="btn"
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 24px", background: "#fff", border: "1px solid #dadce0", borderRadius: 4, fontSize: 14, fontWeight: 500, color: "#3c4043" }}
-                onClick={handleGoogleLogin}
-                disabled={googleLoading}
-              >
-                <svg width="18" height="18" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.26c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.997 8.997 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 2.58 9 2.58Z" fill="#EA4335"/></svg>
-                {googleLoading ? "Signing in..." : "Sign in with Google"}
-              </button>
-            )}
-            <div style={{ fontSize: 12.5, color: googleUser ? "var(--active-green)" : googleError ? "var(--danger)" : "var(--text-secondary)", textAlign: "center", minHeight: 20 }}>
-              {googleUser
-                ? <><strong>Signed in as {googleUser.name}</strong><br/>{googleUser.email}</>
-                : googleError || ""}
-            </div>
-          </div>
-          <div className="btn-row">
-            <button className="btn btn-ghost" onClick={() => setStep(0)}>Back</button>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <button className="btn btn-primary" disabled={!googleUser} onClick={() => setStep(2)}>Continue</button>
-            </div>
-          </div>
-        </div>
+        <GoogleSignInStep
+          googleUser={googleUser}
+          googleLoading={googleLoading}
+          googleError={googleError}
+          onBack={() => setStep(0)}
+          onContinue={() => setStep(2)}
+          onGoogleLogin={handleGoogleLogin}
+        />
       )}
 
-      {/* Page 2: Connectors */}
       {step === 2 && (
-        <div className="page active">
-          <div className="page-icon">
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M6 2v3H3v6h3v3h4v-3h3V5h-3V2H6z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-          </div>
-          <div className="page-title">Connectors</div>
-          <p className="page-desc">Choose which data sources Tada can access to learn your patterns.</p>
-          <div className="glass-card" style={{ padding: 16 }}>
-            <div className="connector-list">
-              {/* Screen Recording */}
-              {flag("permission_screen") && (
-              <div className="connector-row">
-                <div className="connector-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
-                </div>
-                <div className="connector-info">
-                  <div className="connector-name">Screen Recording <span className="required-tag">Required</span></div>
-                  <div className="connector-desc">Captures your screen to observe workflow</div>
-                </div>
-                <div className="connector-action">
-                  {screenGranted
-                    ? <span className="perm-badge granted">Granted</span>
-                    : <button className="btn btn-outline btn-sm" onClick={() => setPermModal({ name: "screen", onGranted: () => setScreenGranted(true) })}>Grant Access</button>
-                  }
-                </div>
-              </div>
-              )}
-
-              {/* Google (Calendar + Gmail) */}
-              {(flag("connector_gmail") || flag("connector_calendar")) && (
-              <div className="connector-row">
-                <div className="connector-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.3"/><path d="M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                </div>
-                <div className="connector-info">
-                  <div className="connector-name">Google</div>
-                  <div className="connector-desc">Calendar + Email</div>
-                </div>
-                <div className="connector-action">
-                  {calendarConnected
-                    ? <span className="connected-badge">Connected</span>
-                    : <button className="btn btn-outline btn-sm" disabled={connectingGoogle === "calendar"} onClick={() => handleConnectGoogle("calendar")}>{connectingGoogle === "calendar" ? "Connecting..." : "Connect"}</button>
-                  }
-                </div>
-              </div>
-              )}
-
-              {/* Outlook (shared auth for calendar + email) */}
-              {(flag("connector_outlook_email") || flag("connector_outlook_calendar")) && (
-              <div className="connector-row">
-                <div className="connector-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.3"/><path d="M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                </div>
-                <div className="connector-info">
-                  <div className="connector-name">Outlook</div>
-                  <div className="connector-desc">Calendar + Email</div>
-                </div>
-                <div className="connector-action">
-                  {outlookConnected
-                    ? <span className="connected-badge">Connected</span>
-                    : <button className="btn btn-outline btn-sm" disabled={connectingOutlook} onClick={handleConnectOutlook}>{connectingOutlook ? "Connecting..." : "Connect"}</button>
-                  }
-                </div>
-              </div>
-              )}
-
-              {/* Disk Access (Notifications + Filesystem) */}
-              {flag("permission_notifications") && (
-              <div className="connector-row">
-                <div className="connector-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-                </div>
-                <div className="connector-info">
-                  <div className="connector-name">Disk Access</div>
-                  <div className="connector-desc">Notifications, Desktop, Documents, Downloads</div>
-                </div>
-                <div className="connector-action">
-                  {notifAvailable && fsAvailable
-                    ? <span className="perm-badge granted">Granted</span>
-                    : <button className="btn btn-outline btn-sm" onClick={() => setPermModal({ name: "notifications", onGranted: () => { setNotifAvailable(true); setNotifEnabled(true); setFsAvailable(true); setFsEnabled(true); } })}>Grant Access</button>
-                  }
-                </div>
-              </div>
-              )}
-
-              {/* Browser Cookies */}
-              {flag("permission_browser_cookies") && (
-              <div className="connector-row">
-                <div className="connector-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M2 8h12M8 2c-2 2-2 10 0 12M8 2c2 2 2 10 0 12" stroke="currentColor" strokeWidth="1.3"/></svg>
-                </div>
-                <div className="connector-info">
-                  <div className="connector-name">Browser Cookies <span className="required-tag">Required</span></div>
-                  <div className="connector-desc">Let the agent browse the internet</div>
-                </div>
-                <div className="connector-action">
-                  {browserCookiesGranted
-                    ? <span className="perm-badge granted">Granted</span>
-                    : <button className="btn btn-outline btn-sm" onClick={() => setPermModal({ name: "browser_cookies", onGranted: () => setBrowserCookiesGranted(true) })}>Grant Access</button>
-                  }
-                </div>
-              </div>
-              )}
-
-              {/* Accessibility (Tabracadabra) */}
-              {flag("permission_accessibility") && (
-              <div className="connector-row">
-                <div className="connector-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="5.5" r="1" fill="currentColor"/><path d="M5.5 7.5h5M8 7.5v4M6.5 11.5L8 9.5l1.5 2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </div>
-                <div className="connector-info">
-                  <div className="connector-name">Accessibility <span className="required-tag">Required</span></div>
-                  <div className="connector-desc">Tab autocomplete (Tabracadabra)</div>
-                </div>
-                <div className="connector-action">
-                  {accessibilityGranted
-                    ? <span className="perm-badge granted">Granted</span>
-                    : <button className="btn btn-outline btn-sm" onClick={() => setPermModal({ name: "accessibility", onGranted: () => setAccessibilityGranted(true) })}>Grant Access</button>
-                  }
-                </div>
-              </div>
-              )}
-            </div>
-          </div>
-          <div className="btn-row">
-            <button className="btn btn-ghost" onClick={() => setStep(1)}>Back</button>
-            <button className="btn btn-primary" disabled={
-              (flag("permission_screen") && !screenGranted)
-              || (flag("permission_browser_cookies") && !browserCookiesGranted)
-              || (flag("permission_accessibility") && !accessibilityGranted)
-            } onClick={() => setStep(3)}>Continue</button>
-          </div>
-        </div>
+        <ConnectorsStep
+          flag={flag}
+          screenGranted={screenGranted}
+          calendarConnected={calendarConnected}
+          outlookConnected={outlookConnected}
+          notifAvailable={notifAvailable}
+          fsAvailable={fsAvailable}
+          accessibilityGranted={accessibilityGranted}
+          browserCookiesGranted={browserCookiesGranted}
+          connectingGoogle={connectingGoogle}
+          connectingOutlook={connectingOutlook}
+          onBack={() => setStep(1)}
+          onContinue={() => setStep(3)}
+          onOpenPermissionModal={openPermissionModal}
+          onConnectGoogle={handleConnectGoogle}
+          onConnectOutlook={handleConnectOutlook}
+          setScreenGranted={setScreenGranted}
+          setNotifAvailable={setNotifAvailable}
+          setNotifEnabled={setNotifEnabled}
+          setFsAvailable={setFsAvailable}
+          setFsEnabled={setFsEnabled}
+          setBrowserCookiesGranted={setBrowserCookiesGranted}
+          setAccessibilityGranted={setAccessibilityGranted}
+        />
       )}
 
-      {/* Page 3: Models & Keys */}
       {step === 3 && (
-        <div className="page active">
-          <div className="page-icon">
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M4 12V7M8 12V4M12 12V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          </div>
-          <div className="page-title">Models & Keys</div>
-          <p className="page-desc">Configure your LLM provider. Uses LiteLLM format — any supported provider works.</p>
-          <div className="glass-card">
-            <div className="model-row">
-              <span className="model-row-label">LLM <span className="required-tag">Required</span></span>
-              <div className="model-row-fields">
-                <div className="field">
-                  <span>Model</span>
-                  <ModelDropdown
-                    value={model}
-                    onChange={setModel}
-                    options={LLM_MODELS}
-                    placeholder="Select a model"
-                  />
-                </div>
-                <div className="field">
-                  <span>API Key</span>
-                  <input type="password" placeholder="AIza..." value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)}/>
-                </div>
-              </div>
-            </div>
-            <AdvancedLLMSection values={advancedValues} setValues={setAdvancedValues} />
-            {flag("tinker") && (
-            <div className="model-row">
-              <span className="model-row-label">Tinker <span className="optional-tag">optional</span></span>
-              <div className="model-row-fields">
-                <div className="field">
-                  <span>Model</span>
-                  <ModelDropdown value={tinkerModel} onChange={setTinkerModel} options={TINKER_MODELS} placeholder="Select a model" />
-                </div>
-                <div className="field">
-                  <span>API Key</span>
-                  <input type="password" placeholder="tml-..." value={tinkerKey}
-                    onChange={(e) => { setTinkerKey(e.target.value); validateTinker(e.target.value); }}/>
-                  {tinkerError && <span className="field-hint" style={{ color: "var(--danger)" }}>{tinkerError}</span>}
-                </div>
-              </div>
-            </div>
-            )}
-            <div className="model-row">
-              <span className="model-row-label">W&amp;B <span className="optional-tag">optional</span></span>
-              <div className="model-row-fields">
-                <div className="field">
-                  <span>API Key</span>
-                  <input type="password" placeholder="wandb-..." value={wandbKey} onChange={(e) => setWandbKey(e.target.value)}/>
-                </div>
-                <div className="field"></div>
-              </div>
-            </div>
-          </div>
-          <div className="btn-row">
-            <button className="btn btn-ghost" onClick={() => setStep(2)}>Back</button>
-            <button className="btn btn-primary" disabled={!model.trim() || !geminiKey.trim() || (flag("tinker") && !!tinkerError)} onClick={handleSubmit}>Finish Setup</button>
-          </div>
-        </div>
+        <ModelsKeysStep
+          flag={flag}
+          model={model}
+          tinkerModel={tinkerModel}
+          geminiKey={geminiKey}
+          tinkerKey={tinkerKey}
+          wandbKey={wandbKey}
+          tinkerError={tinkerError}
+          advancedValues={advancedValues}
+          setModel={setModel}
+          setTinkerModel={setTinkerModel}
+          setGeminiKey={setGeminiKey}
+          setTinkerKey={setTinkerKey}
+          setWandbKey={setWandbKey}
+          setAdvancedValues={setAdvancedValues}
+          validateTinker={validateTinker}
+          onBack={() => setStep(2)}
+          onFinish={() => setStep(4)}
+        />
+      )}
+
+      {step === 4 && (
+        <TabracadabraStep
+          onBack={() => setStep(3)}
+          onContinue={handleSubmit}
+        />
       )}
     </div>
     </>

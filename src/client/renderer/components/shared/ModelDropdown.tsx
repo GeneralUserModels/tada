@@ -7,14 +7,10 @@ export interface ModelOption {
 
 export const LLM_MODELS: ModelOption[] = [
   { value: "gemini/gemini-3.1-flash-lite-preview",  label: "Gemini 3.1 Flash-Lite Preview" },
-  { value: "openai/gpt-5.2-nano",                   label: "OpenAI GPT-5.2 Nano" },
-  { value: "openai/gpt-4.1-nano",                   label: "OpenAI GPT-4.1 Nano" },
 ];
 
 export const TADA_MODELS: ModelOption[] = [
   { value: "gemini/gemini-3.1-flash-lite-preview",  label: "Gemini 3.1 Flash-Lite Preview" },
-  { value: "openai/gpt-5.2-nano",                   label: "OpenAI GPT-5.2 Nano" },
-  { value: "openai/gpt-4.1-nano",                   label: "OpenAI GPT-4.1 Nano" },
 ];
 
 export const TINKER_MODELS: ModelOption[] = [

@@ -14,7 +14,7 @@ interface ModelApiKeyRowProps {
   modelKey: string;
   apiKeyKey: string;
   values: Record<string, string>;
-  setValues: (updater: (prev: Record<string, string>) => Record<string, string>) => void;
+  setValues: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   options?: ModelOption[];
   modelPlaceholder?: string;
   apiKeyPlaceholder?: string;
@@ -55,7 +55,7 @@ export function ModelApiKeyRow({
 
 interface Props {
   values: Record<string, string>;
-  setValues: (updater: (prev: Record<string, string>) => Record<string, string>) => void;
+  setValues: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   children?: React.ReactNode;
 }
 

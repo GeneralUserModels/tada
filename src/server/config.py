@@ -7,6 +7,12 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 CONFIG_PATH = Path(os.environ.get("TADA_CONFIG_PATH", "tada-config.json"))
+CONFIG_DEFAULTS_PATH = Path(
+    os.environ.get(
+        "TADA_CONFIG_DEFAULTS_PATH",
+        str(CONFIG_PATH.with_name("tada-config.defaults.json")),
+    )
+)
 
 # Default model identifiers — single source of truth for Python.
 DEFAULT_LLM_MODEL = "gemini/gemini-3.1-flash-lite-preview"
@@ -179,22 +185,26 @@ class ServerConfig(BaseModel):
         return getattr(self, key, None) or self.default_llm_api_key or None
 
     def load_persisted(self) -> None:
-        """Load user-settable fields from the config file, if it exists.
+        """Load user-settable fields from defaults + config file, if they exist.
 
         CLI-arg-derived fields (log_dir, token paths, etc.) are not overwritten.
         """
-        if not CONFIG_PATH.exists():
-            return
-        try:
-            data = json.loads(CONFIG_PATH.read_text())
-        except Exception:
-            return
-        for field in _PERSISTED_FIELDS:
-            if field in data:
-                if field == "mcp_connectors":
-                    setattr(self, field, [MCPConnectorDef.model_validate(item) for item in data[field]])
-                else:
-                    setattr(self, field, data[field])
+        for cfg_path in (CONFIG_DEFAULTS_PATH, CONFIG_PATH):
+            if not cfg_path.exists():
+                continue
+            try:
+                data = json.loads(cfg_path.read_text())
+            except Exception:
+                continue
+            for field in _PERSISTED_FIELDS:
+                if field in data:
+                    if field == "mcp_connectors":
+                        setattr(self, field, [MCPConnectorDef.model_validate(item) for item in data[field]])
+                    elif field == "feature_flags":
+                        existing = getattr(self, field, {}) or {}
+                        setattr(self, field, {**existing, **data[field]})
+                    else:
+                        setattr(self, field, data[field])
 
     def save(self) -> None:
         """Persist user-settable fields to the config file.

@@ -25,7 +25,6 @@ for _name, _info in ServerConfig.model_fields.items():
 
 SettingsUpdate = create_model("SettingsUpdate", **_update_fields)
 
-
 @router.get("/settings")
 async def get_settings(request: Request):
     state = request.app.state.server
