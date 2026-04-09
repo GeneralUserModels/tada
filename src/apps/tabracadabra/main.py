@@ -194,7 +194,6 @@ def _fetch_tada_config(base_url: str = "http://localhost:8000") -> dict:
     defaults = {
         "model": os.getenv("MODEL", "gemini/gemini-3.1-flash-lite-preview"),
         "api_key": os.getenv("LLM_API_KEY", ""),
-        "hold_threshold": float(os.getenv("HOLD_THRESHOLD", "0.35")),
         "tada_base_url": base_url,
     }
     try:
@@ -206,9 +205,6 @@ def _fetch_tada_config(base_url: str = "http://localhost:8000") -> dict:
             data = json.loads(resp.read().decode())
         defaults["model"] = data.get("tabracadabra_model") or defaults["model"]
         defaults["api_key"] = data.get("tabracadabra_api_key") or data.get("default_llm_api_key") or defaults["api_key"]
-        defaults["hold_threshold"] = float(
-            data.get("tabracadabra_hold_threshold") or defaults["hold_threshold"]
-        )
     except Exception as e:
         print(f"[tabracadabra] Could not fetch config from Tada ({e}), using defaults.")
     return defaults
@@ -220,7 +216,6 @@ class TabracadabraService:
     def __init__(self, config: dict, prompt_text: str, placeholder: bool = False):
         self._model = config["model"]
         self._api_key = config.get("api_key", "")
-        self._hold_threshold = float(config.get("hold_threshold", 1.0))
         self._tada_base_url = config.get("tada_base_url", "http://localhost:8000")
         self._prompt_text = prompt_text
         self._placeholder = placeholder
@@ -236,7 +231,7 @@ class TabracadabraService:
         # I/O lock
         self._io_lock = threading.RLock()
 
-        # Session state (replaces module-level `state` dict)
+        # Session state
         self._session_active = False
         self._inserted_len = 0
         self._keep_contents = False
@@ -245,14 +240,10 @@ class TabracadabraService:
         self._spinner_count = 0
         self._last_char_space = False
         self._content_started = False
-        self._tab_down = False
-        self._tab_down_t0 = 0.0
-        self._activated = False
-        self._activation_timer: threading.Thread | None = None
         self._first_piece_event: threading.Event | None = None
         self._spinner_thread: threading.Thread | None = None
         self._spinner_active = False
-        self._watching = False  # True after tab released while stream is active
+        self._watching = False  # True while generation is active (any key/click cancels)
 
     # ------------- Lifecycle -------------
     def start(self):
@@ -262,7 +253,7 @@ class TabracadabraService:
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run_event_tap, daemon=True, name="tabracadabra")
         self._thread.start()
-        print(f"[tabracadabra] Service started | model={self._model} | threshold={self._hold_threshold}s")
+        print(f"[tabracadabra] Service started | model={self._model} | trigger=Option+Tab")
 
     def stop(self, timeout: float = 2.0):
         """Stop the event tap and join the thread."""
@@ -310,7 +301,7 @@ class TabracadabraService:
         Quartz.CFRunLoopAddSource(self._run_loop_ref, src, Quartz.kCFRunLoopCommonModes)
         Quartz.CGEventTapEnable(self._tap_ref, True)
 
-        print("[tabracadabra] Event tap active. Hold Tab to stream, quick tap for normal Tab.")
+        print("[tabracadabra] Event tap active. Press Option+Tab to generate.")
         Quartz.CFRunLoopRun()
 
     # ------------- Event posting helpers -------------
@@ -430,7 +421,7 @@ class TabracadabraService:
             self._inserted_len += 1 + len(display_text)
             self._spinner_count = 1 + len(display_text)
             self._last_char_space = False
-            activated_t0: Optional[float] = None
+            activated_t0 = time.monotonic()
 
             while not first_piece_event.is_set() and not cancel_event.is_set():
                 # OS-level block — zero CPU while waiting
@@ -438,16 +429,10 @@ class TabracadabraService:
                 if first_piece_event.is_set() or cancel_event.is_set():
                     break
 
-                if self._activated:
-                    if activated_t0 is None:
-                        activated_t0 = time.monotonic()
-                    elapsed = time.monotonic() - activated_t0
-                    pct = min(100, int((elapsed / SPINNER_PROGRESS_DURATION_S) * 100))
-                    idx = (idx + 1) % len(SPINNER_FRAMES_HOLDING)
-                    next_display = f"{SPINNER_FRAMES_HOLDING[idx]} {pct:3d}%"
-                else:
-                    idx = (idx + 1) % len(SPINNER_FRAMES_HOLDING)
-                    next_display = SPINNER_FRAMES_HOLDING[idx]
+                elapsed = time.monotonic() - activated_t0
+                pct = min(100, int((elapsed / SPINNER_PROGRESS_DURATION_S) * 100))
+                idx = (idx + 1) % len(SPINNER_FRAMES_HOLDING)
+                next_display = f"{SPINNER_FRAMES_HOLDING[idx]} {pct:3d}%"
 
                 if next_display == display_text:
                     continue
@@ -626,23 +611,10 @@ class TabracadabraService:
         self._stream_thread = t
         t.start()
 
-    def _activation_timer_body(self, start_t: float, cancel_event: threading.Event):
-        """Wait for hold threshold using Event.wait instead of busy-polling."""
-        remaining = self._hold_threshold - (time.monotonic() - start_t)
-        if remaining > 0:
-            cancel_event.wait(timeout=remaining)
-        if cancel_event.is_set() or not self._tab_down:
-            return
-        if not self._activated:
-            self._activated = True
-            self._start_stream()
-
-    def _handle_tab_down(self):
-        if self._tab_down:
-            return
-        self._tab_down = True
-        self._tab_down_t0 = time.monotonic()
-        self._activated = False
+    def _start_generation(self):
+        """Option+Tab pressed — start spinner + LLM stream immediately."""
+        self._session_active = True
+        self._watching = True
         self._keep_contents = False
         self._set_suppress_flag()
         self._inserted_len = 0
@@ -656,17 +628,8 @@ class TabracadabraService:
         self._first_piece_event = first_piece_event
 
         self._start_spinner(cancel, first_piece_event)
-
-        at = threading.Thread(target=self._activation_timer_body, args=(self._tab_down_t0, cancel), daemon=True)
-        self._activation_timer = at
-        at.start()
-
-    def _synthesize_tab_keypress(self):
-        src = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStatePrivate)
-        down = Quartz.CGEventCreateKeyboardEvent(src, KC_TAB, True)
-        self._post_event(down)
-        up = Quartz.CGEventCreateKeyboardEvent(src, KC_TAB, False)
-        self._post_event(up)
+        self._start_stream()
+        print("[tabracadabra] Option+Tab: generation started", flush=True)
 
     def _stop_stream(self, join: bool = True):
         if self._cancel_event:
@@ -683,30 +646,6 @@ class TabracadabraService:
             t.join()
         self._cleanup_spinner_if_present()
         self._spinner_thread = None
-
-    def _handle_tab_up(self):
-        if not self._tab_down:
-            return
-
-        self._tab_down = False
-        was_activated = self._activated
-
-        if not was_activated:
-            self._stop_spinner_and_cleanup()
-            self._clear_suppress_flag()
-            self._synthesize_tab_keypress()
-            self._activation_timer = None
-            self._first_piece_event = None
-            self._content_started = False
-            self._inserted_len = 0
-            self._last_char_space = False
-            self._cancel_event = None
-            print("[tabracadabra] Tab up: quick tap, synthesized normal tab", flush=True)
-        else:
-            # Stream is running — enter watching mode (stream continues hands-free)
-            self._watching = True
-            self._activation_timer = None
-            print("[tabracadabra] Tab up: entering watching mode", flush=True)
 
     def _handle_cancel(self):
         """Cancel an active watching session. Delete if spinner, interrupt if content."""
@@ -754,51 +693,21 @@ class TabracadabraService:
                     return event
 
                 keycode = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
+                flags = Quartz.CGEventGetFlags(event)
+                has_option = bool(flags & Quartz.kCGEventFlagMaskAlternate)
 
-                if keycode == KC_TAB:
+                if keycode == KC_TAB and has_option:
                     if event_type == Quartz.kCGEventKeyDown:
                         autorepeat = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventAutorepeat)
-                        if not autorepeat and not self._tab_down:
-                            # If a modifier key is held, this is a combo (e.g. Cmd+Tab, Alt+Tab)
-                            flags = Quartz.CGEventGetFlags(event)
-                            modifier_mask = (
-                                Quartz.kCGEventFlagMaskCommand |
-                                Quartz.kCGEventFlagMaskAlternate |
-                                Quartz.kCGEventFlagMaskControl |
-                                Quartz.kCGEventFlagMaskShift
-                            )
-                            if flags & modifier_mask:
-                                return event
-                            # Tab during watching = cancel (same as any other key)
-                            if self._watching:
-                                self._handle_cancel()
-                                return None
-                            self._handle_tab_down()
-                        return None
-                    else:
-                        self._handle_tab_up()
-                        return None
+                        if not autorepeat and not self._watching:
+                            self._start_generation()
+                    # Consume both down and up for Option+Tab
+                    return None
 
-                # Non-tab key handling
-                if event_type == Quartz.kCGEventKeyDown:
-                    # Cancel watching session on any key
-                    if self._watching:
-                        print(f"[tabracadabra] Key during watching: keycode={keycode}", flush=True)
-                        self._handle_cancel()
-                        return event
-
-                    # If tab is held but not yet activated, this is a combo (tab + y)
-                    if self._tab_down and not self._activated:
-                        if self._cancel_event:
-                            self._cancel_event.set()
-                        self._stop_spinner_and_cleanup()
-                        self._clear_suppress_flag()
-                        self._tab_down = False
-                        self._activation_timer = None
-                        self._first_piece_event = None
-                        self._cancel_event = None
-                        # Synthesize the original tab before this key
-                        self._synthesize_tab_keypress()
+                # Any keydown during active session cancels
+                if event_type == Quartz.kCGEventKeyDown and self._watching:
+                    print(f"[tabracadabra] Key during watching: keycode={keycode}", flush=True)
+                    self._handle_cancel()
 
                 return event
 
