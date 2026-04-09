@@ -144,7 +144,7 @@ const DEMOS: Demo[] = [
   },
 ];
 
-type Phase = "typing" | "holding" | "spinner" | "streaming" | "done";
+type Phase = "typing" | "spinner" | "streaming" | "done";
 
 function useAutocompleteDemo() {
   const [demoIdx, setDemoIdx] = useState(0);
@@ -177,12 +177,10 @@ function useAutocompleteDemo() {
           setVisibleTyped(demo.typed.slice(0, frame));
           timeout = setTimeout(typeNext, typeSpeed);
         } else {
-          timeout = setTimeout(() => setPhase("holding"), 400);
+          timeout = setTimeout(() => setPhase("spinner"), 400);
         }
       }
       typeNext();
-    } else if (phase === "holding") {
-      timeout = setTimeout(() => setPhase("spinner"), 600);
     } else if (phase === "spinner") {
       let tick = 0;
       const totalTicks = 18;
@@ -259,7 +257,7 @@ export function App() {
           </span>
         </h1>
         <p className="hero-subtitle">
-          Hold Tab in any textbox. Get a streaming autocomplete powered by a
+          Press Option + Tab in any textbox. Get a streaming autocomplete powered by a
           model that knows your context.
         </p>
 
@@ -288,10 +286,9 @@ export function App() {
               {theme.app}
             </div>
             <div className="demo-tab-hint">
-              {(phase === "holding" || phase === "spinner") && (
+              {phase === "spinner" && (
                 <span className="tab-key-badge">
-                  Tab
-                  <span className="tab-key-held" />
+                  Option + Tab
                 </span>
               )}
             </div>
