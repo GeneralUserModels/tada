@@ -16,7 +16,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index:      path.resolve(__dirname, "src/client/renderer/index.html"),
-        overlay:    path.resolve(__dirname, "src/client/renderer/overlay.html"),
         onboarding: path.resolve(__dirname, "src/client/renderer/onboarding.html"),
         setup:      path.resolve(__dirname, "src/client/renderer/setup.html"),
       },

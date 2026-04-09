@@ -23,19 +23,6 @@ contextBridge.exposeInMainWorld("tada", {
       ipcRenderer.once("server:ready", (_e, data) => cb(data));
     }
   },
-  onPredictionRequested: (cb: () => void) =>
-    ipcRenderer.on("prediction:requested", () => cb()),
-
-  // Overlay
-  onOverlayPrediction: (cb: (data: unknown) => void) =>
-    ipcRenderer.on("overlay:prediction", (_e, data) => cb(data)),
-  onOverlayWaiting: (cb: () => void) =>
-    ipcRenderer.on("overlay:waiting", () => cb()),
-  onOverlayFlushing: (cb: () => void) =>
-    ipcRenderer.on("overlay:flushing", () => cb()),
-  resizeOverlay: (height: number) =>
-    ipcRenderer.send("overlay:resize", height),
-
   // Onboarding — screen permission (Electron-only) + completion signal
   checkScreenPermission: () =>
     ipcRenderer.invoke("onboarding:check-screen-permission"),

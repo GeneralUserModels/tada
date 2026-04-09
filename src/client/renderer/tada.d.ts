@@ -87,13 +87,6 @@ interface MomentResult {
 interface TadaAPI {
   // App lifecycle
   onServerReady: (cb: (data: { url: string }) => void) => void;
-  onPredictionRequested: (cb: () => void) => void;
-
-  // Overlay
-  onOverlayPrediction: (cb: (data: PredictionData) => void) => void;
-  onOverlayWaiting: (cb: () => void) => void;
-  onOverlayFlushing: (cb: () => void) => void;
-  resizeOverlay: (height: number) => void;
 
   // Onboarding — screen permission (Electron-only) + completion signal
   checkScreenPermission: () => Promise<string>;

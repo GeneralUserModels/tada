@@ -1,11 +1,9 @@
-/** Main process: window management, global shortcuts, IPC handlers, child processes. */
+/** Main process: window management, IPC handlers, child processes. */
 
 import {
   app,
   BrowserWindow,
-  globalShortcut,
   ipcMain,
-  screen,
   shell,
 } from "electron";
 import * as fs from "fs";
@@ -148,8 +146,6 @@ function waitForServer(url: string, timeoutMs = 120000): Promise<void> {
 
 let setupWindow: BrowserWindow | null = null;
 let dashboardWindow: BrowserWindow | null = null;
-let overlayWindow: BrowserWindow | null = null;
-let overlayVisible = false;
 let isQuitting = false;
 
 // ── Window creation ──────────────────────────────────────────
@@ -209,87 +205,9 @@ function createDashboard() {
   });
 }
 
-function createOverlay() {
-  const display = screen.getPrimaryDisplay();
-  const { width: screenW, height: screenH } = display.workAreaSize;
-  const overlayW = 420;
-  const overlayH = 80;
-
-  overlayWindow = new BrowserWindow({
-    width: overlayW,
-    height: overlayH,
-    x: screenW - overlayW - 20,
-    y: screenH - overlayH - 60,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    focusable: false,
-    hasShadow: false,
-    resizable: false,
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, "..", "preload", "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-
-  // Click-through + visible on all workspaces
-  overlayWindow.setIgnoreMouseEvents(true);
-  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
-
-  if (isDev()) {
-    overlayWindow.loadURL("http://localhost:5173/overlay.html");
-  } else {
-    overlayWindow.loadFile(path.join(__dirname, "..", "renderer", "overlay.html"));
-  }
-
-  overlayWindow.on("closed", () => {
-    overlayWindow = null;
-  });
-}
-
-function toggleOverlay() {
-  if (!overlayWindow) return;
-  if (overlayVisible) {
-    overlayWindow.hide();
-  } else {
-    overlayWindow.show();
-    // Notify dashboard first (before overlay send which could fail)
-    dashboardWindow?.webContents.send(IPC.PREDICTION_REQUESTED);
-    api.requestPrediction().catch((err) => console.error("[prediction]", err));
-    overlayWindow.webContents.send(IPC.OVERLAY_WAITING);
-  }
-  overlayVisible = !overlayVisible;
-}
-
-function resizeOverlay(contentHeight: number) {
-  if (!overlayWindow) return;
-  const display = screen.getPrimaryDisplay();
-  const { width: screenW, height: screenH } = display.workAreaSize;
-  const overlayW = 420;
-  const h = Math.max(80, Math.min(500, contentHeight));
-  overlayWindow.setBounds({
-    x: screenW - overlayW - 20,
-    y: screenH - h - 60,
-    width: overlayW,
-    height: h,
-  });
-}
-
 // ── SSE event forwarding ─────────────────────────────────────
 
 function setupSseForwarding() {
-  // Dashboard subscribes to SSE directly — only forward what it can't receive itself.
-
-  sse.on("prediction", (data) => {
-    // Overlay has no direct SSE connection; forward predictions to it via IPC.
-    if (overlayVisible && overlayWindow) {
-      overlayWindow.webContents.send(IPC.OVERLAY_PREDICTION, data);
-    }
-  });
-
   sse.on("moment_completed", (data) => {
     dashboardWindow?.webContents.send(IPC.MOMENT_COMPLETED, data);
   });
@@ -302,11 +220,6 @@ function setupIpc() {
   ipcMain.handle(IPC.MOMENTS_GET_TASKS, () => api.getMomentsTasks());
   ipcMain.handle(IPC.MOMENTS_GET_RESULTS, () => api.getMomentsResults());
   ipcMain.handle(IPC.GET_SERVER_URL, () => api.getServerUrl());
-
-  // Overlay resize
-  ipcMain.on("overlay:resize", (_e, height: number) => {
-    resizeOverlay(height);
-  });
 
   // Update check
   ipcMain.handle(IPC.UPDATE_CHECK, () => checkForUpdates());
@@ -389,7 +302,6 @@ app.whenReady().then(async () => {
   }
 
   createDashboard();
-  createOverlay();
   setupSseForwarding();
 
   if (dashboardWindow) {
@@ -409,7 +321,6 @@ app.whenReady().then(async () => {
   });
 
   sse.connect();
-  globalShortcut.register("Control+H", toggleOverlay);
 });
 
 app.on("before-quit", () => {
@@ -430,6 +341,3 @@ app.on("activate", () => {
   }
 });
 
-app.on("will-quit", () => {
-  globalShortcut.unregisterAll();
-});
