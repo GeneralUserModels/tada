@@ -150,8 +150,14 @@ export function Onboarding() {
     for (const [k, v] of Object.entries(advancedValues)) {
       if (v.trim()) advanced[k] = v.trim();
     }
+    const selectedLlmModel = model || LLM_MODELS[0].value;
     const settings: Record<string, unknown> = {
-      reward_llm: model || LLM_MODELS[0].value,
+      // Keep default LLM consumers aligned unless explicitly overridden in Advanced.
+      reward_llm: selectedLlmModel,
+      label_model: selectedLlmModel,
+      filter_model: selectedLlmModel,
+      moments_agent_model: selectedLlmModel,
+      tabracadabra_model: selectedLlmModel,
       model: tinkerModel || undefined,
       default_llm_api_key: geminiKey.trim(),
       ...advanced,
