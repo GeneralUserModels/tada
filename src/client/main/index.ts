@@ -3,6 +3,7 @@
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   shell,
 } from "electron";
@@ -92,6 +93,7 @@ function startServer(port: number): void {
       "--resume-from-checkpoint", "auto",
       "--log-to-wandb",
     ], {
+      cwd: getDataDir(),
       env: {
         ...process.env,
         PYTHONPATH: pythonSrcDir,
@@ -321,6 +323,11 @@ app.whenReady().then(async () => {
   });
 
   sse.connect();
+}).catch((err: unknown) => {
+  const message = err instanceof Error ? err.stack ?? err.message : String(err);
+  console.error("[startup] fatal error", message);
+  dialog.showErrorBox("Tada failed to start", message);
+  app.quit();
 });
 
 app.on("before-quit", () => {

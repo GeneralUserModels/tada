@@ -54,6 +54,7 @@ function runCommand(
     const proc = spawn(cmd, args, {
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, ...env },
+      cwd: getDataDir(),
     });
 
     let stderr = "";
@@ -129,7 +130,7 @@ export async function run(onProgress: ProgressCallback, onLog?: LogCallback): Pr
 
     await downloadFile(uvUrl, tarPath);
     onProgress("Extracting uv...", 10);
-    await runCommand("tar", ["xzf", tarPath, "-C", dataDir, "--strip-components=1"], onLog);
+    await runCommand("/usr/bin/tar", ["xzf", tarPath, "-C", dataDir, "--strip-components=1"], onLog);
     fs.unlinkSync(tarPath);
 
     // Ensure uv is executable
@@ -146,7 +147,7 @@ export async function run(onProgress: ProgressCallback, onLog?: LogCallback): Pr
 
     await downloadFile(rgUrl, rgTarPath);
     onProgress("Extracting ripgrep...", 13);
-    await runCommand("tar", ["xzf", rgTarPath, "-C", dataDir, "--strip-components=1"], onLog);
+    await runCommand("/usr/bin/tar", ["xzf", rgTarPath, "-C", dataDir, "--strip-components=1"], onLog);
     fs.unlinkSync(rgTarPath);
 
     // The tarball extracts a "rg" binary

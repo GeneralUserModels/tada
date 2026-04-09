@@ -1,6 +1,7 @@
 /** Centralized path resolution for dev vs packaged mode. */
 
 import { app } from "electron";
+import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
@@ -9,9 +10,19 @@ export function isDev(): boolean {
 }
 
 export function getDataDir(): string {
-  return isDev()
-    ? path.resolve(__dirname, "..", "..")
-    : app.getPath("userData");
+  if (isDev()) {
+    // In dev, keep all config/assets rooted at the local project path.
+    return app.getAppPath();
+  }
+
+  const appSupportDir = path.join(os.homedir(), "Library", "Application Support");
+  const canonicalDir = path.join(appSupportDir, "tada");
+  const legacyDir = path.join(appSupportDir, app.getName());
+
+  // Prefer the canonical, fixed path so launch context does not split app state.
+  if (fs.existsSync(canonicalDir)) return canonicalDir;
+  if (fs.existsSync(legacyDir)) return legacyDir;
+  return canonicalDir;
 }
 
 export function getPythonPath(): string {
