@@ -8,16 +8,7 @@ export function WelcomeStep({ onStart }: Props) {
   return (
     <div className="page active">
       <div className="welcome-brand">
-        <svg width="28" height="28" viewBox="0 0 20 20" fill="none">
-          <text x="1" y="17" fontFamily="sans-serif" fontWeight="bold" fontSize="11" fill="url(#bGrad)">Z</text>
-          <text x="7" y="13" fontFamily="sans-serif" fontWeight="bold" fontSize="8" fill="url(#bGrad)" opacity="0.75">z</text>
-          <text x="12" y="9" fontFamily="sans-serif" fontWeight="bold" fontSize="6" fill="url(#bGrad)" opacity="0.5">z</text>
-          <defs>
-            <linearGradient id="bGrad" x1="2" y1="2" x2="18" y2="18">
-              <stop stopColor="#84B179"/><stop offset="1" stopColor="#A2CB8B"/>
-            </linearGradient>
-          </defs>
-        </svg>
+        <div className="welcome-brand-icon" aria-hidden="true">🎉</div>
         <span>Tada</span>
       </div>
       <p className="welcome-subtitle">A few quick steps to get you up and running. This only takes a minute.</p>

@@ -7,7 +7,16 @@ import { setServerUrl } from "./api/client";
 // useEffect hooks (e.g. getGoogleUser) can reach the Python server.
 const root = document.getElementById("root")!;
 const reactRoot = createRoot(root);
-window.tada.onServerReady((data) => {
-  setServerUrl(data.url);
-  reactRoot.render(<Onboarding />);
-});
+
+async function bootstrapOnboarding() {
+  try {
+    const url = await window.tada.getServerUrl();
+    if (url) setServerUrl(url);
+  } catch {
+    console.warn("[onboarding] failed to fetch server URL");
+  } finally {
+    reactRoot.render(<Onboarding />);
+  }
+}
+
+void bootstrapOnboarding();
