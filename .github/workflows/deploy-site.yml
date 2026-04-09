@@ -36,7 +36,7 @@ jobs:
       - name: Verify build artifact looks like site app
         run: |
           test -f site/dist/index.html
-          rg 'id="root"' site/dist/index.html
+          grep -q 'id="root"' site/dist/index.html
           touch site/dist/.nojekyll
 
       - uses: actions/upload-pages-artifact@v3
