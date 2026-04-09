@@ -19,6 +19,19 @@ DEFAULT_LLM_MODEL = "gemini/gemini-3.1-flash-lite-preview"
 DEFAULT_TINKER_MODEL = "Qwen/Qwen3-VL-30B-A3B-Instruct"
 DEFAULT_AGENT_MODEL = "anthropic/claude-sonnet-4-6"
 
+MODEL_ALIASES: dict[str, str] = {
+    # Legacy/invalid aliases kept for backwards compatibility with older UI selections.
+    "openai/gpt-5.2-nano": "openai/gpt-5.4-nano",
+    "gpt-5.2-nano": "gpt-5.4-nano",
+    # Migrate prior GPT-5 nano selection to the new supported OpenAI option in UI.
+    "openai/gpt-5-nano": "openai/gpt-5.4-nano",
+    "gpt-5-nano": "gpt-5.4-nano",
+}
+
+
+def normalize_model_id(model_id: str) -> str:
+    return MODEL_ALIASES.get(model_id, model_id)
+
 # Fields exposed via GET/PUT /api/settings (the UI settings panel).
 SETTINGS_API_FIELDS: frozenset[str] = frozenset({
     "default_llm_api_key", "tinker_api_key", "hf_token", "wandb_api_key",
@@ -204,7 +217,16 @@ class ServerConfig(BaseModel):
                         existing = getattr(self, field, {}) or {}
                         setattr(self, field, {**existing, **data[field]})
                     else:
-                        setattr(self, field, data[field])
+                        value = data[field]
+                        if field in {
+                            "reward_llm",
+                            "label_model",
+                            "filter_model",
+                            "moments_agent_model",
+                            "tabracadabra_model",
+                        } and isinstance(value, str):
+                            value = normalize_model_id(value)
+                        setattr(self, field, value)
 
     def save(self) -> None:
         """Persist user-settable fields to the config file.

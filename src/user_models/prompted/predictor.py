@@ -97,14 +97,13 @@ class PromptedPredictor(BasePredictor):
                 blocks.append(h["text"])
         return "\n\n".join(blocks)
 
-    def _sample(self, messages: list, stop: list) -> str:
+    def _sample(self, messages: list) -> str:
         logger.info("[llm] prediction: generating")
         response = litellm_completion(
             model=self.model,
             messages=messages,
             max_tokens=self.max_tokens,
             temperature=self.temperature,
-            stop=stop,
             api_key=self.api_key or None,
             metadata={"app": "tabracadabra"},
         )
@@ -166,7 +165,7 @@ class PromptedPredictor(BasePredictor):
             if isinstance(p, dict) and "text" in p
         )
 
-        actions_text = self._sample(messages, stop=["</actions>"])
+        actions_text = self._sample(messages)
 
         logger.info(
             "[predict] model=%s | retrieval: %d hits, %d chars | "

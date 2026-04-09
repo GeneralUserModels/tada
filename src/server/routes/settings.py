@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import create_model
 
-from server.config import ServerConfig, SETTINGS_API_FIELDS
+from server.config import ServerConfig, SETTINGS_API_FIELDS, normalize_model_id
 from server.feature_flags import is_enabled
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,14 @@ for _name, _info in ServerConfig.model_fields.items():
         _update_fields[_name] = (Optional[_info.annotation], None)
 
 SettingsUpdate = create_model("SettingsUpdate", **_update_fields)
+
+_MODEL_FIELDS = {
+    "reward_llm",
+    "label_model",
+    "filter_model",
+    "moments_agent_model",
+    "tabracadabra_model",
+}
 
 
 @router.get("/settings")
@@ -40,6 +48,8 @@ async def update_settings(update: SettingsUpdate, request: Request):
     updated = []
 
     for field_name, value in update.model_dump(exclude_none=True).items():
+        if field_name in _MODEL_FIELDS and isinstance(value, str):
+            value = normalize_model_id(value)
         setattr(cfg, field_name, value)
         updated.append(field_name)
 
