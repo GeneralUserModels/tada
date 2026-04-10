@@ -33,8 +33,9 @@ from connectors.screen.napsack.recorder import (
 load_dotenv()
 
 # ------------- Constants -------------
-JOINER = "\u2060"  # WORD JOINER (plays nice with Backspace)
-SPINNER_FRAMES_HOLDING = ["◐", "◓", "◑", "◒"]
+# Keep spinner ASCII + fixed-width to avoid editor normalization drift that can
+# make backspace-based redraws delete earlier user text in rich editors.
+SPINNER_FRAMES_HOLDING = ["|", "/", "-", "\\"]
 SPINNER_PROGRESS_DURATION_S = 9.0
 SPINNER_TICK_INTERVAL_S = 0.12
 # Give macOS a brief chance to apply posted backspaces before first content.
@@ -186,6 +187,11 @@ def _normalize_piece(piece: str) -> str:
     piece = piece.replace("\u00A0", " ")
     piece = re.sub(r" {2,}", " ", piece)
     return piece
+
+
+def _format_spinner_display(frame: str, pct: int) -> str:
+    """Return a plain ASCII spinner string without space padding."""
+    return f"[{frame}] {pct}%"
 
 
 # ------------- Config fetch for standalone use -------------
@@ -416,10 +422,10 @@ class TabracadabraService:
     def _loading_spinner(self, first_piece_event: threading.Event, cancel_event: threading.Event):
         try:
             idx = 0
-            display_text = SPINNER_FRAMES_HOLDING[idx]
-            self._type_text(JOINER + display_text)
-            self._inserted_len += 1 + len(display_text)
-            self._spinner_count = 1 + len(display_text)
+            display_text = _format_spinner_display(SPINNER_FRAMES_HOLDING[idx], 0)
+            self._type_text(display_text)
+            self._inserted_len += len(display_text)
+            self._spinner_count = len(display_text)
             self._last_char_space = False
             activated_t0 = time.monotonic()
 
@@ -432,7 +438,7 @@ class TabracadabraService:
                 elapsed = time.monotonic() - activated_t0
                 pct = min(100, int((elapsed / SPINNER_PROGRESS_DURATION_S) * 100))
                 idx = (idx + 1) % len(SPINNER_FRAMES_HOLDING)
-                next_display = f"{SPINNER_FRAMES_HOLDING[idx]} {pct:3d}%"
+                next_display = _format_spinner_display(SPINNER_FRAMES_HOLDING[idx], pct)
 
                 if next_display == display_text:
                     continue

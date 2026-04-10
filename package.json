@@ -11,7 +11,8 @@
     "start": "npm run build && electron dist/main/index.js",
     "dev": "node scripts/dev-supervisor.cjs",
     "dist": "npm run build && npx electron-builder --mac --publish never",
-    "release": "npm run build && npx electron-builder --mac --publish always",
+    "release": "npm run build && REQUIRE_NOTARIZATION=1 npx electron-builder --mac --publish never",
+    "release:publish": "npm run build && REQUIRE_NOTARIZATION=1 npx electron-builder --mac --publish always",
     "reset": "rm -f tada-config.json ~/.config/tada/google-token.json ~/.config/tada/outlook-token.json"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "dotenv": "^17.4.1",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",
     "typescript": "^5.6.0",
@@ -36,6 +38,7 @@
   "build": {
     "appId": "com.tada.app",
     "productName": "Tada",
+    "afterSign": "scripts/notarize.cjs",
     "directories": {
       "output": "release"
     },
@@ -49,11 +52,11 @@
     "mac": {
       "icon": "src/client/build/icon.icns",
       "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
       "target": [
         "dmg",
         "zip"
       ],
-      "notarize": false,
       "extendInfo": {
         "NSScreenCaptureUsageDescription": "Tada needs screen recording to observe your workflow.",
         "NSAccessibilityUsageDescription": "Tada needs accessibility access to track input events."

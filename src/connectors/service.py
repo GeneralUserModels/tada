@@ -149,12 +149,18 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
         logger.info(f"{cfg.name}: fetched {len(items)}, kept {len(to_write)}")
 
     while True:
-        await cfg.connector.disconnect_if_needed()
+        logger.info(f"[DEBUG {cfg.name}] top of loop: paused={cfg.connector.paused}, session={cfg.connector._session is not None}, disconnect_event={cfg.connector._disconnect_event.is_set()}")
+        try:
+            await cfg.connector.disconnect_if_needed()
+        except Exception:
+            logger.exception(f"{cfg.name}: disconnect_if_needed failed")
 
         # Reconnect notification-based connectors that were resumed but are still disconnected
         if cfg.uses_notifications and not cfg.connector.paused and cfg.connector._session is None:
+            logger.info(f"[DEBUG {cfg.name}] reconnecting after resume...")
             try:
                 await cfg.connector.connect()
+                logger.info(f"[DEBUG {cfg.name}] reconnected OK, session={cfg.connector._session is not None}")
             except Exception:
                 logger.exception("%s: failed to reconnect after resume", cfg.name)
 
@@ -200,10 +206,13 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
         # For long-poll connectors (interval=0), ensure a minimum backoff on error or when paused
         # to avoid tight-looping. Normal case: re-poll immediately (the tool handled the wait).
         delay = max(cfg.interval, 5) if (error_occurred or cfg.connector.paused) else cfg.interval
+        logger.info(f"[DEBUG {cfg.name}] sleeping delay={delay}, paused={cfg.connector.paused}, error_occurred={error_occurred}")
         if delay > 0:
             try:
                 await asyncio.wait_for(cfg.connector._disconnect_event.wait(), timeout=delay)
+                logger.info(f"[DEBUG {cfg.name}] woke from sleep: disconnect_event fired")
             except asyncio.TimeoutError:
+                logger.info(f"[DEBUG {cfg.name}] woke from sleep: timeout")
                 pass
 
 
