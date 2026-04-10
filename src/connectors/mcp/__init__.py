@@ -49,22 +49,26 @@ class MCPConnector:
         return self._paused
 
     def pause(self, error: str | None = None) -> None:
+        logger.info(f"[DEBUG] MCPConnector.pause() called, error={error}")
         self._paused = True
         if error is not None:
             self.error = error
 
     def stop(self, error: str | None = None) -> None:
         """Pause and request disconnection (actual disconnect happens in the owning task)."""
+        logger.info(f"[DEBUG] MCPConnector.stop() called, error={error}")
         self.pause(error=error)
         self._disconnect_event.set()
 
     async def disconnect_if_needed(self) -> None:
         """Disconnect if a stop was requested.  Must be called from the same task that connected."""
         if self._disconnect_event.is_set():
+            logger.info("[DEBUG] MCPConnector.disconnect_if_needed() — disconnecting")
             self._disconnect_event.clear()
             await self._disconnect()
 
     def resume(self) -> None:
+        logger.info(f"[DEBUG] MCPConnector.resume() called, session={self._session is not None}, disconnect_event={self._disconnect_event.is_set()}")
         self._paused = False
         self.error = None
         self._disconnect_event.clear()  # cancel any pending disconnect from stop()
@@ -147,7 +151,11 @@ class MCPConnector:
         )
 
     async def _disconnect(self) -> None:
-        if self._stack is not None:
-            await self._stack.aclose()
+        stack = self._stack
         self._stack = None
         self._session = None
+        if stack is not None:
+            try:
+                await stack.aclose()
+            except Exception:
+                logger.warning("MCPConnector._disconnect: aclose failed", exc_info=True)

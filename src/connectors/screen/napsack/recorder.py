@@ -101,6 +101,18 @@ class OnlineRecorder(ScreenRecorder):
         with redirect_stdout(sys.stderr):
             super().start()
 
+    def stop(self):
+        """Stop recording without heavy cleanup (sanitization, plots) — subprocess is about to die."""
+        if not self.running:
+            return
+        self.running = False
+        if self.mouse_listener:
+            self.mouse_listener.stop()
+        if self.keyboard_listener:
+            self.keyboard_listener.stop()
+        self.screenshot_manager.stop()
+        self.input_event_queue.stop()
+
     def _on_aggregation_request(self, request):
         if not request:
             return
