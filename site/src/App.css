@@ -99,7 +99,7 @@ body {
   line-height: 1.65;
   color: var(--text-secondary);
   max-width: 440px;
-  margin: 0 auto 28px;
+  margin: 0 auto 24px;
 }
 
 /* ── Buttons ─────────────────────────────────────────────── */
@@ -155,13 +155,13 @@ body {
 /* ── Demo ────────────────────────────────────────────────── */
 
 .demo-container {
-  max-width: 680px;
+  max-width: 920px;
   margin: 0 auto;
   padding: 12px 24px 24px;
 }
 
 .demo {
-  height: 290px;
+  height: 420px;
   display: flex;
   flex-direction: column;
   border-radius: var(--r-lg);
@@ -436,6 +436,7 @@ body {
 
 .demo-typed {
   color: var(--demo-text);
+  opacity: 0.96;
   transition: color 0.5s;
 }
 
@@ -455,6 +456,14 @@ body {
   transition: color 0.5s;
 }
 
+.demo-selection {
+  color: #fff;
+  background: #0a84ff;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 .demo-cursor {
   display: inline-block;
   width: 1.5px;
@@ -464,6 +473,11 @@ body {
   margin-left: 1px;
   animation: blink 1s step-end infinite;
   transition: background 0.5s;
+}
+
+.demo-scroll-spacer {
+  display: block;
+  height: clamp(44px, 14%, 72px);
 }
 
 @keyframes blink {

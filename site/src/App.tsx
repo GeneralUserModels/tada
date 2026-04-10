@@ -1,4 +1,4 @@
-import React, { type ReactNode, useEffect, useState } from "react";
+import React, { type ReactNode, useEffect, useRef, useState } from "react";
 
 const REPO = "GeneralUserModels/tada";
 const RELEASE_URL = `https://github.com/${REPO}/releases/latest`;
@@ -17,9 +17,29 @@ interface DemoTheme {
   cursorColor: string;
 }
 
+type DemoStep =
+  | {
+      kind: "user";
+      text: string;
+      pauseAfter?: number;
+    }
+  | {
+      kind: "assistant";
+      text: string;
+      trigger: "autocomplete" | "prompt";
+      pauseAfter?: number;
+    }
+  | {
+      kind: "delete";
+      count?: number;
+      from?: "start" | "end" | "middle";
+      start?: number;
+      matchText?: string;
+      pauseAfter?: number;
+    };
+
 interface Demo {
-  typed: string;
-  completion: string;
+  steps: DemoStep[];
   theme: DemoTheme;
   topChrome: ReactNode;
   bottomChrome?: ReactNode;
@@ -91,9 +111,35 @@ function SlackBottomChrome() {
 
 const DEMOS: Demo[] = [
   {
-    typed: "The main limitation of our approach is that ",
-    completion:
-      "it assumes access to a recent context window, which may not generalize well to cold-start scenarios where the user model has limited prior observations.",
+    steps: [
+      {
+        kind: "user",
+        text: "What's the cold-start limitation with tabracadabra?\n",
+      },
+      {
+        kind: "assistant",
+        trigger: "autocomplete",
+        text: "Tabracadabra performs best when it has a warm context window with enough prior interaction to infer user intent and style. In true cold-start settings, brand-new users often provide too little historical signal for the model to ground its suggestions reliably. As a result, early completions can be less personalized, less stable, and occasionally lower quality than what we see after a short period of use. This gap narrows as the interaction history grows and the system accumulates richer context.\n",
+      },
+      {
+        kind: "user",
+        text: "\nturn that into a paper sentence for limitations\n",
+      },
+      {
+        kind: "assistant",
+        trigger: "prompt",
+        text: "A key limitation of our approach is its reliance on a warm context window, which may reduce effectiveness in cold-start settings where user history is minimal.",
+      },
+      {
+        kind: "delete",
+        count: 53,
+      },
+      {
+        kind: "assistant",
+        trigger: "autocomplete",
+        text: "for users with sparse history.",
+      },
+    ],
     theme: {
       app: "Overleaf",
       icon: "📄",
@@ -108,9 +154,42 @@ const DEMOS: Demo[] = [
     topChrome: <OverleafChrome />,
   },
   {
-    typed: "Hey Sarah, thanks for the feedback on the draft. I think we should ",
-    completion:
-      "revisit the framing in section 3 — the current intro buries the key contribution. Happy to sync tomorrow if you're free.",
+    steps: [
+      {
+        kind: "user",
+        text: "before i forget: what should i send Diyi and Michael today?\n",
+      },
+      {
+        kind: "assistant",
+        trigger: "autocomplete",
+        text: "You planned to send them a short follow-up email about the paper timeline before Friday.\n",
+      },
+      {
+        kind: "user",
+        text: "\nyep. draft that email\n",
+      },
+      {
+        kind: "assistant",
+        trigger: "prompt",
+        text:
+          "Hi all!\n\nWanted to check in on the paper timeline we discussed last week. If there's a revised schedule for COLM 2026, I'd love to align on next steps this week.\n\nThanks,\nOmar\n",
+      },
+      {
+        kind: "delete",
+        from: "start",
+        count: 160,
+      },
+      {
+        kind: "user",
+        text: "\ntoo wordy. make it warmer + shorter-\n",
+      },
+      {
+        kind: "assistant",
+        trigger: "autocomplete",
+        text:
+          "Hi all!\n\nI think we're chugging along on the COLM deadline as usual, lemme know if you have any thoughts on paper timeline\n\nOmar\n",
+      },
+    ],
     theme: {
       app: "Mail",
       icon: "✉️",
@@ -125,9 +204,45 @@ const DEMOS: Demo[] = [
     topChrome: <MailChrome />,
   },
   {
-    typed: "hey team, just pushed the new context window changes. the main thing to note is ",
-    completion:
-      "that retrieval now falls back to a sliding window when the cache miss rate exceeds 15% — should be transparent but worth watching latency in prod.",
+    steps: [
+      {
+        kind: "user",
+        text: "what changed with cache behavior in prod?\n",
+      },
+      {
+        kind: "assistant",
+        trigger: "autocomplete",
+        text:
+          "You should mention that cache misses now trigger a sliding-window retrieval fallback after the threshold is exceeded.\n",
+      },
+      {
+        kind: "user",
+        text: "\na draft:\n",
+      },
+      {
+        kind: "assistant",
+        trigger: "prompt",
+        text:
+          "hey team - shipped the context window update.\nmain change: when cache misses cross 15%, retrieval falls back to a sliding window automatically.\nshould be transparent, but let's keep an eye on prod latency today.",
+      },
+      {
+        kind: "user",
+        text: "\nelaborate a little + touch on that detail i discussed with Kanishk-\n",
+      },
+      {
+        kind: "assistant",
+        trigger: "autocomplete",
+        text:
+          "also (cc: @Kanishk), the first latency spike we saw came from cold-cache repopulation right after rollout, not sustained query load. if latency stays elevated after warmup, that's when we should investigate.",
+      },
+      {
+        kind: "delete",
+        from: "middle",
+        matchText:
+          "\n\nelaborate a little + touch on that detail i discussed with Kanishk-\n",
+        pauseAfter: 760,
+      },
+    ],
     theme: {
       app: "Slack",
       icon: "💬",
@@ -144,93 +259,327 @@ const DEMOS: Demo[] = [
   },
 ];
 
-type Phase = "typing" | "spinner" | "streaming" | "done";
+interface Segment {
+  source: "user" | "assistant";
+  text: string;
+}
+
+interface SelectionState {
+  count: number;
+  from: "start" | "end" | "middle";
+  start?: number;
+}
 
 function useAutocompleteDemo() {
   const [demoIdx, setDemoIdx] = useState(0);
-  const [phase, setPhase] = useState<Phase>("typing");
-  const [visibleTyped, setVisibleTyped] = useState("");
+  const [segments, setSegments] = useState<Segment[]>([]);
+  const [selection, setSelection] = useState<SelectionState | null>(null);
   const [spinnerIdx, setSpinnerIdx] = useState(0);
   const [spinnerPct, setSpinnerPct] = useState(0);
-  const [visibleCompletion, setVisibleCompletion] = useState("");
+  const [showSpinner, setShowSpinner] = useState(false);
+  const [showTabHint, setShowTabHint] = useState(false);
+  const [running, setRunning] = useState(true);
+  const segmentsRef = useRef<Segment[]>([]);
 
   const demo = DEMOS[demoIdx];
 
   useEffect(() => {
-    let timeout: ReturnType<typeof setTimeout>;
-    let frame = 0;
+    let cancelled = false;
 
-    function reset() {
-      setVisibleTyped("");
-      setVisibleCompletion("");
+    function sleep(ms: number) {
+      return new Promise<void>((resolve) => {
+        window.setTimeout(resolve, ms);
+      });
+    }
+
+    function delayForUserChar(char: string) {
+      const isPunctuation = /[,.!?;:]/.test(char);
+      const isWhitespace = char === " ";
+      const isNewline = char === "\n";
+
+      let base = 18;
+      if (isWhitespace) base = 11;
+      if (isPunctuation) base += 46;
+      if (isNewline) base += 78;
+      return base + Math.floor(Math.random() * 12);
+    }
+
+    function delayForAssistantToken(token: string) {
+      const isWhitespace = /^\s+$/.test(token);
+      const hasNewline = token.includes("\n");
+      const endsWithPunctuation = /[,.!?;:]$/.test(token.trim());
+      const wordLength = token.trim().length;
+
+      let base = 44;
+      if (isWhitespace) base = hasNewline ? 40 : 20;
+      if (!isWhitespace) base += Math.min(wordLength * 2, 12);
+      if (endsWithPunctuation) base += 24;
+      if (hasNewline) base += 18;
+      return base + Math.floor(Math.random() * 10);
+    }
+
+    function appendText(source: Segment["source"], text: string) {
+      setSegments((prev) => {
+        if (prev.length === 0) {
+          const next = [{ source, text }];
+          segmentsRef.current = next;
+          return next;
+        }
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last.source === source) {
+          next[next.length - 1] = { ...last, text: last.text + text };
+          segmentsRef.current = next;
+          return next;
+        }
+        next.push({ source, text });
+        segmentsRef.current = next;
+        return next;
+      });
+    }
+
+    function deleteChars(
+      count: number,
+      from: "start" | "end" | "middle",
+      start = 0
+    ) {
+      setSegments((prev) => {
+        if (prev.length === 0 || count <= 0) return prev;
+        const next = [...prev];
+        let remaining = count;
+
+        if (from === "start") {
+          while (remaining > 0 && next.length > 0) {
+            const first = next[0];
+            if (first.text.length <= remaining) {
+              remaining -= first.text.length;
+              next.shift();
+              continue;
+            }
+            next[0] = { ...first, text: first.text.slice(remaining) };
+            remaining = 0;
+          }
+          segmentsRef.current = next;
+          return next;
+        }
+
+        if (from === "middle") {
+          const totalChars = next.reduce(
+            (sum, segment) => sum + segment.text.length,
+            0
+          );
+          const removeStart = Math.max(0, Math.min(start, totalChars));
+          const removeEnd = Math.max(
+            removeStart,
+            Math.min(removeStart + count, totalChars)
+          );
+
+          let cursor = 0;
+          const rebuilt: Segment[] = [];
+          for (const segment of next) {
+            const segStart = cursor;
+            const segEnd = segStart + segment.text.length;
+            cursor = segEnd;
+
+            if (segEnd <= removeStart || segStart >= removeEnd) {
+              rebuilt.push(segment);
+              continue;
+            }
+
+            const keepPrefixLen = Math.max(0, removeStart - segStart);
+            const keepSuffixStart = Math.max(0, removeEnd - segStart);
+            const prefix = segment.text.slice(0, keepPrefixLen);
+            const suffix = segment.text.slice(keepSuffixStart);
+
+            if (prefix) rebuilt.push({ source: segment.source, text: prefix });
+            if (suffix) rebuilt.push({ source: segment.source, text: suffix });
+          }
+
+          const merged: Segment[] = [];
+          for (const segment of rebuilt) {
+            const last = merged[merged.length - 1];
+            if (last && last.source === segment.source) {
+              last.text += segment.text;
+            } else {
+              merged.push({ ...segment });
+            }
+          }
+
+          segmentsRef.current = merged;
+          return merged;
+        }
+
+        while (remaining > 0 && next.length > 0) {
+          const lastIdx = next.length - 1;
+          const last = next[lastIdx];
+          if (last.text.length <= remaining) {
+            remaining -= last.text.length;
+            next.pop();
+            continue;
+          }
+          next[lastIdx] = { ...last, text: last.text.slice(0, -remaining) };
+          remaining = 0;
+        }
+        segmentsRef.current = next;
+        return next;
+      });
+    }
+
+    async function runDemo() {
+      setSegments([]);
+      segmentsRef.current = [];
       setSpinnerIdx(0);
       setSpinnerPct(0);
-      setPhase("typing");
-      frame = 0;
+      setShowSpinner(false);
+      setShowTabHint(false);
+      setSelection(null);
+      setRunning(true);
+
+      for (const [stepIdx, step] of demo.steps.entries()) {
+        if (cancelled) return;
+
+        if (step.kind === "delete") {
+          await sleep(360 + Math.floor(Math.random() * 260));
+          let from = step.from ?? "end";
+          let count = step.count ?? 0;
+          let start = step.start ?? 0;
+
+          if (step.matchText) {
+            const fullText = segmentsRef.current
+              .map((segment) => segment.text)
+              .join("");
+            const idx = fullText.indexOf(step.matchText);
+            if (idx >= 0) {
+              from = "middle";
+              start = idx;
+              if (count <= 0) count = step.matchText.length;
+            }
+          }
+
+          if (count <= 0) {
+            await sleep(step.pauseAfter ?? 620);
+            continue;
+          }
+
+          setSelection({ count, from, start });
+          await sleep(360 + Math.floor(Math.random() * 260));
+          if (cancelled) return;
+          deleteChars(count, from, start);
+          setSelection(null);
+          await sleep(step.pauseAfter ?? 620);
+          continue;
+        }
+
+        if (step.kind === "assistant") {
+          setShowSpinner(true);
+          setShowTabHint(step.trigger === "autocomplete");
+
+          const totalTicks = 6 + Math.floor(Math.random() * 4);
+          for (let tick = 0; tick < totalTicks; tick++) {
+            if (cancelled) return;
+            setSpinnerIdx(tick % SPINNER_FRAMES.length);
+            setSpinnerPct(Math.round(((tick + 1) / totalTicks) * 100));
+            await sleep(65 + Math.floor(Math.random() * 30));
+          }
+
+          setShowSpinner(false);
+          setShowTabHint(false);
+        }
+
+        const source: Segment["source"] =
+          step.kind === "user" ? "user" : "assistant";
+        let textToType = step.text;
+        if (step.kind === "user") {
+          const normalizedUserText = step.text.replace(/^\n+/, "");
+          if (stepIdx === 0) {
+            textToType = normalizedUserText;
+          } else {
+            const lastSegment = segmentsRef.current[segmentsRef.current.length - 1];
+            const trailingNewlineCount =
+              lastSegment?.text.match(/\n*$/)?.[0].length ?? 0;
+            const separatorNewlines = Math.max(0, 2 - trailingNewlineCount);
+            textToType = `${"\n".repeat(separatorNewlines)}${normalizedUserText}`;
+          }
+        }
+
+        if (source === "user") {
+          for (const char of textToType) {
+            if (cancelled) return;
+            appendText(source, char);
+            await sleep(delayForUserChar(char));
+          }
+        } else {
+          const tokens = textToType.match(/(\s+|[^\s]+)/g) ?? [];
+          for (const token of tokens) {
+            if (cancelled) return;
+            appendText(source, token);
+            await sleep(delayForAssistantToken(token));
+          }
+        }
+
+        await sleep(step.pauseAfter ?? 500);
+      }
+
+      const finalArtifactText =
+        [...segmentsRef.current]
+          .reverse()
+          .find((segment) => segment.source === "assistant" && segment.text.length > 0)
+          ?.text ?? "";
+      const totalChars = segmentsRef.current.reduce(
+        (sum, segment) => sum + segment.text.length,
+        0
+      );
+      const charsToDelete = Math.max(0, totalChars - finalArtifactText.length);
+
+      if (charsToDelete > 0) {
+        setSelection({ count: charsToDelete, from: "start" });
+        await sleep(420 + Math.floor(Math.random() * 260));
+        if (cancelled) return;
+        deleteChars(charsToDelete, "start");
+        setSelection(null);
+      }
+
+      setRunning(false);
+      await sleep(3600);
+      if (!cancelled) {
+        setDemoIdx((idx) => (idx + 1) % DEMOS.length);
+      }
     }
 
-    if (phase === "typing") {
-      const typeSpeed = 30;
-      function typeNext() {
-        if (frame < demo.typed.length) {
-          frame++;
-          setVisibleTyped(demo.typed.slice(0, frame));
-          timeout = setTimeout(typeNext, typeSpeed);
-        } else {
-          timeout = setTimeout(() => setPhase("spinner"), 400);
-        }
-      }
-      typeNext();
-    } else if (phase === "spinner") {
-      let tick = 0;
-      const totalTicks = 18;
-      function spinNext() {
-        if (tick < totalTicks) {
-          setSpinnerIdx(tick % SPINNER_FRAMES.length);
-          setSpinnerPct(
-            Math.min(100, Math.round(((tick + 1) / totalTicks) * 100))
-          );
-          tick++;
-          timeout = setTimeout(spinNext, 120);
-        } else {
-          setPhase("streaming");
-        }
-      }
-      spinNext();
-    } else if (phase === "streaming") {
-      frame = 0;
-      const streamSpeed = 18;
-      function streamNext() {
-        if (frame < demo.completion.length) {
-          frame++;
-          setVisibleCompletion(demo.completion.slice(0, frame));
-          timeout = setTimeout(streamNext, streamSpeed);
-        } else {
-          timeout = setTimeout(() => setPhase("done"), 2000);
-        }
-      }
-      streamNext();
-    } else if (phase === "done") {
-      timeout = setTimeout(() => {
-        setDemoIdx((i) => (i + 1) % DEMOS.length);
-        reset();
-      }, 600);
-    }
+    runDemo();
 
-    return () => clearTimeout(timeout);
-  }, [phase, demo]);
+    return () => {
+      cancelled = true;
+    };
+  }, [demo]);
 
   const spinnerText =
-    phase === "spinner"
+    showSpinner
       ? `${SPINNER_FRAMES[spinnerIdx]} ${spinnerPct.toString().padStart(3, " ")}%`
       : "";
 
-  return { demoIdx, visibleTyped, visibleCompletion, spinnerText, phase };
+  return {
+    demoIdx,
+    segments,
+    selection,
+    spinnerText,
+    showSpinner,
+    showTabHint,
+    running,
+  };
 }
 
 export function App() {
-  const { demoIdx, visibleTyped, visibleCompletion, spinnerText, phase } =
-    useAutocompleteDemo();
+  const {
+    demoIdx,
+    segments,
+    selection,
+    spinnerText,
+    showSpinner,
+    showTabHint,
+    running,
+  } = useAutocompleteDemo();
+  const demoBodyRef = useRef<HTMLDivElement>(null);
 
   const demo = DEMOS[demoIdx];
   const theme = demo.theme;
@@ -245,6 +594,49 @@ export function App() {
     "--demo-font-size": theme.fontSize,
   } as React.CSSProperties;
 
+  const selectedRanges: Array<{ start: number; end: number } | null> = new Array(
+    segments.length
+  ).fill(null);
+
+  if (selection) {
+    const totalChars = segments.reduce((sum, segment) => sum + segment.text.length, 0);
+    const baseStart =
+      selection.from === "start"
+        ? 0
+        : selection.from === "end"
+          ? Math.max(0, totalChars - selection.count)
+          : Math.max(0, Math.min(selection.start ?? 0, totalChars));
+    const selectionStart = Math.min(baseStart, totalChars);
+    const selectionEnd = Math.min(totalChars, selectionStart + selection.count);
+
+    let cursor = 0;
+    for (let idx = 0; idx < segments.length; idx++) {
+      const segment = segments[idx];
+      const segStart = cursor;
+      const segEnd = segStart + segment.text.length;
+      cursor = segEnd;
+
+      const overlapStart = Math.max(segStart, selectionStart);
+      const overlapEnd = Math.min(segEnd, selectionEnd);
+      if (overlapEnd > overlapStart) {
+        selectedRanges[idx] = {
+          start: overlapStart - segStart,
+          end: overlapEnd - segStart,
+        };
+      }
+    }
+  }
+
+  useEffect(() => {
+    const node = demoBodyRef.current;
+    if (!node) return;
+    const centeredScrollTop = Math.max(
+      0,
+      node.scrollHeight - node.clientHeight * 0.5
+    );
+    node.scrollTop = centeredScrollTop;
+  }, [demoIdx, segments, selection, showSpinner]);
+
   return (
     <div className="page">
       <div className="grain" />
@@ -257,8 +649,7 @@ export function App() {
           </span>
         </h1>
         <p className="hero-subtitle">
-          Press Option + Tab in any textbox. Get a streaming autocomplete powered by a
-          model that knows your context.
+          An intelligent, context-aware assistant, in every textbox.
         </p>
 
         <div className="hero-actions">
@@ -286,7 +677,7 @@ export function App() {
               {theme.app}
             </div>
             <div className="demo-tab-hint">
-              {phase === "spinner" && (
+              {showSpinner && showTabHint && (
                 <span className="tab-key-badge">
                   Option + Tab
                 </span>
@@ -296,15 +687,42 @@ export function App() {
 
           {demo.topChrome}
 
-          <div className="demo-body">
-            <span className="demo-typed">{visibleTyped}</span>
-            {phase === "spinner" && (
+          <div ref={demoBodyRef} className="demo-body">
+            {segments.map((segment, idx) => (
+              (() => {
+                const className =
+                  segment.source === "user" ? "demo-typed" : "demo-completion";
+                const selectedRange = selectedRanges[idx];
+
+                if (!selectedRange) {
+                  return (
+                    <span key={`${idx}-${segment.source}`} className={className}>
+                      {segment.text}
+                    </span>
+                  );
+                }
+
+                const leadingText = segment.text.slice(0, selectedRange.start);
+                const selectedText = segment.text.slice(
+                  selectedRange.start,
+                  selectedRange.end
+                );
+                const trailingText = segment.text.slice(selectedRange.end);
+
+                return (
+                  <React.Fragment key={`${idx}-${segment.source}`}>
+                    {leadingText && <span className={className}>{leadingText}</span>}
+                    <span className="demo-selection">{selectedText}</span>
+                    {trailingText && <span className={className}>{trailingText}</span>}
+                  </React.Fragment>
+                );
+              })()
+            ))}
+            {showSpinner && (
               <span className="demo-spinner">{spinnerText}</span>
             )}
-            {(phase === "streaming" || phase === "done") && (
-              <span className="demo-completion">{visibleCompletion}</span>
-            )}
-            {phase !== "done" && <span className="demo-cursor" />}
+            {running && <span className="demo-cursor" />}
+            <span className="demo-scroll-spacer" aria-hidden="true" />
           </div>
 
           {demo.bottomChrome}
