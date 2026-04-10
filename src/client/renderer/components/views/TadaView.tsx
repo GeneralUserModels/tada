@@ -261,7 +261,7 @@ export function TadaView() {
         <div className="tada-detail glass-card">
           <iframe
             src={resultUrl}
-            sandbox="allow-scripts"
+            sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
             style={{ width: "100%", height: "100%", border: "none", borderRadius: "var(--r-md)" }}
           />
         </div>
@@ -392,6 +392,7 @@ export function TadaView() {
           </section>
         ))
       )}
+      <div style={{ minHeight: 24, flexShrink: 0 }} />
     </div>
   );
 }
