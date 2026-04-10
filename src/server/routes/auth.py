@@ -280,35 +280,50 @@ async def google_user():
 
 @router.post("/google/start")
 async def google_start(request: Request):
-    """Data-access Google OAuth (calendar + gmail scopes). Writes the connector token file."""
+    """Data-access Google OAuth (calendar + gmail scopes) via alpha Supabase project.
+
+    Uses Supabase PKCE flow to get Google provider tokens with Gmail/Calendar
+    scopes. The client secret stays in Supabase — never shipped to users.
+    """
     state = request.app.state.server
     cfg = _get_app_config()
-    client_id = cfg.get("google_client_id", "")
-    client_secret = cfg.get("google_client_secret", "")
-    if not client_id or not client_secret:
-        raise HTTPException(status_code=400, detail="Google client credentials not configured")
+    alpha_url = cfg.get("alpha_supabase_url", "")
+    alpha_key = cfg.get("alpha_supabase_anon_key", "")
+    if not alpha_url or not alpha_key:
+        raise HTTPException(status_code=400, detail="Alpha Supabase credentials not configured")
+
+    code_verifier = secrets.token_urlsafe(32)
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).rstrip(b"=").decode()
 
     port = _free_port()
     redirect_uri = f"http://localhost:{port}"
 
-    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "scope": " ".join(GOOGLE_DATA_SCOPES),
-        "access_type": "offline",
-        "prompt": "consent",
+    auth_url = f"{alpha_url}/auth/v1/authorize?" + urllib.parse.urlencode({
+        "provider": "google",
+        "redirect_to": redirect_uri,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+        "flow_type": "pkce",
+        "scopes": " ".join(GOOGLE_DATA_SCOPES),
     })
 
     code = await _oauth_loopback(auth_url, port)
-    token_data, _ = _google_oauth_exchange(client_id, client_secret, code, redirect_uri)
+    session = _supabase_pkce_exchange(alpha_url, alpha_key, code, code_verifier)
+
+    provider_token = session.get("provider_token", "")
+    provider_refresh_token = session.get("provider_refresh_token", "")
+    if not provider_token:
+        raise HTTPException(status_code=500, detail="No provider token returned from Supabase")
 
     token = {
-        "access_token": token_data["access_token"],
-        "refresh_token": token_data.get("refresh_token", ""),
-        "expires_at": time.time() * 1000 + token_data.get("expires_in", 3600) * 1000,
-        "client_id": client_id,
-        "client_secret": client_secret,
+        "access_token": provider_token,
+        "refresh_token": provider_refresh_token,
+        "supabase_refresh_token": session.get("refresh_token", ""),
+        "alpha_supabase_url": alpha_url,
+        "alpha_supabase_anon_key": alpha_key,
+        "expires_at": time.time() * 1000 + 3600 * 1000,
         "scopes": GOOGLE_DATA_SCOPES,
     }
     _write_token(state.config.google_token_path, token)
@@ -446,12 +461,42 @@ def _refresh_if_expired(token_path: str | None, token_url: str, build_body: Call
     logger.info("[auth] %s token refreshed", name)
 
 
+def _refresh_google_via_supabase(token_path: str | None) -> None:
+    """Refresh Google provider token via the alpha Supabase project."""
+    token = _read_token(token_path) if token_path else None
+    if not token or not token.get("supabase_refresh_token"):
+        return
+    if token.get("expires_at", 0) > time.time() * 1000 + 5 * 60 * 1000:
+        return
+    alpha_url = token.get("alpha_supabase_url", "")
+    alpha_key = token.get("alpha_supabase_anon_key", "")
+    if not alpha_url or not alpha_key:
+        return
+    url = f"{alpha_url}/auth/v1/token?grant_type=refresh_token"
+    body = json.dumps({"refresh_token": token["supabase_refresh_token"]}).encode()
+    req = urllib.request.Request(url, data=body, headers={
+        "Content-Type": "application/json",
+        "apikey": alpha_key,
+    })
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        session = json.loads(resp.read())
+    new_provider_token = session.get("provider_token", "")
+    if not new_provider_token:
+        logger.warning("[auth] Google Supabase refresh returned no provider_token")
+        return
+    token["access_token"] = new_provider_token
+    if session.get("provider_refresh_token"):
+        token["refresh_token"] = session["provider_refresh_token"]
+    if session.get("refresh_token"):
+        token["supabase_refresh_token"] = session["refresh_token"]
+    token["expires_at"] = time.time() * 1000 + 3600 * 1000
+    _write_token(token_path, token)
+    logger.info("[auth] Google token refreshed via Supabase")
+
+
 def _provider_args(config) -> list[tuple]:
     """Return (token_path, token_url, build_body, name) for each OAuth provider."""
     return [
-        (config.google_token_path, "https://oauth2.googleapis.com/token",
-         lambda t: {"grant_type": "refresh_token", "refresh_token": t["refresh_token"],
-                    "client_id": t["client_id"], "client_secret": t["client_secret"]}, "Google"),
         (config.outlook_token_path, f"{MICROSOFT_AUTHORITY}/oauth2/v2.0/token",
          lambda t: {"grant_type": "refresh_token", "refresh_token": t["refresh_token"],
                     "client_id": t["client_id"], "scope": " ".join(MICROSOFT_SCOPES)}, "Outlook"),
@@ -460,6 +505,10 @@ def _provider_args(config) -> list[tuple]:
 
 def refresh_expired_tokens(config) -> None:
     """Refresh any expired Google/Outlook tokens. Call before starting connectors."""
+    try:
+        _refresh_google_via_supabase(config.google_token_path)
+    except Exception as e:
+        logger.warning("[auth] Google startup refresh failed: %s", e)
     for args in _provider_args(config):
         try:
             _refresh_if_expired(*args)
@@ -470,6 +519,10 @@ def refresh_expired_tokens(config) -> None:
 async def run_token_refresh(config) -> None:
     """Background task: refresh Google & Outlook tokens every 45 minutes."""
     while True:
+        try:
+            _refresh_google_via_supabase(config.google_token_path)
+        except Exception as e:
+            logger.warning("[auth] Google token refresh failed: %s", e)
         for args in _provider_args(config):
             try:
                 _refresh_if_expired(*args)
