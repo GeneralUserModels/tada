@@ -152,9 +152,7 @@ class BrowserManager:
     def screenshot(self) -> str:
         return self._call(self._do_screenshot)
 
-    def shutdown(self):
-        if self._started:
-            self._queue.put((None, None, None))  # sentinel
+    def _do_shutdown(self):
         if self._browser:
             self._browser.close()
         if self._playwright:
@@ -163,7 +161,12 @@ class BrowserManager:
         self._context = None
         self._page = None
         self._playwright = None
-        self._started = False
+
+    def shutdown(self):
+        if self._started:
+            self._call(self._do_shutdown)
+            self._queue.put((None, None, None))  # sentinel
+            self._started = False
 
 
 class BrowserNavigateTool(BaseTool):

@@ -230,8 +230,16 @@ class Agent:
         if self.api_key:
             kwargs["api_key"] = self.api_key
         if self._web_search_options:
-            kwargs["web_search_options"] = self._web_search_options
-            # Gemini requires this when combining web search with function calling
-            if self.model.startswith("gemini/"):
-                kwargs["include_server_side_tool_invocations"] = True
+            if self.model.startswith(("openai/", "gpt-", "o1-", "o3-", "o4-")):
+                # OpenAI uses web search as a tool, not a top-level param
+                ws_tool = {"type": "web_search_preview", "web_search_preview": self._web_search_options}
+                if kwargs.get("tools"):
+                    kwargs["tools"].append(ws_tool)
+                else:
+                    kwargs["tools"] = [ws_tool]
+            else:
+                kwargs["web_search_options"] = self._web_search_options
+                # Gemini requires this when combining web search with function calling
+                if self.model.startswith("gemini/"):
+                    kwargs["include_server_side_tool_invocations"] = True
         return litellm.completion(**kwargs)
