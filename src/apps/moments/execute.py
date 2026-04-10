@@ -68,7 +68,8 @@ your CSS and JS from separate files. This renders in an iframe inside the Tada d
 
 3. **`{output_dir}/app.js`** — All JavaScript in a separate file. Include from index.html. \
 Put your data as a JSON object at the top of this file (e.g. `const DATA = [...]`), then the \
-rendering logic below it.
+rendering logic below it. Remember: app.js shares global scope with components.js, so only \
+declare NEW identifiers — never redeclare anything components.js already provides.
 
 4. **`{output_dir}/meta.json`** — Metadata:
 ```json
@@ -91,18 +92,25 @@ components used, and template-specific components. Read the README first with \
 - **components.js** — Reusable React component library on the `PN` namespace
 - **README.md** — Full API docs for all shared components
 
-**Available `PN.*` components** (from components.js):
-- `PN.PageHeader` — title, subtitle, optional badges and status badge
-- `PN.GlassCard` — frosted glass container with optional animation delay
-- `PN.Badge` / `PN.BadgeRow` — pill labels (success/warning/danger variants)
-- `PN.StatRow` — horizontal metrics row with stat pills
-- `PN.SearchInput` — controlled search input field
-- `PN.FilterBar` — pill-style filter buttons with active state
-- `PN.TabBar` — tab navigation with optional counts
-- `PN.ItemCard` — content card with title, description, badges, meta
-- `PN.EmptyState` — placeholder message
-- `PN.ResultCount` — item/row count display
-- `PN.useFilter` / `PN.useSearch` — filtering and search hooks
+**CRITICAL — global scope rules:** All `<script>` tags in index.html share ONE global scope. \
+components.js runs first and declares `h`, `useState`, `useCallback`, `useMemo`, `useEffect`, \
+and every component function (`PageHeader`, `GlassCard`, `Badge`, etc.) as globals. \
+Your app.js MUST NOT use `const`, `let`, or `var` to redeclare ANY identifier that components.js \
+already defines — this causes `SyntaxError: Identifier has already been declared` and the app \
+will not render. Just reference them directly (e.g. `h(PageHeader, ...)` not `const PageHeader = ...`).
+
+**Available components** (already global from components.js — use directly, no import needed):
+- `PageHeader` — title, subtitle, optional badges and status badge
+- `GlassCard` — frosted glass container with optional animation delay
+- `Badge` / `BadgeRow` — pill labels (success/warning/danger variants)
+- `StatRow` — horizontal metrics row with stat pills
+- `SearchInput` — controlled search input field
+- `FilterBar` — pill-style filter buttons with active state
+- `TabBar` — tab navigation with optional counts
+- `ItemCard` — content card with title, description, badges, meta
+- `EmptyState` — placeholder message
+- `ResultCount` — item/row count display
+- `useFilter` / `useSearch` — filtering and search hooks
 
 **Available templates:**
 - **dashboard** — Stats + filterable/searchable card grid. For: metrics, tracking, status overviews.
@@ -125,7 +133,8 @@ If another moment has a useful component (chart, timeline, custom card layout), 
 into your output. The component ecosystem grows over time.
 
 **Create new reusable components:** When building something novel, implement clean React components \
-with clear props (using `React.createElement`, no JSX). Define them at the top of app.js so they \
+with clear props (using `h()` which is already `React.createElement`). Define them at the top of \
+app.js using `function MyComponent(...)` syntax (NOT `const MyComponent = ...`) so they \
 can be borrowed by future moments. Think of each new component as a potential addition to the library.
 
 You have full creative freedom to modify templates, combine elements from multiple templates, \
@@ -366,8 +375,10 @@ if __name__ == "__main__":
     parser.add_argument("output_dir", help="Directory to write HTML output")
     parser.add_argument("logs_dir", help="Path to the logs directory")
     parser.add_argument("-m", "--model", default=None)
+    parser.add_argument("--api-key", default=None, help="API key (default: from config or $ANTHROPIC_API_KEY)")
     args = parser.parse_args()
     model = args.model or resolve_moments_model()
+    api_key = args.api_key or os.environ.get("ANTHROPIC_API_KEY") or resolve_moments_api_key()
 
-    success = run(args.task_path, args.output_dir, args.logs_dir, model=model, api_key=resolve_moments_api_key())
+    success = run(args.task_path, args.output_dir, args.logs_dir, model=model, api_key=api_key)
     print("Success" if success else "Failed")
