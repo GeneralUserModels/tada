@@ -177,7 +177,7 @@ const DEMOS: Demo[] = [
       {
         kind: "delete",
         from: "start",
-        count: 160,
+        count: 172,
       },
       {
         kind: "user",
