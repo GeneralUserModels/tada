@@ -20,11 +20,16 @@ FEATURE_FLAG_DEFAULTS: dict[str, bool] = {
     "connector_outlook_calendar": True,
     "connector_notifications": True,
     "connector_filesystem": True,
+    # Audio connectors
+    "connector_microphone": True,
+    "connector_system_audio": True,
     # OS-level permissions
     "permission_screen": True,
     "permission_notifications": True,
     "permission_accessibility": True,
     "permission_browser_cookies": True,
+    "permission_microphone": True,
+    "permission_system_audio": True,
 }
 
 

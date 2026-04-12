@@ -48,6 +48,8 @@ export function Onboarding() {
   const [fsEnabled, setFsEnabled] = useState(false);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [browserCookiesGranted, setBrowserCookiesGranted] = useState(false);
+  const [micGranted, setMicGranted] = useState(false);
+  const [sysAudioGranted, setSysAudioGranted] = useState(false);
   const [connectingGoogle, setConnectingGoogle] = useState<string | null>(null);
   const [connectingOutlook, setConnectingOutlook] = useState(false);
 
@@ -96,6 +98,10 @@ export function Onboarding() {
       // after explicit user action via the "Grant Access" modal.
       const cookiesOk = await window.tada.checkConnectorPermission("browser_cookies");
       setBrowserCookiesGranted(cookiesOk);
+      const micOk = await window.tada.checkConnectorPermission("microphone");
+      setMicGranted(micOk);
+      const sysAudioOk = await window.tada.checkConnectorPermission("system_audio");
+      setSysAudioGranted(sysAudioOk);
     }
     checkAvailability();
   }, [step]);
@@ -234,6 +240,10 @@ export function Onboarding() {
           setFsEnabled={setFsEnabled}
           setBrowserCookiesGranted={setBrowserCookiesGranted}
           setAccessibilityGranted={setAccessibilityGranted}
+          micGranted={micGranted}
+          setMicGranted={setMicGranted}
+          sysAudioGranted={sysAudioGranted}
+          setSysAudioGranted={setSysAudioGranted}
         />
       )}
 

@@ -38,6 +38,20 @@ const CONNECTOR_ICONS: Record<string, JSX.Element> = {
       <path d="M6 6V3M10 6V3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
     </svg>
   ),
+  microphone: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <rect x="6" y="1" width="4" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M4 7a4 4 0 008 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <path d="M8 11v3M6 14h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  ),
+  speaker: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M2 5.5h2.5L8 2v12l-3.5-3.5H2a1 1 0 01-1-1v-3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+      <path d="M11 5.5a3.5 3.5 0 010 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <path d="M13 3.5a6.5 6.5 0 010 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  ),
 };
 
 export const CONNECTOR_META: Record<string, { label: string; desc: string; icon: string }> = {
@@ -48,6 +62,8 @@ export const CONNECTOR_META: Record<string, { label: string; desc: string; icon:
   outlook_email:    { label: "Outlook Email",      desc: "Read recent Outlook emails for context",         icon: "mail" },
   notifications:    { label: "Notifications",      desc: "Read macOS notification history",                icon: "bell" },
   filesystem:       { label: "Filesystem",         desc: "Watch Desktop, Documents, Downloads",            icon: "folder" },
+  microphone:       { label: "Microphone",         desc: "Transcribe speech from your microphone",         icon: "microphone" },
+  system_audio:     { label: "System Audio",       desc: "Transcribe system audio output",                 icon: "speaker" },
 };
 
 interface Props {
@@ -69,13 +85,21 @@ export function ConnectorItem({
   const meta = CONNECTOR_META[name] ?? { label: name, desc: "", icon: "plug" };
   const icon = CONNECTOR_ICONS[meta.icon];
   const [waitingPermission, setWaitingPermission] = useState(false);
+  const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
+
+  // Audio connectors: check OS permission on mount
+  const isAudioConnector = name === "microphone" || name === "system_audio";
+  useEffect(() => {
+    if (!isAudioConnector) return;
+    window.tada.checkConnectorPermission(name).then(setPermissionGranted);
+  }, [name, isAudioConnector]);
 
   // Clear waiting state when error resolves
   useEffect(() => {
     if (!info.error) setWaitingPermission(false);
   }, [info.error]);
 
-  // Poll for OS permission grant on screen/notifications
+  // Poll for OS permission grant on screen/notifications/audio
   useEffect(() => {
     if (!waitingPermission) return;
 
@@ -84,17 +108,22 @@ export function ConnectorItem({
       if (ok) {
         clearInterval(id);
         setWaitingPermission(false);
-        await onRetry(name);
+        setPermissionGranted(true);
+        if (!isAudioConnector) await onRetry(name);
       }
     }, 1500);
 
     return () => clearInterval(id);
-  }, [waitingPermission, name, onRetry]);
+  }, [waitingPermission, name, onRetry, isAudioConnector]);
 
   async function handlePermissionClick() {
     setWaitingPermission(true);
     if (name === "screen") {
       await window.tada.requestConnectorPermission("screen");
+    } else if (name === "microphone") {
+      await window.tada.requestConnectorPermission("microphone");
+    } else if (name === "system_audio") {
+      await window.tada.requestConnectorPermission("system_audio");
     } else {
       window.tada.openFdaSettings(name);
     }
@@ -102,7 +131,17 @@ export function ConnectorItem({
 
   let action: JSX.Element;
 
-  if (info.error) {
+  if (isAudioConnector && permissionGranted === false) {
+    // Audio connectors: show "Grant Access" before showing toggle
+    action = (
+      <button
+        className="pill-btn"
+        style={{ fontSize: 10, padding: "3px 10px" }}
+        disabled={waitingPermission}
+        onClick={handlePermissionClick}
+      >{waitingPermission ? "Waiting\u2026" : "Grant Access"}</button>
+    );
+  } else if (info.error) {
     let label: string;
     let handleClick: () => void;
 
@@ -117,6 +156,9 @@ export function ConnectorItem({
       handleClick = handlePermissionClick;
     } else if (name === "notifications") {
       label = waitingPermission ? "Waiting\u2026" : "Open Settings";
+      handleClick = handlePermissionClick;
+    } else if (name === "microphone" || name === "system_audio") {
+      label = waitingPermission ? "Waiting\u2026" : "Grant Access";
       handleClick = handlePermissionClick;
     } else {
       label = "Retry";

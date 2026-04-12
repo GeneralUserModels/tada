@@ -23,6 +23,10 @@ type Props = {
   setFsEnabled: (v: boolean) => void;
   setBrowserCookiesGranted: (v: boolean) => void;
   setAccessibilityGranted: (v: boolean) => void;
+  micGranted: boolean;
+  setMicGranted: (v: boolean) => void;
+  sysAudioGranted: boolean;
+  setSysAudioGranted: (v: boolean) => void;
 };
 
 export function ConnectorsStep(props: Props) {
@@ -54,6 +58,42 @@ export function ConnectorsStep(props: Props) {
                 {props.screenGranted
                   ? <span className="perm-badge granted">Granted</span>
                   : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("screen", () => props.setScreenGranted(true))}>Grant Access</button>
+                }
+              </div>
+            </div>
+          )}
+
+          {props.flag("permission_microphone") && (
+            <div className="connector-row">
+              <div className="connector-icon">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="6" y="1" width="4" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M4 7a4 4 0 008 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M8 11v3M6 14h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+              </div>
+              <div className="connector-info">
+                <div className="connector-name">Microphone</div>
+                <div className="connector-desc">Transcribe speech from your microphone</div>
+              </div>
+              <div className="connector-action">
+                {props.micGranted
+                  ? <span className="perm-badge granted">Granted</span>
+                  : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("microphone", () => props.setMicGranted(true))}>Grant Access</button>
+                }
+              </div>
+            </div>
+          )}
+
+          {props.flag("permission_system_audio") && (
+            <div className="connector-row">
+              <div className="connector-icon">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 5.5h2.5L8 2v12l-3.5-3.5H2a1 1 0 01-1-1v-3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M11 5.5a3.5 3.5 0 010 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M13 3.5a6.5 6.5 0 010 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+              </div>
+              <div className="connector-info">
+                <div className="connector-name">System Audio</div>
+                <div className="connector-desc">Transcribe system audio output</div>
+              </div>
+              <div className="connector-action">
+                {props.sysAudioGranted
+                  ? <span className="perm-badge granted">Granted</span>
+                  : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("system_audio", () => props.setSysAudioGranted(true))}>Grant Access</button>
                 }
               </div>
             </div>
