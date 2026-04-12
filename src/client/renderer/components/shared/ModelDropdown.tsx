@@ -11,6 +11,7 @@ export const LLM_MODELS: ModelOption[] = [
 
 export const TADA_MODELS: ModelOption[] = [
   { value: "gemini/gemini-3.1-flash-lite-preview",  label: "Gemini 3.1 Flash-Lite Preview" },
+  { value: "anthropic/claude-sonnet-4-6",            label: "Claude Sonnet 4.6" },
 ];
 
 export const TINKER_MODELS: ModelOption[] = [
