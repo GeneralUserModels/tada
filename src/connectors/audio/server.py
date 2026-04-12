@@ -27,11 +27,64 @@ _running = False
 _session_file: Path | None = None
 
 
+async def _process_chunk(
+    chunk_start: float,
+    chunk_end: float,
+    model: str,
+    api_key: str | None,
+) -> None:
+    """Collect audio from recorders, mix, transcribe, write, notify."""
+    from connectors.audio.mixer import mix_and_encode
+    from connectors.audio.transcriber import transcribe_audio, append_transcript_markdown
+
+    streams: list = []
+    if _mic_recorder is not None:
+        data = _mic_recorder.read_and_clear()
+        if data is not None:
+            streams.append(data)
+    if _sys_recorder is not None:
+        data = _sys_recorder.read_and_clear()
+        if data is not None:
+            streams.append(data)
+
+    if not streams:
+        return
+
+    wav_bytes = mix_and_encode(streams)
+    if wav_bytes is None:
+        return  # silence
+
+    logger.info("audio: transcribing %.1f KB chunk (%ds)", len(wav_bytes) / 1024, chunk_end - chunk_start)
+
+    text = await asyncio.to_thread(
+        transcribe_audio, wav_bytes, model, api_key, cost_app="transcription"
+    )
+
+    if not text:
+        logger.info("audio: chunk was silence, skipping")
+        return
+
+    logger.info("audio: transcribed %d chars", len(text))
+
+    item = {
+        "id": f"audio_{chunk_end}",
+        "summary": text,
+        "timestamp": chunk_end,
+    }
+    await _transcribed_queue.put(item)
+
+    if _session_file is not None:
+        await asyncio.to_thread(
+            append_transcript_markdown, _session_file, text, chunk_start, chunk_end,
+        )
+
+    if _active_session is not None:
+        await _active_session.send_resource_updated("audio://activity")
+
+
 async def _transcription_loop() -> None:
     """Background task: every CHUNK_SECONDS, mix active streams, transcribe, notify."""
     global _session_file
-    from connectors.audio.mixer import mix_and_encode
-    from connectors.audio.transcriber import transcribe_audio, append_transcript_markdown
 
     model = os.environ.get("TADA_TRANSCRIPTION_MODEL", "gemini/gemini-3.1-flash-lite-preview")
     api_key = os.environ.get("TADA_TRANSCRIPTION_API_KEY") or None
@@ -48,63 +101,20 @@ async def _transcription_loop() -> None:
             break
 
         chunk_end = time.time()
-
         try:
-            # Collect PCM from active recorders
-            streams: list = []
-            if _mic_recorder is not None:
-                data = _mic_recorder.read_and_clear()
-                if data is not None:
-                    streams.append(data)
-            if _sys_recorder is not None:
-                data = _sys_recorder.read_and_clear()
-                if data is not None:
-                    streams.append(data)
-
-            if not streams:
-                chunk_start = chunk_end
-                continue
-
-            wav_bytes = mix_and_encode(streams)
-            if wav_bytes is None:
-                chunk_start = chunk_end
-                continue  # silence
-
-            logger.info("audio: transcribing %.1f KB chunk (%ds)", len(wav_bytes) / 1024, chunk_end - chunk_start)
-
-            text = await asyncio.to_thread(
-                transcribe_audio, wav_bytes, model, api_key, cost_app="transcription"
-            )
-
-            if not text:
-                logger.info("audio: chunk was silence, skipping")
-                chunk_start = chunk_end
-                continue
-
-            logger.info("audio: transcribed %d chars", len(text))
-
-            item = {
-                "id": f"audio_{chunk_end}",
-                "summary": text,
-                "timestamp": chunk_end,
-            }
-            await _transcribed_queue.put(item)
-
-            # Append to session transcript with true time range
-            if _session_file is not None:
-                await asyncio.to_thread(
-                    append_transcript_markdown, _session_file, text, chunk_start, chunk_end,
-                )
-
-            chunk_start = chunk_end
-
-            # Notify MCP client
-            if _active_session is not None:
-                await _active_session.send_resource_updated("audio://activity")
-
+            await _process_chunk(chunk_start, chunk_end, model, api_key)
         except Exception:
             logger.exception("audio: chunk processing failed, will retry next cycle")
-            chunk_start = chunk_end
+        chunk_start = chunk_end
+
+    # Flush remaining audio on shutdown
+    chunk_end = time.time()
+    if chunk_end - chunk_start > 1:  # at least 1s of audio
+        logger.info("audio: flushing remaining audio before shutdown")
+        try:
+            await _process_chunk(chunk_start, chunk_end, model, api_key)
+        except Exception:
+            logger.exception("audio: flush failed")
 
 
 @asynccontextmanager
