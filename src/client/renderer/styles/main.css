@@ -940,7 +940,7 @@ button, input, select, textarea, canvas, a, label,
   }
 }
 
-/* ── Ta-Da View ──────────────────────────────────────────── */
+/* ── Tada View ───────────────────────────────────────────── */
 
 .tada-card {
   cursor: pointer;
@@ -1077,7 +1077,7 @@ button, input, select, textarea, canvas, a, label,
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);
 }
 
-/* ── Ta-Da List Header ─────────────────────────────────── */
+/* ── Tada List Header ──────────────────────────────────── */
 
 .tada-list-header {
   display: flex;

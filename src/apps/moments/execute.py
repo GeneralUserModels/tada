@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -319,6 +321,38 @@ def _parse_frontmatter(content: str) -> dict:
     return result
 
 
+def _check_js_compilation(output_dir: str) -> bool:
+    """Run node --check on all .js files in output_dir. Returns True if all pass."""
+    for js_file in sorted(Path(output_dir).glob("*.js")):
+        result = subprocess.run(
+            ["node", "--check", str(js_file)],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            print(f"  [compile] FAILED: {js_file.name}: {result.stderr.strip()}")
+            return False
+    return True
+
+
+def _restore_backup(backup_dir: str, output_dir: str) -> None:
+    """Replace output_dir contents with backup."""
+    print(f"  [safety] restoring previous version from backup")
+    shutil.rmtree(output_dir)
+    shutil.move(backup_dir, output_dir)
+
+
+def _clean_output(output_dir: str) -> None:
+    """Remove all files from output_dir (first-ever run failed)."""
+    print(f"  [safety] removing failed output (no previous version)")
+    shutil.rmtree(output_dir)
+
+
+def _cleanup_backup(backup_dir: str) -> None:
+    """Remove backup after successful compilation."""
+    if Path(backup_dir).exists():
+        shutil.rmtree(backup_dir)
+
+
 def run(
     task_path: str,
     output_dir: str,
@@ -332,6 +366,15 @@ def run(
     task_content = Path(task_path).read_text()
     fm = _parse_frontmatter(task_content)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    # Back up existing output so we can restore on failure
+    backup_dir = str(Path(output_dir).parent / "_backups" / Path(output_dir).name)
+    had_previous = (Path(output_dir) / "index.html").exists()
+    if had_previous:
+        if Path(backup_dir).exists():
+            shutil.rmtree(backup_dir)
+        Path(backup_dir).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(output_dir, backup_dir)
 
     effective_frequency = frequency_override or fm.get("frequency", "")
     effective_schedule = schedule_override or fm.get("schedule", "")
@@ -356,7 +399,7 @@ def run(
             templates_dir=str(TEMPLATES_DIR),
         )
 
-    agent, _ = build_agent(model, logs_dir, api_key=api_key)
+    agent, _ = build_agent(model, logs_dir, extra_write_dirs=[output_dir], api_key=api_key)
     agent.max_rounds = 100
     agent.run([{"role": "user", "content": instruction}])
 
@@ -371,11 +414,36 @@ def run(
             "schedule": effective_schedule,
         }, indent=2))
 
-    # Verify and refine the output — fix errors, improve quality, or delete if unsalvageable
-    if (Path(output_dir) / "index.html").exists():
+    # Check if execute produced a valid output before running verify_and_refine
+    execute_ok = (Path(output_dir) / "index.html").exists() and _check_js_compilation(output_dir)
+
+    if execute_ok:
+        # Snapshot post-execute state so we can recover if verify_and_refine breaks it
+        pre_refine_dir = str(Path(output_dir).parent / "_pre_refine" / Path(output_dir).name)
+        if Path(pre_refine_dir).exists():
+            shutil.rmtree(pre_refine_dir)
+        Path(pre_refine_dir).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(output_dir, pre_refine_dir)
+
         verify_and_refine(output_dir, logs_dir, model, api_key=api_key)
 
-    return (Path(output_dir) / "index.html").exists()
+        # If verify_and_refine broke it, restore the post-execute snapshot
+        refine_ok = (Path(output_dir) / "index.html").exists() and _check_js_compilation(output_dir)
+        if not refine_ok:
+            print("  [safety] verify_and_refine broke output, restoring post-execute version")
+            _restore_backup(pre_refine_dir, output_dir)
+        else:
+            shutil.rmtree(pre_refine_dir)
+
+        _cleanup_backup(backup_dir)
+        return True
+
+    # Execute itself failed — restore previous version or clean up
+    if had_previous:
+        _restore_backup(backup_dir, output_dir)
+        return True
+    _clean_output(output_dir)
+    return False
 
 
 if __name__ == "__main__":

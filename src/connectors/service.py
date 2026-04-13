@@ -186,6 +186,16 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
                 elif "No such file or directory" in raw or "FileNotFoundError" in raw:
                     user_msg = "Not signed in"
                 elif "401" in raw or "Unauthorized" in raw:
+                    # Try refreshing the token before giving up
+                    if cfg.requires_auth == "google":
+                        try:
+                            from server.routes.auth import _refresh_google_via_supabase
+                            _refresh_google_via_supabase(state.config.google_token_path)
+                            logger.info(f"{cfg.name}: refreshed Google token after 401, retrying")
+                            error_occurred = True
+                            continue
+                        except Exception as refresh_err:
+                            logger.warning(f"{cfg.name}: token refresh failed: {refresh_err}")
                     user_msg = "Authentication expired — reconnect your account"
                 else:
                     user_msg = raw

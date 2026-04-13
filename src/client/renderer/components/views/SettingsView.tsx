@@ -113,7 +113,7 @@ export function SettingsView() {
 
           {momentsEnabled && (
           <div className="model-row">
-            <span className="model-row-label">Ta-Da</span>
+            <span className="model-row-label">Tada</span>
             <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, cursor: "pointer" }}>
               <input
                 type="checkbox"

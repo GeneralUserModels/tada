@@ -101,7 +101,7 @@ interface TadaAPI {
   requestConnectorPermission: (name: string) => Promise<boolean>;
   checkConnectorPermission: (name: string) => Promise<boolean>;
 
-  // Moments (Ta-Da)
+  // Moments (Tada)
   getMomentsTasks: () => Promise<MomentTask[]>;
   getMomentsResults: () => Promise<MomentResult[]>;
   getServerUrl: () => Promise<string>;

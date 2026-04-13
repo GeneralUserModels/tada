@@ -24,6 +24,8 @@ import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from fastapi import APIRouter, HTTPException, Request
 
 from server.config import CONFIG_PATH
@@ -445,12 +447,12 @@ async def outlook_status(request: Request):
 
 # ── Token refresh ─────────────────────────────────────────────
 
-def _refresh_if_expired(token_path: str | None, token_url: str, build_body: Callable, name: str) -> None:
+def _refresh_if_expired(token_path: str | None, token_url: str, build_body: Callable, name: str, force: bool = False) -> None:
     """Refresh a single provider's token if expired or expiring within 5 minutes."""
     token = _read_token(token_path) if token_path else None
     if not token or not token.get("refresh_token"):
         return
-    if token.get("expires_at", 0) > time.time() * 1000 + 5 * 60 * 1000:
+    if not force and token.get("expires_at", 0) > time.time() * 1000 + 5 * 60 * 1000:
         return
     data = _http_post(token_url, build_body(token))
     token["access_token"] = data["access_token"]
@@ -461,12 +463,12 @@ def _refresh_if_expired(token_path: str | None, token_url: str, build_body: Call
     logger.info("[auth] %s token refreshed", name)
 
 
-def _refresh_google_via_supabase(token_path: str | None) -> None:
+def _refresh_google_via_supabase(token_path: str | None, force: bool = False) -> None:
     """Refresh Google provider token via the alpha Supabase project."""
     token = _read_token(token_path) if token_path else None
     if not token or not token.get("supabase_refresh_token"):
         return
-    if token.get("expires_at", 0) > time.time() * 1000 + 5 * 60 * 1000:
+    if not force and token.get("expires_at", 0) > time.time() * 1000 + 5 * 60 * 1000:
         return
     alpha_url = token.get("alpha_supabase_url", "")
     alpha_key = token.get("alpha_supabase_anon_key", "")
@@ -503,15 +505,25 @@ def _provider_args(config) -> list[tuple]:
     ]
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
+def _refresh_google_with_retry(token_path: str | None) -> None:
+    _refresh_google_via_supabase(token_path, force=True)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
+def _refresh_provider_with_retry(*args) -> None:
+    _refresh_if_expired(*args, force=True)
+
+
 def refresh_expired_tokens(config) -> None:
-    """Refresh any expired Google/Outlook tokens. Call before starting connectors."""
+    """Force-refresh all OAuth tokens at startup with retries."""
     try:
-        _refresh_google_via_supabase(config.google_token_path)
+        _refresh_google_with_retry(config.google_token_path)
     except Exception as e:
         logger.warning("[auth] Google startup refresh failed: %s", e)
     for args in _provider_args(config):
         try:
-            _refresh_if_expired(*args)
+            _refresh_provider_with_retry(*args)
         except Exception as e:
             logger.warning("[auth] %s startup refresh failed: %s", args[3], e)
 
