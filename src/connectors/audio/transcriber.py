@@ -66,6 +66,7 @@ def create_session_file(transcript_dir: Path, session_start: float) -> Path:
     transcript_dir.mkdir(parents=True, exist_ok=True)
     session_file = transcript_dir / f"{dt.strftime('%Y-%m-%d_%H-%M-%S')}.md"
     session_file.write_text(f"# Audio Transcript — {dt.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+    logger.info("audio: created session transcript file %s", session_file)
     return session_file
 
 
@@ -84,3 +85,4 @@ def append_transcript_markdown(
 
     with open(session_file, "a") as f:
         f.write(f"## {start_str} – {end_str}\n\n{text}\n\n---\n\n")
+    logger.info("audio: appended transcript chunk (%s – %s) to %s", start_str, end_str, session_file)

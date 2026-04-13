@@ -23,8 +23,11 @@ _mic_recorder = None
 _sys_recorder = None
 _transcribed_queue: asyncio.Queue[dict] | None = None
 _active_session: ServerSession | None = None
-_running = False
+_shutdown_event: asyncio.Event | None = None
+_flush_done_event: asyncio.Event | None = None
 _session_file: Path | None = None
+# Buffers from recorders disabled mid-chunk, drained on next _process_chunk
+_leftover_streams: list = []
 
 
 async def _process_chunk(
@@ -37,7 +40,8 @@ async def _process_chunk(
     from connectors.audio.mixer import mix_and_encode
     from connectors.audio.transcriber import transcribe_audio, append_transcript_markdown
 
-    streams: list = []
+    streams: list = _leftover_streams.copy()
+    _leftover_streams.clear()
     if _mic_recorder is not None:
         data = _mic_recorder.read_and_clear()
         if data is not None:
@@ -95,38 +99,37 @@ async def _transcription_loop() -> None:
 
     chunk_start = time.time()
 
-    while _running:
-        await asyncio.sleep(CHUNK_SECONDS)
-        if not _running:
-            break
+    while not _shutdown_event.is_set():
+        try:
+            await asyncio.wait_for(_shutdown_event.wait(), timeout=CHUNK_SECONDS)
+        except asyncio.TimeoutError:
+            pass  # normal: chunk interval elapsed
 
         chunk_end = time.time()
+        if chunk_end - chunk_start < 1:
+            break
         try:
             await _process_chunk(chunk_start, chunk_end, model, api_key)
         except Exception:
-            logger.exception("audio: chunk processing failed, will retry next cycle")
+            logger.exception("audio: chunk processing failed")
         chunk_start = chunk_end
 
-    # Flush remaining audio on shutdown
-    chunk_end = time.time()
-    if chunk_end - chunk_start > 1:  # at least 1s of audio
-        logger.info("audio: flushing remaining audio before shutdown")
-        try:
-            await _process_chunk(chunk_start, chunk_end, model, api_key)
-        except Exception:
-            logger.exception("audio: flush failed")
+    if _flush_done_event is not None:
+        _flush_done_event.set()
 
 
 @asynccontextmanager
 async def lifespan(_server: FastMCP) -> AsyncIterator[None]:
-    global _mic_recorder, _sys_recorder, _transcribed_queue, _running
+    global _mic_recorder, _sys_recorder, _transcribed_queue
 
     from server.cost_tracker import init_cost_tracking, run_cost_logger
     tracker = init_cost_tracking()
     asyncio.create_task(run_cost_logger(tracker), name="audio-cost-logger")
 
+    global _shutdown_event, _flush_done_event
     _transcribed_queue = asyncio.Queue()
-    _running = True
+    _shutdown_event = asyncio.Event()
+    _flush_done_event = asyncio.Event()
 
     mic_enabled = os.environ.get("TADA_MIC_ENABLED", "0") == "1"
     sys_enabled = os.environ.get("TADA_SYS_ENABLED", "0") == "1"
@@ -143,10 +146,12 @@ async def lifespan(_server: FastMCP) -> AsyncIterator[None]:
         _sys_recorder.start()
         logger.info("audio: system audio source enabled")
 
-    asyncio.create_task(_transcription_loop(), name="audio-transcriber")
+    transcription_task = asyncio.create_task(_transcription_loop(), name="audio-transcriber")
     yield
 
-    _running = False
+    # Signal shutdown — wakes the loop from its sleep immediately so it can flush
+    _shutdown_event.set()
+    await transcription_task
     if _mic_recorder is not None:
         _mic_recorder.stop()
     if _sys_recorder is not None:
@@ -160,6 +165,56 @@ mcp = FastMCP("tada-audio", lifespan=lifespan)
 async def _on_subscribe(_uri: AnyUrl) -> None:
     global _active_session
     _active_session = mcp._mcp_server.request_context.session
+
+
+@mcp.tool()
+async def configure_sources(mic_enabled: bool | None = None, sys_enabled: bool | None = None, session_file: str | None = None) -> str:
+    """Toggle mic/system audio recorders at runtime without restarting the server."""
+    global _mic_recorder, _sys_recorder, _session_file
+
+    if session_file is not None:
+        _session_file = Path(session_file) if session_file else None
+        logger.info("audio: session transcript → %s", _session_file)
+
+    if mic_enabled is not None:
+        if mic_enabled and _mic_recorder is None:
+            from connectors.audio.mic_recorder import MicRecorder
+            _mic_recorder = MicRecorder()
+            _mic_recorder.start()
+            logger.info("audio: microphone source enabled")
+        elif not mic_enabled and _mic_recorder is not None:
+            data = _mic_recorder.read_and_clear()
+            if data is not None:
+                _leftover_streams.append(data)
+            _mic_recorder.stop()
+            _mic_recorder = None
+            logger.info("audio: microphone source disabled")
+
+    if sys_enabled is not None:
+        if sys_enabled and _sys_recorder is None:
+            from connectors.audio.sys_recorder import SystemAudioRecorder
+            _sys_recorder = SystemAudioRecorder()
+            _sys_recorder.start()
+            logger.info("audio: system audio source enabled")
+        elif not sys_enabled and _sys_recorder is not None:
+            data = _sys_recorder.read_and_clear()
+            if data is not None:
+                _leftover_streams.append(data)
+            _sys_recorder.stop()
+            _sys_recorder = None
+            logger.info("audio: system audio source disabled")
+
+    return json.dumps({"ok": True, "mic": _mic_recorder is not None, "sys": _sys_recorder is not None})
+
+
+@mcp.tool()
+async def flush_audio() -> str:
+    """Flush remaining audio: transcribe whatever is buffered, write to session file. Blocks until done."""
+    if _shutdown_event is None or _shutdown_event.is_set():
+        return json.dumps({"ok": True, "flushed": False})
+    _shutdown_event.set()
+    await _flush_done_event.wait()
+    return json.dumps({"ok": True, "flushed": True})
 
 
 @mcp.tool()

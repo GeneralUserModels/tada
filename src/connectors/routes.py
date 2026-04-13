@@ -5,6 +5,7 @@ Registered by server/app.py under /api/connectors.
 
 import asyncio
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from server.feature_flags import is_enabled
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/connectors", tags=["connectors"])
 
@@ -104,10 +107,13 @@ async def update_connector(name: str, update: ConnectorUpdate, request: Request)
         audio_conn._server_params.env["TADA_SYS_ENABLED"] = "1" if sys_on else "0"
 
         if not mic_on and not sys_on:
-            # Both off — pause and clear session file (finalize)
+            # Both off — flush remaining audio, then stop
+            if audio_conn._session is not None:
+                await audio_conn._session.call_tool("flush_audio", {})
             audio_conn.stop()
             audio_conn._server_params.env.pop("TADA_SESSION_FILE", None)
         else:
+            session_file_str: str | None = None
             # Create session file if this is the first source being enabled
             if not was_any_on:
                 log_dir = config.log_dir or "./logs"
@@ -116,17 +122,25 @@ async def update_connector(name: str, update: ConnectorUpdate, request: Request)
                 dt = datetime.now()
                 session_file = transcript_dir / f"{dt.strftime('%Y-%m-%d_%H-%M-%S')}.md"
                 session_file.write_text(f"# Audio Transcript — {dt.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-                audio_conn._server_params.env["TADA_SESSION_FILE"] = str(session_file)
+                session_file_str = str(session_file)
+                audio_conn._server_params.env["TADA_SESSION_FILE"] = session_file_str
+                logger.info("audio: new session transcript file %s", session_file)
 
-            # Restart: stop so the polling loop disconnects (in its own task),
-            # then resume after a delay so it reconnects with updated env vars.
-            audio_conn.stop()
+            if audio_conn._session is not None:
+                # Server already running — toggle sources in-place, no restart needed
+                args: dict = {"mic_enabled": mic_on, "sys_enabled": sys_on}
+                if session_file_str is not None:
+                    args["session_file"] = session_file_str
+                await audio_conn._session.call_tool("configure_sources", args)
+            else:
+                # Server not running yet — restart so it picks up env vars
+                audio_conn.stop()
 
-            async def _delayed_resume():
-                await asyncio.sleep(2)
-                audio_conn.resume()
+                async def _delayed_resume():
+                    await asyncio.sleep(2)
+                    audio_conn.resume()
 
-            asyncio.create_task(_delayed_resume())
+                asyncio.create_task(_delayed_resume())
 
         return {"ok": True, "name": name, "enabled": update.enabled}
 
