@@ -7,7 +7,7 @@ import json
 import logging
 import re
 import time as _time
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 
 from apps.moments.execute import run as execute_moment, _parse_frontmatter as parse_frontmatter
@@ -202,9 +202,8 @@ async def run_moments_scheduler(state) -> None:
                         meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
                         index_path = Path(output_dir) / "index.html"
                         if index_path.exists():
-                            from datetime import timezone as _tz
                             mtime = index_path.stat().st_mtime
-                            true_updated = datetime.fromtimestamp(mtime, tz=_tz.utc).isoformat()
+                            true_updated = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
                         else:
                             true_updated = datetime.now().isoformat()
                         await state.broadcast("moment_completed", {
