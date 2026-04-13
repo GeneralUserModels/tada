@@ -192,6 +192,7 @@ async def run_moments_scheduler(state) -> None:
                         execute_moment, str(md_file), output_dir, logs_dir, model,
                         frequency_override=freq_override, schedule_override=sched_override,
                         api_key=api_key,
+                        last_run_at=run_history.get(slug),
                     )
                     completed_at = _time.time()
                     save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")

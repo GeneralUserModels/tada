@@ -209,18 +209,19 @@ interface structure. Focus on refreshing the content, data, and any time-sensiti
 
 ## Content Freshness
 
-This moment runs **{frequency}**. All content you include MUST be new and relevant to this cycle:
+This moment runs **{frequency}**. It was last run at **{last_run_at}**. \
+The user has already seen the output from that run. Your job is to show them things they \
+haven't seen before.
 
-- **Daily moments**: Only include content from the last ~24 hours. Yesterday's items should be \
-replaced, not carried over. A blog post from 3 days ago or an article from last week is stale — \
-drop it entirely. The user already saw the previous run.
-- **Weekly moments**: Only include content from the last ~7 days. Anything older than a week \
-should be dropped. Month-old articles, papers, or news have no place in a weekly refresh.
-
-**Do NOT accumulate old content across runs.** Each update should feel like a fresh edition, not \
-a growing archive. When fetching from the web, filter aggressively by publication/post date. \
-When reading local data, only use entries timestamped within the current cycle window. If a \
-source doesn't have enough fresh content, show fewer items rather than padding with stale ones.
+**Only include content that is NEW TO THE USER.** This means:
+- Do NOT carry over items from the previous run — the user already saw them.
+- Do NOT re-surface the same articles, links, summaries, or data points from last time.
+- Read the existing output (especially the DATA in app.js) to know what was already shown, \
+and explicitly exclude those items.
+- When fetching from the web or reading local data, filter to content published or recorded \
+AFTER {last_run_at}. Anything the user could have seen in the last run is not new.
+- If there isn't enough genuinely new content to fill the interface, show fewer items. \
+A short but fresh update is better than one padded with stale repeats.
 
 ## Task
 
@@ -376,6 +377,7 @@ def run(
     frequency_override: str | None = None,
     schedule_override: str | None = None,
     api_key: str | None = None,
+    last_run_at: float | None = None,
 ) -> bool:
     """Execute a moment task. Returns True if index.html was produced."""
     task_content = Path(task_path).read_text()
@@ -397,12 +399,14 @@ def run(
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     existing_index = Path(output_dir) / "index.html"
     if existing_index.exists():
+        last_run_str = datetime.fromtimestamp(last_run_at).strftime("%Y-%m-%d %H:%M") if last_run_at else "unknown"
         instruction = f"Current date and time: **{now}**\n\n" + UPDATE_INSTRUCTION_TEMPLATE.format(
             task_content=task_content,
             output_dir=output_dir,
             logs_dir=logs_dir,
             frequency=effective_frequency,
             schedule=effective_schedule,
+            last_run_at=last_run_str,
         )
     else:
         instruction = f"Current date and time: **{now}**\n\n" + INSTRUCTION_TEMPLATE.format(
