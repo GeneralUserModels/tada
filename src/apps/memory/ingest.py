@@ -185,6 +185,8 @@ and what the user's role is — not just describe the repo structure.
 - Do NOT duplicate information across pages — use [[wiki-links]] to cross-reference.
 - Do NOT create empty stub pages "for later." Only create a page when you have real content.
 - Do NOT delete any existing wiki pages. Update them instead.
+- Do NOT ask questions or wait for confirmation. You are fully autonomous — execute the entire \
+workflow from start to finish without stopping. Never end your turn with a question.
 """
 
 INCREMENTAL_SECTION = """\
