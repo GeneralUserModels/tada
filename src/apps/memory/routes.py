@@ -6,6 +6,9 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+# Strip "Category — " prefixes from legacy titles
+_TITLE_PREFIX_RE = re.compile(r"^(?:Person|Project|Interest|Habit|Research|Topic)\s*[—–-]\s*", re.IGNORECASE)
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
@@ -57,7 +60,7 @@ async def list_pages(request: Request):
         fm = _parse_frontmatter(md_file.read_text(errors="replace"))
         pages.append({
             "path": str(rel),
-            "title": fm.get("title", rel.stem.replace("-", " ").title()),
+            "title": _TITLE_PREFIX_RE.sub("", fm.get("title", rel.stem.replace("-", " ").title())),
             "confidence": float(fm["confidence"]) if "confidence" in fm else None,
             "last_updated": fm.get("last_updated"),
             "category": str(rel.parent) if str(rel.parent) != "." else None,
