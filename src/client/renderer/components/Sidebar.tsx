@@ -29,6 +29,17 @@ const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
     ),
   },
   {
+    view: "pensieve",
+    label: "Pensieve",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M8 2C5.2 2 3 4.2 3 7c0 1.5.7 2.9 1.7 3.8.3.3.5.7.5 1.2v.5c0 .8.7 1.5 1.5 1.5h2.6c.8 0 1.5-.7 1.5-1.5V12c0-.5.2-.9.5-1.2C12.3 9.9 13 8.5 13 7c0-2.8-2.2-5-5-5z"
+          stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+        <path d="M6 14.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  {
     view: "usermodel",
     label: "User Model",
     icon: (
@@ -52,6 +63,7 @@ const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
 
 const FLAG_FOR_VIEW: Partial<Record<ActiveView, string>> = {
   tada: "moments",
+  pensieve: "memory",
 };
 
 export function Sidebar({ activeView, connected, onNavigate }: Props) {

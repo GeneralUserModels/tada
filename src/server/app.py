@@ -51,6 +51,11 @@ async def start_services(state: ServerState) -> None:
     # Background OAuth token refresh
     state.token_refresh_task = asyncio.create_task(run_token_refresh(state.config))
 
+    # Memory wiki service
+    if is_enabled(state.config, "memory") and state.config.memory_enabled:
+        from apps.memory.service import run_memory_service
+        state.memory_task = asyncio.create_task(run_memory_service(state))
+
     # Moments services
     if is_enabled(state.config, "moments") and state.config.moments_enabled:
         from apps.moments.scheduler import run_moments_scheduler
@@ -113,6 +118,7 @@ async def lifespan(app: FastAPI):
         state.model.training_task,
         state.context_logging_task,
         state.token_refresh_task,
+        state.memory_task,
         state.moments_scheduler_task,
         state.moments_discovery_task,
         state.prediction_loop_task,
@@ -159,7 +165,9 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(onboarding_router)
     app.include_router(connectors_router)
+    from apps.memory.routes import router as memory_router
     from apps.moments.routes import router as moments_router
+    app.include_router(memory_router)
     app.include_router(moments_router)
     app.include_router(settings.router)
     app.include_router(status.router)

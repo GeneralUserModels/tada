@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 
 FEATURE_FLAG_DEFAULTS: dict[str, bool] = {
     # Top-level features
+    "memory": True,
     "moments": True,
     "tabracadabra": True,
     "tinker": False,

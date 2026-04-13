@@ -1,7 +1,7 @@
 /** REST client — thin fetch wrapper for the Tada server. */
 
 export { setServerUrl, getServerUrl } from "../../shared/api-core";
-import { request } from "../../shared/api-core";
+import { request, requestText } from "../../shared/api-core";
 
 // ── User model control ────────────────────────────────────────
 export const startTraining = () => request("POST", "/api/user_models/training/start");
@@ -55,6 +55,22 @@ export const recordMomentView = (slug: string) =>
 
 export const recordMomentViewEnd = (slug: string, data: { duration_ms: number }) =>
   request("POST", `/api/moments/${slug}/view-end`, data);
+
+// ── Memory wiki ─────────────────────────────────────────────
+export const getMemoryPages = () =>
+  request("GET", "/api/memory/pages") as Promise<{ path: string; title: string; confidence: number | null; last_updated: string | null; category: string | null }[]>;
+
+export const getMemoryPage = (path: string) =>
+  requestText("GET", `/api/memory/pages/${path}`);
+
+export const updateMemoryPage = (path: string, content: string) =>
+  request("PUT", `/api/memory/pages/${path}`, { content });
+
+export const getMemoryStatus = () =>
+  request("GET", "/api/memory/status") as Promise<{ exists: boolean; last_ingest: string | null; last_lint: string | null; page_count: number }>;
+
+export const getMemoryLog = () =>
+  requestText("GET", "/api/memory/log");
 
 // ── Onboarding ───────────────────────────────────────────────
 export const getOnboardingStatus = () =>

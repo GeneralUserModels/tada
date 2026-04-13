@@ -14,6 +14,7 @@ load_dotenv()
 
 from agent.builder import build_agent
 from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
+from apps.moments.verify_refine import verify_and_refine
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -186,6 +187,8 @@ the README.md of the template that best fits your task.
 4. Build the interface by composing from shared `PN.*` components and template-specific components. \
 Also browse `{output_dir}/../` for reusable components from other moments.
 5. Write your output files to `{output_dir}/` (including base.css and components.js).
+6. **Verify your JS**: run `node --check {output_dir}/app.js` (and any other .js files you wrote) \
+to catch syntax errors. Fix any errors before finishing.
 """
 
 
@@ -294,6 +297,8 @@ more detailed data that isn't in the logs.
 3. Compare fresh data with what's already in the existing interface.
 4. Update the data/content while preserving the interface structure.
 5. Write the updated files to `{output_dir}/`.
+6. **Verify your JS**: run `node --check {output_dir}/app.js` (and any other .js files you wrote) \
+to catch syntax errors. Fix any errors before finishing.
 """
 
 
@@ -365,6 +370,10 @@ def run(
             "frequency": effective_frequency,
             "schedule": effective_schedule,
         }, indent=2))
+
+    # Verify and refine the output — fix errors, improve quality, or delete if unsalvageable
+    if (Path(output_dir) / "index.html").exists():
+        verify_and_refine(output_dir, logs_dir, model, api_key=api_key)
 
     return (Path(output_dir) / "index.html").exists()
 

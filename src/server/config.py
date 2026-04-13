@@ -27,6 +27,7 @@ SETTINGS_API_FIELDS: frozenset[str] = frozenset({
     "filter_model", "filter_model_api_key",
     "fps", "num_generations",
     "learning_rate", "batch_size", "past_len", "future_len", "loss_mode",
+    "memory_enabled", "memory_agent_model", "memory_agent_api_key",
     "moments_enabled", "moments_agent_model", "moments_agent_api_key",
     "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
     "feature_flags",
@@ -38,6 +39,7 @@ _PERSISTED_FIELDS = SETTINGS_API_FIELDS | {
     "model_type",
     "disabled_connectors", "connector_errors", "mcp_connectors",
     "onboarding_complete",
+    "memory_enabled", "memory_agent_model", "memory_agent_api_key", "memory_schedule",
     "tada_dir", "moments_agent_model", "moments_agent_api_key", "moments_discovery_schedule", "moments_enabled",
     "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
     "agent_model", "agent_api_key",
@@ -154,6 +156,12 @@ class ServerConfig(BaseModel):
     resume_from_checkpoint: str | None = Field(default_factory=lambda: os.getenv("TADA_RESUME_FROM_CHECKPOINT") or None)
     retriever_checkpoint: str | None = Field(default_factory=lambda: os.getenv("TADA_RETRIEVER_CHECKPOINT") or None)
     sampler_ttl_seconds: int = 60
+
+    # Memory wiki
+    memory_enabled: bool = True
+    memory_agent_model: str = Field(default_factory=lambda: os.getenv("TADA_AGENT_MODEL", DEFAULT_LLM_MODEL))
+    memory_agent_api_key: str = ""
+    memory_schedule: str = "daily at 3am"
 
     # Moments
     tada_dir: str = Field(default_factory=lambda: os.getenv(

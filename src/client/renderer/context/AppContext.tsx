@@ -4,7 +4,7 @@ import * as sse from "../api/sse";
 
 // ── Types ─────────────────────────────────────────────────────
 
-export type ActiveView = "connectors" | "tada" | "usermodel" | "settings";
+export type ActiveView = "connectors" | "tada" | "pensieve" | "usermodel" | "settings";
 
 export interface HistoryItem {
   id: number;
