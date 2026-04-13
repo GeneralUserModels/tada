@@ -207,6 +207,21 @@ This moment was previously generated and the interface already exists. Your job 
 with fresh, current data — not rebuild it from scratch. Keep the existing design, layout, and \
 interface structure. Focus on refreshing the content, data, and any time-sensitive information.
 
+## Content Freshness
+
+This moment runs **{frequency}**. All content you include MUST be new and relevant to this cycle:
+
+- **Daily moments**: Only include content from the last ~24 hours. Yesterday's items should be \
+replaced, not carried over. A blog post from 3 days ago or an article from last week is stale — \
+drop it entirely. The user already saw the previous run.
+- **Weekly moments**: Only include content from the last ~7 days. Anything older than a week \
+should be dropped. Month-old articles, papers, or news have no place in a weekly refresh.
+
+**Do NOT accumulate old content across runs.** Each update should feel like a fresh edition, not \
+a growing archive. When fetching from the web, filter aggressively by publication/post date. \
+When reading local data, only use entries timestamped within the current cycle window. If a \
+source doesn't have enough fresh content, show fewer items rather than padding with stale ones.
+
 ## Task
 
 Focus on the "Specific Instructions for Agent" section below — that defines what to do. \
