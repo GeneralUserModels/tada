@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { getSeekerStatus, getSeekerConversation, endSeekerConversation, getSeekerHistory, getSeekerPastConversation } from "../api/client";
 import { getServerUrl } from "../../shared/api-core";
 import { on as sseOn } from "../api/sse";
+import { useAppContext } from "../context/AppContext";
 
 export interface HistoryEntry {
   filename: string;
@@ -9,6 +10,7 @@ export interface HistoryEntry {
 }
 
 export function useSeeker() {
+  const { dispatch } = useAppContext();
   const [status, setStatus] = useState<SeekerStatus | null>(null);
   const [messages, setMessages] = useState<SeekerMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -22,10 +24,15 @@ export function useSeeker() {
     try {
       const s = await getSeekerStatus();
       setStatus(s);
+      if (s.has_questions && !s.questions_answered) {
+        dispatch({ type: "SEEKER_QUESTIONS_READY" });
+      } else {
+        dispatch({ type: "SEEKER_QUESTIONS_CLEARED" });
+      }
     } catch (e) {
       console.error("[seeker] status load failed:", e);
     }
-  }, []);
+  }, [dispatch]);
 
   const loadConversation = useCallback(async () => {
     try {
