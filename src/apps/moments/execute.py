@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +16,7 @@ load_dotenv()
 
 from agent.builder import build_agent
 from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
+from apps.moments.verify_refine import verify_and_refine
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -186,6 +189,8 @@ the README.md of the template that best fits your task.
 4. Build the interface by composing from shared `PN.*` components and template-specific components. \
 Also browse `{output_dir}/../` for reusable components from other moments.
 5. Write your output files to `{output_dir}/` (including base.css and components.js).
+6. **Verify your JS**: run `node --check {output_dir}/app.js` (and any other .js files you wrote) \
+to catch syntax errors. Fix any errors before finishing.
 """
 
 
@@ -201,6 +206,22 @@ UPDATE_INSTRUCTION_TEMPLATE = """You are a powerful AI agent updating an existin
 This moment was previously generated and the interface already exists. Your job is to UPDATE it \
 with fresh, current data — not rebuild it from scratch. Keep the existing design, layout, and \
 interface structure. Focus on refreshing the content, data, and any time-sensitive information.
+
+## Content Freshness
+
+This moment runs **{frequency}**. It was last run at **{last_run_at}**. \
+The user has already seen the output from that run. Your job is to show them things they \
+haven't seen before.
+
+**Only include content that is NEW TO THE USER.** This means:
+- Do NOT carry over items from the previous run — the user already saw them.
+- Do NOT re-surface the same articles, links, summaries, or data points from last time.
+- Read the existing output (especially the DATA in app.js) to know what was already shown, \
+and explicitly exclude those items.
+- When fetching from the web or reading local data, filter to content published or recorded \
+AFTER {last_run_at}. Anything the user could have seen in the last run is not new.
+- If there isn't enough genuinely new content to fill the interface, show fewer items. \
+A short but fresh update is better than one padded with stale repeats.
 
 ## Task
 
@@ -294,6 +315,8 @@ more detailed data that isn't in the logs.
 3. Compare fresh data with what's already in the existing interface.
 4. Update the data/content while preserving the interface structure.
 5. Write the updated files to `{output_dir}/`.
+6. **Verify your JS**: run `node --check {output_dir}/app.js` (and any other .js files you wrote) \
+to catch syntax errors. Fix any errors before finishing.
 """
 
 
@@ -314,6 +337,38 @@ def _parse_frontmatter(content: str) -> dict:
     return result
 
 
+def _check_js_compilation(output_dir: str) -> bool:
+    """Run node --check on all .js files in output_dir. Returns True if all pass."""
+    for js_file in sorted(Path(output_dir).glob("*.js")):
+        result = subprocess.run(
+            ["node", "--check", str(js_file)],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            print(f"  [compile] FAILED: {js_file.name}: {result.stderr.strip()}")
+            return False
+    return True
+
+
+def _restore_backup(backup_dir: str, output_dir: str) -> None:
+    """Replace output_dir contents with backup."""
+    print(f"  [safety] restoring previous version from backup")
+    shutil.rmtree(output_dir)
+    shutil.move(backup_dir, output_dir)
+
+
+def _clean_output(output_dir: str) -> None:
+    """Remove all files from output_dir (first-ever run failed)."""
+    print(f"  [safety] removing failed output (no previous version)")
+    shutil.rmtree(output_dir)
+
+
+def _cleanup_backup(backup_dir: str) -> None:
+    """Remove backup after successful compilation."""
+    if Path(backup_dir).exists():
+        shutil.rmtree(backup_dir)
+
+
 def run(
     task_path: str,
     output_dir: str,
@@ -322,11 +377,21 @@ def run(
     frequency_override: str | None = None,
     schedule_override: str | None = None,
     api_key: str | None = None,
+    last_run_at: float | None = None,
 ) -> bool:
     """Execute a moment task. Returns True if index.html was produced."""
     task_content = Path(task_path).read_text()
     fm = _parse_frontmatter(task_content)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    # Back up existing output so we can restore on failure
+    backup_dir = str(Path(output_dir).parent / "_backups" / Path(output_dir).name)
+    had_previous = (Path(output_dir) / "index.html").exists()
+    if had_previous:
+        if Path(backup_dir).exists():
+            shutil.rmtree(backup_dir)
+        Path(backup_dir).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(output_dir, backup_dir)
 
     effective_frequency = frequency_override or fm.get("frequency", "")
     effective_schedule = schedule_override or fm.get("schedule", "")
@@ -334,12 +399,14 @@ def run(
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     existing_index = Path(output_dir) / "index.html"
     if existing_index.exists():
+        last_run_str = datetime.fromtimestamp(last_run_at).strftime("%Y-%m-%d %H:%M") if last_run_at else "unknown"
         instruction = f"Current date and time: **{now}**\n\n" + UPDATE_INSTRUCTION_TEMPLATE.format(
             task_content=task_content,
             output_dir=output_dir,
             logs_dir=logs_dir,
             frequency=effective_frequency,
             schedule=effective_schedule,
+            last_run_at=last_run_str,
         )
     else:
         instruction = f"Current date and time: **{now}**\n\n" + INSTRUCTION_TEMPLATE.format(
@@ -351,7 +418,7 @@ def run(
             templates_dir=str(TEMPLATES_DIR),
         )
 
-    agent, _ = build_agent(model, logs_dir, api_key=api_key)
+    agent, _ = build_agent(model, logs_dir, extra_write_dirs=[output_dir], api_key=api_key)
     agent.max_rounds = 100
     agent.run([{"role": "user", "content": instruction}])
 
@@ -366,7 +433,36 @@ def run(
             "schedule": effective_schedule,
         }, indent=2))
 
-    return (Path(output_dir) / "index.html").exists()
+    # Check if execute produced a valid output before running verify_and_refine
+    execute_ok = (Path(output_dir) / "index.html").exists() and _check_js_compilation(output_dir)
+
+    if execute_ok:
+        # Snapshot post-execute state so we can recover if verify_and_refine breaks it
+        pre_refine_dir = str(Path(output_dir).parent / "_pre_refine" / Path(output_dir).name)
+        if Path(pre_refine_dir).exists():
+            shutil.rmtree(pre_refine_dir)
+        Path(pre_refine_dir).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(output_dir, pre_refine_dir)
+
+        verify_and_refine(output_dir, logs_dir, model, api_key=api_key)
+
+        # If verify_and_refine broke it, restore the post-execute snapshot
+        refine_ok = (Path(output_dir) / "index.html").exists() and _check_js_compilation(output_dir)
+        if not refine_ok:
+            print("  [safety] verify_and_refine broke output, restoring post-execute version")
+            _restore_backup(pre_refine_dir, output_dir)
+        else:
+            shutil.rmtree(pre_refine_dir)
+
+        _cleanup_backup(backup_dir)
+        return True
+
+    # Execute itself failed — restore previous version or clean up
+    if had_previous:
+        _restore_backup(backup_dir, output_dir)
+        return True
+    _clean_output(output_dir)
+    return False
 
 
 if __name__ == "__main__":

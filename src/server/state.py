@@ -20,6 +20,7 @@ class ServerState:
     token_refresh_task: asyncio.Task | None = None
     moments_scheduler_task: asyncio.Task | None = None
     moments_discovery_task: asyncio.Task | None = None
+    memory_task: asyncio.Task | None = None
 
     # Moments executor lock (one at a time)
     moments_executor_lock: asyncio.Lock = field(default_factory=asyncio.Lock)

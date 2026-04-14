@@ -31,3 +31,16 @@ export async function request(
   }
   return res.json();
 }
+
+export async function requestText(
+  method: string,
+  path: string,
+): Promise<string> {
+  const url = `${serverUrl}${path}`;
+  const res = await fetch(url, { method });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${method} ${path} ${res.status}: ${text}`);
+  }
+  return res.text();
+}

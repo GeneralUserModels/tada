@@ -7,7 +7,7 @@ import json
 import logging
 import re
 import time as _time
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 
 from apps.moments.execute import run as execute_moment, _parse_frontmatter as parse_frontmatter
@@ -99,6 +99,9 @@ def save_run(results_dir: Path, slug: str, started_at: float, completed_at: floa
         f.write("\n")
 
 
+_FREQUENCY_PERIOD = {"daily": timedelta(days=1), "weekly": timedelta(weeks=1)}
+
+
 def should_run(slug: str, frequency: str, schedule: str, run_history: dict[str, float]) -> bool:
     """Determine if a task should run now based on its schedule and run history."""
     last_run = run_history.get(slug)
@@ -107,21 +110,25 @@ def should_run(slug: str, frequency: str, schedule: str, run_history: dict[str, 
     if frequency == "once":
         return last_run is None
 
+    period = _FREQUENCY_PERIOD.get(frequency)
+    if period is None:
+        return False
+
     next_run = _next_run_time(schedule, frequency)
     if next_run is None:
         return False
 
     if last_run is None:
-        if frequency == "daily":
-            return next_run.date() == now.date() or next_run <= now + timedelta(minutes=2)
         return True
 
     last_dt = datetime.fromtimestamp(last_run)
-    if frequency == "daily":
-        return last_dt.date() < now.date() and next_run <= now + timedelta(minutes=2)
-    if frequency == "weekly":
-        return (now - last_dt) >= timedelta(days=6) and next_run <= now + timedelta(minutes=2)
-    return False
+    if (now - last_dt) < period - timedelta(hours=1):
+        return False
+
+    # If next_run is more than 2 min away, the scheduled time for this
+    # period has already passed — the moment is overdue.
+    due_time = next_run if next_run <= now + timedelta(minutes=2) else next_run - period
+    return now >= due_time
 
 
 async def run_moments_scheduler(state) -> None:
@@ -131,7 +138,8 @@ async def run_moments_scheduler(state) -> None:
     # Initialize sandbox in the event loop (signal handlers require main thread)
     from agent.builder import _ensure_sandbox_async
     logs_dir = str(Path(state.config.log_dir).resolve())
-    await _ensure_sandbox_async(logs_dir)
+    tada_dir = str(Path(state.config.tada_dir).resolve())
+    await _ensure_sandbox_async([logs_dir, tada_dir])
 
     executor_lock = state.moments_executor_lock
 
@@ -184,6 +192,7 @@ async def run_moments_scheduler(state) -> None:
                         execute_moment, str(md_file), output_dir, logs_dir, model,
                         frequency_override=freq_override, schedule_override=sched_override,
                         api_key=api_key,
+                        last_run_at=run_history.get(slug),
                     )
                     completed_at = _time.time()
                     save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")
@@ -192,11 +201,17 @@ async def run_moments_scheduler(state) -> None:
                     if success:
                         meta_path = Path(output_dir) / "meta.json"
                         meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+                        index_path = Path(output_dir) / "index.html"
+                        if index_path.exists():
+                            mtime = index_path.stat().st_mtime
+                            true_updated = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+                        else:
+                            true_updated = datetime.now().isoformat()
                         await state.broadcast("moment_completed", {
                             "slug": slug,
                             "title": meta.get("title", fm.get("title", slug)),
                             "description": meta.get("description", fm.get("description", "")),
-                            "completed_at": meta.get("completed_at", datetime.now().isoformat()),
+                            "completed_at": true_updated,
                             "frequency": effective_frequency,
                             "schedule": effective_schedule,
                         })

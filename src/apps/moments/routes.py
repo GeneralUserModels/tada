@@ -1,7 +1,8 @@
-"""REST endpoints for moments (Ta-Da tab)."""
+"""REST endpoints for moments (Tada tab)."""
 
 import json
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -72,7 +73,8 @@ async def list_results(request: Request, include_dismissed: bool = False):
     all_state = load_state(tada_dir)
     results = []
     for meta_path in results_dir.glob("*/meta.json"):
-        if not (meta_path.parent / "index.html").exists():
+        index_path = meta_path.parent / "index.html"
+        if not index_path.exists():
             continue
         meta = json.loads(meta_path.read_text())
         slug = meta_path.parent.name
@@ -81,11 +83,15 @@ async def list_results(request: Request, include_dismissed: bool = False):
         if slug_state["dismissed"] and not include_dismissed:
             continue
 
+        # Use the actual file modification time as "last updated"
+        mtime = os.path.getmtime(index_path)
+        completed_at = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+
         results.append({
             "slug": slug,
             "title": meta.get("title", slug),
             "description": meta.get("description", ""),
-            "completed_at": meta.get("completed_at", ""),
+            "completed_at": completed_at,
             "frequency": meta.get("frequency", ""),
             "schedule": meta.get("schedule", ""),
             **slug_state,

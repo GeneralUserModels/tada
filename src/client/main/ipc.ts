@@ -26,7 +26,7 @@ export const IPC = {
   CONNECTOR_REQUEST_PERMISSION: "connector:request-permission",
   CONNECTOR_CHECK_PERMISSION: "connector:check-permission",
 
-  // Moments (Ta-Da)
+  // Moments (Tada)
   MOMENTS_GET_TASKS: "moments:get-tasks",
   MOMENTS_GET_RESULTS: "moments:get-results",
   GET_SERVER_URL: "get:server-url",
