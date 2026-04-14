@@ -11,6 +11,7 @@ FEATURE_FLAG_DEFAULTS: dict[str, bool] = {
     # Top-level features
     "memory": True,
     "moments": True,
+    "seeker": False,
     "tabracadabra": True,
     "tinker": False,
     # Connectors

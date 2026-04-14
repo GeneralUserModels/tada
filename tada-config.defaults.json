@@ -19,6 +19,7 @@
     "connector_microphone": false,
     "connector_system_audio": false,
     "permission_microphone": false,
-    "permission_system_audio": false
+    "permission_system_audio": false,
+    "seeker": false
   }
 }

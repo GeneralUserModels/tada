@@ -53,8 +53,14 @@ end-to-end is just as valuable.
 
 **PRIMARY — read these first, they are the most important:**
 - session_*/labels.jsonl — the user's actual screen activity sessions. Fields: text, start_time. Read ALL session directories. Ignore raw_events (mouse noise). This is where the real workflow patterns live. Look for repeated multi-step sequences across sessions.
+- audio/filtered.jsonl — fields: text, timestamp, summary (nested under "source"). Transcribed audio from the user's microphone.
+- memory/ — a wiki of markdown pages about the user (people, projects, interests, habits). Read memory/index.md for a catalog.
+- active-conversations/conversation_*.md — past Seeker conversations where the user directly answered \
+questions about their beliefs, intentions, values, and habits. These reveal what the user cares about, \
+what frustrates them, and what they wish was automated. Use these to prioritize tasks that align with \
+the user's stated goals and preferences.
 
-**SECONDARY — use these for additional context:**
+**ALSO IMPORTANT — these can directly motivate tasks, not just provide context:**
 - email/filtered.jsonl — fields: subject, from, date, summary (nested under "source")
 - calendar/events.jsonl — fields: summary, start, end, location, description (nested under "source")
 - notifications/filtered.jsonl — fields: app, subtitle, body, summary (nested under "source")
@@ -63,11 +69,16 @@ end-to-end is just as valuable.
 **IGNORE these files — they are internal pipeline data, not user activity:**
 - checkpoints.jsonl, predictions.jsonl, metrics.jsonl, retriever*, raw_events*
 
-Start by reading ALL session_*/labels.jsonl files. These show what the user actually does on their computer. The other sources are supporting context — do not base tasks solely on emails/notifications.
+Start by reading ALL session_*/labels.jsonl files. These show what the user actually does on their computer. Then read all other sources — emails, calendar, notifications, and filesystem changes can all directly motivate tasks on their own.
+
+## Time awareness
+
+Consider the current date/time and what's coming up for the user (calendar, emails, etc.) — \
+timely tasks are often more useful than generic ones.
 
 ## What to look for
 
-Focus on the SESSION LOGS. Look for:
+Look across ALL sources — session logs, emails, calendar, notifications, filesystem. Look for:
 - **Multi-step manual workflows** — the same sequence of 3+ steps repeated across sessions. The task should collapse these into a single command.
 - **Content production drudgery** — manually exporting, downloading, copying, and arranging artifacts. The agent should do the entire pipeline end-to-end.
 - **Information foraging** — searching for, reading, and comparing information from multiple sources. The agent should do the research and present a structured summary.

@@ -56,6 +56,18 @@ export const recordMomentView = (slug: string) =>
 export const recordMomentViewEnd = (slug: string, data: { duration_ms: number }) =>
   request("POST", `/api/moments/${slug}/view-end`, data);
 
+// ── Seeker ──────────────────────────────────────────────────
+export const getSeekerStatus = () =>
+  request("GET", "/api/seeker/status") as Promise<SeekerStatus>;
+export const getSeekerConversation = () =>
+  request("GET", "/api/seeker/conversation") as Promise<{ active: boolean; messages: SeekerMessage[] }>;
+export const endSeekerConversation = () =>
+  request("POST", "/api/seeker/end");
+export const getSeekerHistory = () =>
+  request("GET", "/api/seeker/history") as Promise<{ filename: string; date: string }[]>;
+export const getSeekerPastConversation = (filename: string) =>
+  request("GET", `/api/seeker/history/${filename}`) as Promise<{ filename: string; messages: SeekerMessage[] }>;
+
 // ── Memory wiki ─────────────────────────────────────────────
 export const getMemoryPages = () =>
   request("GET", "/api/memory/pages") as Promise<{ path: string; title: string; confidence: number | null; last_updated: string | null; category: string | null }[]>;

@@ -130,6 +130,11 @@ Then proceed with ingestion.
 **PRIMARY — read these first:**
 - session_*/labels.jsonl — the user's actual screen activity. Fields: text, start_time. Read ALL \
 session directories. Ignore raw_events. This is where the real patterns live.
+- audio/filtered.jsonl — fields: text, timestamp, summary (nested under "source"). Transcribed audio from the user's microphone.
+- active-conversations/conversation_*.md — past Seeker conversations where the user directly answered \
+questions about their beliefs, intentions, values, habits, and feelings. These are first-person \
+self-reports — extremely high-confidence data. Treat these as a primary source for wiki pages about \
+the user's inner life, motivations, and preferences. Read ALL conversation files.
 
 **SECONDARY — additional context:**
 - email/filtered.jsonl — fields: subject, from, date, summary (nested under "source")

@@ -50,8 +50,14 @@ the agent can do the legwork so the user walks in prepared.
 
 **PRIMARY — read these first, they are the most important:**
 - session_*/labels.jsonl — the user's actual screen activity sessions. Fields: text, start_time. Read ALL session directories. Ignore raw_events (mouse noise). This is where you'll find what the user is currently doing.
+- audio/filtered.jsonl — fields: text, timestamp, summary (nested under "source"). Transcribed audio from the user's microphone.
+- memory/ — a wiki of markdown pages about the user (people, projects, interests, habits). Read memory/index.md for a catalog.
+- active-conversations/conversation_*.md — past Seeker conversations where the user directly answered \
+questions about their beliefs, intentions, values, and habits. These reveal what the user is thinking \
+about, what they need help with, and what they wish was done for them. Use these to identify timely \
+one-off tasks that match what the user has expressed.
 
-**SECONDARY — use these for additional context:**
+**ALSO IMPORTANT — these can directly motivate tasks, not just provide context:**
 - email/filtered.jsonl — fields: subject, from, date, summary (nested under "source")
 - calendar/events.jsonl — fields: summary, start, end, location, description (nested under "source")
 - notifications/filtered.jsonl — fields: app, subtitle, body, summary (nested under "source")
@@ -60,9 +66,15 @@ the agent can do the legwork so the user walks in prepared.
 **IGNORE these files — they are internal pipeline data, not user activity:**
 - checkpoints.jsonl, predictions.jsonl, metrics.jsonl, retriever*, raw_events*
 
+## Time awareness
+
+Consider the current date/time and what's coming up for the user (calendar, emails, etc.) — \
+timely tasks are often more useful than generic ones.
+
 ## What to look for
 
-Focus on what the user is CURRENTLY doing or interested in. Look for:
+Focus on what the user is CURRENTLY doing or interested in. Look across ALL sources — session logs, \
+emails, calendar, notifications, filesystem. Look for:
 - **Active research** — the user is searching for, reading about, or comparing something specific. The agent can do deeper research and compile a structured summary.
 - **Planning or decision-making** — the user is planning a trip, evaluating options, comparing products, etc. The agent can gather more information, build a comparison, or draft an itinerary.
 - **Unfinished work** — something the user started but hasn't completed. The agent can pick it up and finish it or prepare a draft.

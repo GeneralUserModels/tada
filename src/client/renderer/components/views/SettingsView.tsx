@@ -26,6 +26,7 @@ function allKeys(): string[] {
   keys.add("tabracadabra_enabled");
   keys.add("moments_enabled");
   keys.add("memory_enabled");
+  keys.add("seeker_enabled");
   return Array.from(keys);
 }
 
@@ -34,6 +35,7 @@ export function SettingsView() {
   const { state, dispatch } = useAppContext();
   const momentsEnabled = useFeatureFlag("moments");
   const memoryEnabled = useFeatureFlag("memory");
+  const seekerFlagEnabled = useFeatureFlag("seeker");
   const tabracadabraEnabled = useFeatureFlag("tabracadabra");
   const tinkerEnabled = useFeatureFlag("tinker");
   const [values, setValues] = useState<Record<string, string>>({});
@@ -59,6 +61,7 @@ export function SettingsView() {
     data["tabracadabra_enabled"] = (values["tabracadabra_enabled"] ?? "true") === "true";
     data["moments_enabled"] = (values["moments_enabled"] ?? "true") === "true";
     data["memory_enabled"] = (values["memory_enabled"] ?? "true") === "true";
+    data["seeker_enabled"] = (values["seeker_enabled"] ?? "true") === "true";
     if (Object.keys(data).length > 0) {
       await updateSettings(data);
       const fresh = await getSettings();
@@ -155,6 +158,30 @@ export function SettingsView() {
                 background: "#fff", borderRadius: "50%", transition: "transform 0.2s",
                 boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
                 transform: (values["memory_enabled"] ?? "true") === "true" ? "translateX(16px)" : "translateX(0)",
+              }} />
+            </label>
+          </div>
+          )}
+          {seekerFlagEnabled && (
+          <div className="model-row" style={{ marginTop: 10 }}>
+            <span className="model-row-label">Seeker</span>
+            <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={(values["seeker_enabled"] ?? "true") === "true"}
+                style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
+                onChange={(e) => setValues(v => ({ ...v, seeker_enabled: e.target.checked ? "true" : "false" }))}
+              />
+              <span style={{
+                position: "absolute", inset: 0,
+                background: (values["seeker_enabled"] ?? "true") === "true" ? "#84B179" : "rgba(132,177,121,0.15)",
+                borderRadius: 20, transition: "background 0.2s",
+              }} />
+              <span style={{
+                position: "absolute", height: 14, width: 14, left: 3, bottom: 3,
+                background: "#fff", borderRadius: "50%", transition: "transform 0.2s",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                transform: (values["seeker_enabled"] ?? "true") === "true" ? "translateX(16px)" : "translateX(0)",
               }} />
             </label>
           </div>

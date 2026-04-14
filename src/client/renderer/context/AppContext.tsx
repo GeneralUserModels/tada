@@ -4,7 +4,7 @@ import * as sse from "../api/sse";
 
 // ── Types ─────────────────────────────────────────────────────
 
-export type ActiveView = "connectors" | "tada" | "pensieve" | "usermodel" | "settings";
+export type ActiveView = "connectors" | "tada" | "pensieve" | "seeker" | "usermodel" | "settings";
 
 export interface HistoryItem {
   id: number;
@@ -34,6 +34,7 @@ export interface AppState {
   historyItems: HistoryItem[];
   settings: Record<string, unknown>;
   updateVersion: string | null;
+  seekerHasQuestions: boolean;
 }
 
 type AppAction =
@@ -51,7 +52,9 @@ type AppAction =
   | { type: "SEED_LABEL_HISTORY"; history: { text: string; timestamp: number }[] }
   | { type: "LOAD_SETTINGS"; settings: Record<string, unknown> }
   | { type: "UPDATE_AVAILABLE"; version: string }
-  | { type: "UPDATE_DISMISSED" };
+  | { type: "UPDATE_DISMISSED" }
+  | { type: "SEEKER_QUESTIONS_READY" }
+  | { type: "SEEKER_QUESTIONS_CLEARED" };
 
 let historyCounter = 0;
 
@@ -79,6 +82,7 @@ const initialState: AppState = {
   historyItems: [],
   settings: {},
   updateVersion: null,
+  seekerHasQuestions: false,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -190,6 +194,12 @@ function reducer(state: AppState, action: AppAction): AppState {
     case "UPDATE_DISMISSED":
       return { ...state, updateVersion: null };
 
+    case "SEEKER_QUESTIONS_READY":
+      return { ...state, seekerHasQuestions: true };
+
+    case "SEEKER_QUESTIONS_CLEARED":
+      return { ...state, seekerHasQuestions: false };
+
     default:
       return state;
   }
@@ -227,6 +237,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sse.on("elbo_score",    (data) => dispatch({ type: "ELBO_SCORE", data: data as ElboScoreData }));
     sse.on("training_step", (data) => dispatch({ type: "TRAINING_STEP", data: data as TrainingStepData }));
     sse.on("label",         (data) => dispatch({ type: "LABEL", data: data as LabelData }));
+    sse.on("seeker_questions_ready", () => dispatch({ type: "SEEKER_QUESTIONS_READY" }));
 
     // server:ready — main sends URL once server is up; we initialize api + sse then seed state
     window.tada.onServerReady(async ({ url }: { url: string }) => {
@@ -256,6 +267,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const settings = await api.getSettings();
           dispatch({ type: "LOAD_SETTINGS", settings: settings as Record<string, unknown> });
         } catch { /* settings fetch failed */ }
+
+        try {
+          const seekerStatus = await api.getSeekerStatus();
+          if (seekerStatus.has_questions && !seekerStatus.questions_answered) {
+            dispatch({ type: "SEEKER_QUESTIONS_READY" });
+          }
+        } catch { /* seeker may not be enabled */ }
       } catch (e) { console.error("[app] getStatus failed:", e); }
     });
 

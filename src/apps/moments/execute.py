@@ -48,6 +48,10 @@ The user's data is in `{logs_dir}/`. Only use sources relevant to the task above
 
 **Screen activity**: `session_*/labels.jsonl` — fields: text, start_time. Each session directory \
 is a recording session. Ignore raw_events (mouse noise).
+**Audio**: `audio/filtered.jsonl` — fields: text, timestamp, summary (nested under "source"). Transcribed audio.
+**Memory wiki**: `memory/` — markdown pages about the user (people, projects, interests, habits). Read `memory/index.md` for a catalog.
+**Seeker conversations**: `active-conversations/conversation_*.md` — past conversations where the user \
+answered questions about their beliefs, intentions, values, and habits. First-person self-reports.
 
 **Email**: `email/filtered.jsonl` — fields: subject, from, date, summary (nested under "source")
 **Calendar**: `calendar/events.jsonl` — fields: summary, start, end, location, description (nested under "source")
@@ -245,6 +249,10 @@ The user's data is in `{logs_dir}/`. Only use sources relevant to the task above
 
 **Screen activity**: `session_*/labels.jsonl` — fields: text, start_time. Each session directory \
 is a recording session. Ignore raw_events (mouse noise).
+**Audio**: `audio/filtered.jsonl` — fields: text, timestamp, summary (nested under "source"). Transcribed audio.
+**Memory wiki**: `memory/` — markdown pages about the user (people, projects, interests, habits). Read `memory/index.md` for a catalog.
+**Seeker conversations**: `active-conversations/conversation_*.md` — past conversations where the user \
+answered questions about their beliefs, intentions, values, and habits. First-person self-reports.
 
 **Email**: `email/filtered.jsonl` — fields: subject, from, date, summary (nested under "source")
 **Calendar**: `calendar/events.jsonl` — fields: summary, start, end, location, description (nested under "source")

@@ -84,6 +84,19 @@ interface MomentResult {
   frequency_override: string | null;
 }
 
+interface SeekerStatus {
+  has_questions: boolean;
+  conversation_active: boolean;
+  questions_answered: boolean;
+  last_conversation_file: string | null;
+  seeker_enabled: boolean;
+}
+
+interface SeekerMessage {
+  role: "assistant" | "user";
+  content: string;
+}
+
 interface TadaAPI {
   // App lifecycle
   onServerReady: (cb: (data: { url: string }) => void) => void;

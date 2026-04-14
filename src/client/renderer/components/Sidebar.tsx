@@ -5,6 +5,7 @@ import { useFeatureFlags, getFlag } from "../featureFlags";
 interface Props {
   activeView: ActiveView;
   connected: boolean;
+  seekerHasQuestions: boolean;
   onNavigate: (view: ActiveView) => void;
 }
 
@@ -40,6 +41,16 @@ const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
     ),
   },
   {
+    view: "seeker",
+    label: "Seeker",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
+        <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  {
     view: "usermodel",
     label: "User Model",
     icon: (
@@ -64,9 +75,10 @@ const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
 const FLAG_FOR_VIEW: Partial<Record<ActiveView, string>> = {
   tada: "moments",
   pensieve: "memory",
+  seeker: "seeker",
 };
 
-export function Sidebar({ activeView, connected, onNavigate }: Props) {
+export function Sidebar({ activeView, connected, seekerHasQuestions, onNavigate }: Props) {
   const featureFlags = useFeatureFlags();
 
   const visibleItems = navItems.filter(({ view }) => {
@@ -94,6 +106,7 @@ export function Sidebar({ activeView, connected, onNavigate }: Props) {
           >
             {icon}
             {label}
+            {view === "seeker" && seekerHasQuestions && <span className="nav-notify-dot" />}
           </button>
         ))}
       </div>
