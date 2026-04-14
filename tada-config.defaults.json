@@ -15,6 +15,10 @@
     "permission_notifications": false,
     "permission_accessibility": true,
     "permission_browser_cookies": false,
-    "tinker": false
+    "tinker": false,
+    "connector_microphone": false,
+    "connector_system_audio": false,
+    "permission_microphone": false,
+    "permission_system_audio": false
   }
 }

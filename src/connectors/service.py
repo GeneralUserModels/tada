@@ -146,7 +146,7 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
             seen.add(item["id"])
         _trim_seen(seen)
         _save_seen(seen_path, seen)
-        logger.info(f"{cfg.name}: fetched {len(items)}, kept {len(to_write)}")
+        logger.info(f"{cfg.name}: fetched {len(items)}, kept {len(to_write)}, writing to {out_path}")
 
     while True:
         logger.info(f"[DEBUG {cfg.name}] top of loop: paused={cfg.connector.paused}, session={cfg.connector._session is not None}, disconnect_event={cfg.connector._disconnect_event.is_set()}")
@@ -325,6 +325,32 @@ async def run_context_logging_service(state) -> None:
         ),
     ]
 
+    # Audio connector — one server managing both mic and system audio.
+    # The UI shows two virtual connectors ("microphone", "system_audio") mapped via routes.
+    if is_enabled(config, "connector_microphone") or is_enabled(config, "connector_system_audio"):
+        mic_on = "microphone" not in config.disabled_connectors
+        sys_on = "system_audio" not in config.disabled_connectors
+        connector_configs.append(ConnectorConfig(
+            name="audio", interval=0, log_subdir="audio",
+            filter=False,
+            prediction_event=False,
+            requires_auth=None,
+            uses_notifications=True,
+            connector=MCPConnector(
+                command=sys.executable,
+                args=["-m", "connectors.audio.server"],
+                tool_name="fetch_audio",
+                subscribe_uri="audio://activity",
+                env={
+                    "TADA_LOG_DIR": config.log_dir,
+                    "TADA_MIC_ENABLED": "1" if mic_on else "0",
+                    "TADA_SYS_ENABLED": "1" if sys_on else "0",
+                    "TADA_TRANSCRIPTION_MODEL": config.label_model,
+                    "TADA_TRANSCRIPTION_API_KEY": config.resolve_api_key("label_model_api_key"),
+                },
+            ),
+        ))
+
     # Append user-defined community / custom MCP connectors from config
     for mcp_def in config.mcp_connectors:
         connector_configs.append(ConnectorConfig(
@@ -360,6 +386,13 @@ async def run_context_logging_service(state) -> None:
         if cfg.name in config.connector_errors:
             cfg.connector.error = config.connector_errors[cfg.name]
 
+    # Audio connector: pause if both virtual sources are disabled
+    audio_conn = state.connectors.get("audio")
+    if audio_conn is not None:
+        both_off = "microphone" in config.disabled_connectors and "system_audio" in config.disabled_connectors
+        if both_off:
+            audio_conn.pause()
+
     # Re-enable auth-error connectors whose tokens were refreshed at startup
     auth_token_paths = {"google": config.google_token_path, "outlook": config.outlook_token_path}
     for cfg in connector_configs:
@@ -376,15 +409,9 @@ async def run_context_logging_service(state) -> None:
     logger.info("Context logging service started")
     filter_api_key = config.resolve_api_key("filter_model_api_key")
 
-    # Eagerly connect notification-based connectors so they can receive push events.
-    # Without this, fetch() (which triggers _connect) is never called because the
-    # poll loop waits for a notification that can only arrive after subscribing.
-    for cfg in connector_configs:
-        if cfg.uses_notifications and not cfg.connector.paused:
-            try:
-                await cfg.connector.connect()
-            except Exception:
-                logger.exception("%s: failed to connect on startup", cfg.name)
+    # Notification-based connectors are eagerly connected inside _run_connector
+    # (not here) so the connection is owned by the same task that disconnects it.
+    # Connecting here would create cancel-scope-in-wrong-task errors on disconnect.
 
     await asyncio.gather(*[
         _run_connector(c, log_dir, seen_dir, config.filter_model, filter_api_key, state) for c in connector_configs
