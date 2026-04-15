@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -71,7 +72,8 @@ async def run_memory_service(state) -> None:
 
             # Check if we missed today's run
             now = datetime.now()
-            scheduled_time = _parse_time(schedule)
+            time_match = re.search(r"(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)", schedule.lower())
+            scheduled_time = _parse_time(time_match.group(1)) if time_match else None
             today_target = datetime.combine(now.date(), scheduled_time) if scheduled_time else None
             last_run_file = Path(state.config.log_dir).resolve() / "memory" / ".memory_last_run"
             last_run = _read_last_run(last_run_file)
@@ -100,6 +102,7 @@ async def run_memory_service(state) -> None:
             logger.info("Memory: running ingest")
             await asyncio.to_thread(MemoryIngest(logs_dir, model, api_key).run)
             logger.info("Memory: ingest complete")
+            await state.broadcast("memory_updated", {})
 
             # Run lint if last lint was >6 days ago
             lint_last_run_file = Path(logs_dir) / "memory" / ".memory_lint_last_run"

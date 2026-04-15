@@ -51,6 +51,17 @@ export function useMoments() {
     await updateMomentState(slug, { pinned: false });
   }, []);
 
+  const thumbs = useCallback(async (slug: string, value: "up" | "down") => {
+    setResults((prev) =>
+      prev.map((r) =>
+        r.slug === slug ? { ...r, thumbs: r.thumbs === value ? null : value } : r
+      )
+    );
+    const current = results.find((r) => r.slug === slug);
+    const newValue = current?.thumbs === value ? "clear" : value;
+    await updateMomentState(slug, { thumbs: newValue });
+  }, [results]);
+
   const editSchedule = useCallback(async (slug: string, frequency: string, schedule: string) => {
     await updateMomentSchedule(slug, { frequency, schedule });
     setResults((prev) =>
@@ -95,6 +106,7 @@ export function useMoments() {
     restore,
     pin,
     unpin,
+    thumbs,
     editSchedule,
     startView,
     endView,

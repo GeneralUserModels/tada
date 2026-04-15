@@ -28,7 +28,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from fastapi import APIRouter, HTTPException, Request
 
-from server.config import CONFIG_PATH
+from server.config import CONFIG_PATH, CONFIG_DEFAULTS_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +50,14 @@ OUTLOOK_REDIRECT_PORT = 48215
 # ── Helpers ────────────────────────────────────────────────────
 
 def _get_app_config() -> dict:
-    """Read app-level credentials from the config file (client IDs, Supabase)."""
-    try:
-        return json.loads(CONFIG_PATH.read_text())
-    except Exception:
-        return {}
+    """Read app-level credentials, layering user config over defaults."""
+    merged: dict = {}
+    for path in (CONFIG_DEFAULTS_PATH, CONFIG_PATH):
+        try:
+            merged.update(json.loads(path.read_text()))
+        except Exception:
+            pass
+    return merged
 
 
 def _open_url(url: str) -> None:

@@ -119,17 +119,37 @@ Then proceed with ingestion.
 3. Run analysis code to quantify patterns (Python via bash)
 4. For each meaningful personal fact or pattern you discover:
    a. Check if a relevant wiki page already exists (use index.md)
-   b. If yes: read it, update with new info, adjust confidence
+   b. If yes: **READ IT and UPDATE IT.** This is critical — do not skip existing pages. Add new \
+details, refine descriptions, adjust confidence scores, add new cross-references, incorporate \
+new evidence. Existing pages should grow richer and more nuanced over time, not stay frozen.
    c. If no: create a new page in the most natural location
 5. Use web search and browser to enrich entries with external context
 6. Update index.md to reflect any new or moved pages
 7. Append to log.md
 
+**IMPORTANT: Updating existing pages is just as valuable as creating new ones.** Every ingest should \
+leave existing pages better than it found them — more detailed, better cross-referenced, with \
+updated confidence scores reflecting the latest evidence. If you read 20 sessions of new data and \
+only create new pages without touching existing ones, you are doing it wrong.
+
 ## Log files to read (all in {logs_dir}/)
 
 **PRIMARY — read these first:**
+- **active-conversations/conversation_*.md** — past Seeker conversations where the user directly \
+answered questions about their beliefs, intentions, values, habits, and feelings. These are \
+FIRST-PERSON SELF-REPORTS and your single highest-quality data source. The user is speaking candidly \
+about who they are, what they care about, what they think, and why. Read EVERY conversation file. \
+Extract aggressively: motivations, values, personality traits, emotional states, opinions, goals, \
+relationships, self-perception, decision-making patterns, fears, aspirations. A single seeker \
+conversation often reveals more about the user than dozens of screen activity sessions. When seeker \
+conversations contradict inferences from activity logs, the seeker conversation wins — it's the \
+user's own words. Create or update dedicated wiki pages for themes that emerge (e.g. a "Values" \
+page, a "Self-Image" page, pages about specific relationships the user discusses). Set confidence \
+high (0.7–1.0) for direct self-reports.
 - session_*/labels.jsonl — the user's actual screen activity. Fields: text, start_time. Read ALL \
 session directories. Ignore raw_events. This is where the real patterns live.
+- audio/filtered.jsonl — fields: text, timestamp, summary (nested under "source"). Transcribed audio \
+from the user's microphone.
 
 **SECONDARY — additional context:**
 - email/filtered.jsonl — fields: subject, from, date, summary (nested under "source")
@@ -195,14 +215,20 @@ INCREMENTAL_SECTION = """\
 
 This is a RE-RUN. The last ingest was on **{last_ingest_date}**.
 
+### New Seeker conversations since last ingest (READ THESE FIRST):
+{new_conversations_list}
+
 ### Sessions with new content since last ingest:
 {sessions_list}
 
 ### Other sources modified since last ingest:
 {other_sources_list}
 
-Focus on the new data, but also check existing wiki pages for consistency with what you already know. \
-Adjust confidence scores if new data reinforces or contradicts existing pages.
+Focus on the new data. Read new Seeker conversations before anything else — they are the richest \
+source of insight. For every piece of new information, check whether a relevant wiki page already \
+exists and UPDATE IT with the new evidence. Adjust confidence scores if new data reinforces or \
+contradicts existing pages. Every incremental ingest should leave existing pages richer and more \
+accurate.
 """
 
 NON_SESSION_SOURCES = [
@@ -225,6 +251,21 @@ def _modified_sources(logs_dir: str, since: datetime | None) -> list[str]:
     return result
 
 
+def _new_seeker_conversations(logs_dir: str, since: datetime | None) -> list[str]:
+    """Return seeker conversation files created after *since*."""
+    conv_dir = Path(logs_dir) / "active-conversations"
+    if not conv_dir.exists():
+        return []
+    files = sorted(conv_dir.glob("conversation_*.md"))
+    if since is None:
+        return [str(f.relative_to(logs_dir)) for f in files]
+    return [
+        str(f.relative_to(logs_dir))
+        for f in files
+        if datetime.fromtimestamp(f.stat().st_mtime) > since
+    ]
+
+
 def run(logs_dir: str, model: str, api_key: str | None = None) -> str:
     logs_path = Path(logs_dir).resolve()
     logs_dir = str(logs_path)
@@ -236,6 +277,7 @@ def run(logs_dir: str, model: str, api_key: str | None = None) -> str:
 
     new_sessions = sessions_with_new_content(logs_dir, last_ingest)
     modified_sources = _modified_sources(logs_dir, last_ingest)
+    new_convos = _new_seeker_conversations(logs_dir, last_ingest)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     instruction = f"Current date and time: **{now}**\n\n" + INGEST_TEMPLATE.format(
@@ -243,15 +285,17 @@ def run(logs_dir: str, model: str, api_key: str | None = None) -> str:
         logs_dir=logs_dir,
     )
 
-    if last_ingest is not None and (new_sessions or modified_sources):
+    if last_ingest is not None and (new_sessions or modified_sources or new_convos):
         sessions_list = "\n".join(f"- {s}/labels.jsonl" for s in new_sessions) if new_sessions else "- (none)"
         sources_list = "\n".join(f"- {s}" for s in modified_sources) if modified_sources else "- (none)"
+        convos_list = "\n".join(f"- {c}" for c in new_convos) if new_convos else "- (none)"
         instruction += INCREMENTAL_SECTION.format(
             last_ingest_date=last_ingest.strftime("%Y-%m-%d %H:%M"),
             sessions_list=sessions_list,
             other_sources_list=sources_list,
+            new_conversations_list=convos_list,
         )
-    elif last_ingest is not None and not new_sessions and not modified_sources:
+    elif last_ingest is not None and not new_sessions and not modified_sources and not new_convos:
         instruction += (
             f"\n\n## Note\n\nThe last ingest was on "
             f"**{last_ingest.strftime('%Y-%m-%d %H:%M')}** and there is no new data "

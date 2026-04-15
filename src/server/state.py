@@ -24,6 +24,11 @@ class ServerState:
 
     # Moments executor lock (one at a time)
     moments_executor_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+    # Seeker
+    seeker_scheduler_task: asyncio.Task | None = None
+    seeker_messages: list[dict] = field(default_factory=list)
+    seeker_conversation_active: bool = False
     
     # For Tabracadabra
     prediction_loop_task: asyncio.Task | None = None
