@@ -208,9 +208,12 @@ class Agent:
         retry=retry_if_exception_type((litellm.RateLimitError, litellm.APIConnectionError, litellm.InternalServerError, litellm.Timeout, httpx.ReadTimeout)),
     )
     def _call_llm(self, messages: list):
-        system_blocks = [
-            {"type": "text", "text": self.system_prompt, "cache_control": {"type": "ephemeral"}},
-        ]
+        is_gemini = self.model.startswith("gemini/")
+        cache_control = None if is_gemini else {"type": "ephemeral"}
+        system_block = {"type": "text", "text": self.system_prompt}
+        if cache_control:
+            system_block["cache_control"] = cache_control
+        system_blocks = [system_block]
         if self._plan_state and self._plan_state.items:
             system_blocks.append({"type": "text", "text": f"\n\n<current-plan>\n{self._plan_state.render()}\n</current-plan>"})
         # Cache the first user message (task instruction) — it stays constant across rounds
@@ -219,7 +222,10 @@ class Agent:
             first = conv_messages[0]
             content = first.get("content", "")
             if isinstance(content, str):
-                conv_messages[0] = {**first, "content": [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}]}
+                cached_content = {"type": "text", "text": content}
+                if cache_control:
+                    cached_content["cache_control"] = cache_control
+                conv_messages[0] = {**first, "content": [cached_content]}
         kwargs = dict(
             model=self.model,
             messages=[{"role": "system", "content": system_blocks}] + conv_messages,

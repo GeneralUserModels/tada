@@ -44,7 +44,7 @@ export const getMomentsTasks = () => request("GET", "/api/moments/tasks");
 export const getMomentsResults = (includeDismissed = false) =>
   request("GET", `/api/moments/results${includeDismissed ? "?include_dismissed=true" : ""}`) as Promise<MomentResult[]>;
 
-export const updateMomentState = (slug: string, data: { dismissed?: boolean; pinned?: boolean }) =>
+export const updateMomentState = (slug: string, data: { dismissed?: boolean; pinned?: boolean; thumbs?: "up" | "down" | null }) =>
   request("PUT", `/api/moments/${slug}/state`, data);
 
 export const updateMomentSchedule = (slug: string, data: { frequency: string; schedule: string }) =>

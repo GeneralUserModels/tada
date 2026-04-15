@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api/moments", tags=["moments"])
 class MomentStateUpdate(BaseModel):
     dismissed: Optional[bool] = None
     pinned: Optional[bool] = None
+    thumbs: Optional[str] = None
 
 
 class ScheduleUpdate(BaseModel):
@@ -137,6 +138,10 @@ async def update_moment_state(slug: str, body: MomentStateUpdate, request: Reque
         entry["dismissed"] = body.dismissed
         if body.dismissed:
             entry["pinned"] = False
+    if body.thumbs is not None:
+        if body.thumbs not in ("up", "down", "clear"):
+            return JSONResponse({"error": "thumbs must be 'up', 'down', or 'clear'"}, status_code=400)
+        entry["thumbs"] = None if body.thumbs == "clear" else body.thumbs
 
     all_state[slug] = entry
     save_state(tada_dir, all_state)

@@ -148,7 +148,7 @@ export function TadaView() {
   const { state } = useAppContext();
   const {
     results, loading, load, showDismissed, toggleShowDismissed,
-    dismiss, restore, pin, unpin, editSchedule, startView, endView,
+    dismiss, restore, pin, unpin, thumbs, editSchedule, startView, endView,
   } = useMoments();
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
@@ -220,6 +220,26 @@ export function TadaView() {
             <>
               <span className="tada-detail-title">{selected.title}</span>
               <div className="tada-card-actions">
+                <button
+                  className={`tada-card-action-btn tada-thumbs-up${selected.thumbs === "up" ? " active" : ""}`}
+                  title="Thumbs up"
+                  onClick={() => thumbs(selected.slug, "up")}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M5 14V7m0 7H3.5A1.5 1.5 0 012 12.5v-4A1.5 1.5 0 013.5 7H5m0 7h5.59a2 2 0 001.96-1.61l.86-4.28A1.5 1.5 0 0011.93 6H9V3.5A1.5 1.5 0 007.5 2L5 7"
+                      stroke="currentColor" fill={selected.thumbs === "up" ? "currentColor" : "none"} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  className={`tada-card-action-btn tada-thumbs-down${selected.thumbs === "down" ? " active" : ""}`}
+                  title="Thumbs down"
+                  onClick={() => thumbs(selected.slug, "down")}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M11 2v7m0-7h1.5A1.5 1.5 0 0114 3.5v4a1.5 1.5 0 01-1.5 1.5H11m0-7H5.41a2 2 0 00-1.96 1.61l-.86 4.28A1.5 1.5 0 004.07 10H7v2.5A1.5 1.5 0 008.5 14L11 9"
+                      stroke="currentColor" fill={selected.thumbs === "down" ? "currentColor" : "none"} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
                 {selected.dismissed ? (
                   <button
                     className="tada-card-action-btn"
@@ -312,6 +332,26 @@ export function TadaView() {
                 {r.dismissed && <span className="tada-dismissed-badge">Dismissed</span>}
               </h3>
               <div className="tada-card-actions" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className={`tada-card-action-btn tada-thumbs-up${r.thumbs === "up" ? " active" : ""}`}
+                  title="Thumbs up"
+                  onClick={() => thumbs(r.slug, "up")}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <path d="M5 14V7m0 7H3.5A1.5 1.5 0 012 12.5v-4A1.5 1.5 0 013.5 7H5m0 7h5.59a2 2 0 001.96-1.61l.86-4.28A1.5 1.5 0 0011.93 6H9V3.5A1.5 1.5 0 007.5 2L5 7"
+                      stroke="currentColor" fill={r.thumbs === "up" ? "currentColor" : "none"} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  className={`tada-card-action-btn tada-thumbs-down${r.thumbs === "down" ? " active" : ""}`}
+                  title="Thumbs down"
+                  onClick={() => thumbs(r.slug, "down")}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <path d="M11 2v7m0-7h1.5A1.5 1.5 0 0114 3.5v4a1.5 1.5 0 01-1.5 1.5H11m0-7H5.41a2 2 0 00-1.96 1.61l-.86 4.28A1.5 1.5 0 004.07 10H7v2.5A1.5 1.5 0 008.5 14L11 9"
+                      stroke="currentColor" fill={r.thumbs === "down" ? "currentColor" : "none"} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
                 {r.dismissed ? (
                   <button
                     className="tada-card-action-btn"

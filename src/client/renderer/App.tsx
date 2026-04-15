@@ -28,6 +28,8 @@ export function App() {
         activeView={state.activeView}
         connected={state.connected}
         seekerHasQuestions={state.seekerHasQuestions}
+        tadaHasNew={state.tadaHasNew}
+        pensieveHasNew={state.pensieveHasNew}
         onNavigate={navigate}
       />
       <main id="content">

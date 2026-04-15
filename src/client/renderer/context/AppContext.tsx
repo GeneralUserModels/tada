@@ -35,6 +35,8 @@ export interface AppState {
   settings: Record<string, unknown>;
   updateVersion: string | null;
   seekerHasQuestions: boolean;
+  tadaHasNew: boolean;
+  pensieveHasNew: boolean;
 }
 
 type AppAction =
@@ -54,7 +56,9 @@ type AppAction =
   | { type: "UPDATE_AVAILABLE"; version: string }
   | { type: "UPDATE_DISMISSED" }
   | { type: "SEEKER_QUESTIONS_READY" }
-  | { type: "SEEKER_QUESTIONS_CLEARED" };
+  | { type: "SEEKER_QUESTIONS_CLEARED" }
+  | { type: "TADA_NEW_MOMENT" }
+  | { type: "PENSIEVE_UPDATED" };
 
 let historyCounter = 0;
 
@@ -83,12 +87,19 @@ const initialState: AppState = {
   settings: {},
   updateVersion: null,
   seekerHasQuestions: false,
+  tadaHasNew: false,
+  pensieveHasNew: false,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case "NAVIGATE":
-      return { ...state, activeView: action.view };
+      return {
+        ...state,
+        activeView: action.view,
+        tadaHasNew: action.view === "tada" ? false : state.tadaHasNew,
+        pensieveHasNew: action.view === "pensieve" ? false : state.pensieveHasNew,
+      };
 
     case "SERVER_READY":
       return {
@@ -200,6 +211,12 @@ function reducer(state: AppState, action: AppAction): AppState {
     case "SEEKER_QUESTIONS_CLEARED":
       return { ...state, seekerHasQuestions: false };
 
+    case "TADA_NEW_MOMENT":
+      return { ...state, tadaHasNew: true };
+
+    case "PENSIEVE_UPDATED":
+      return { ...state, pensieveHasNew: true };
+
     default:
       return state;
   }
@@ -238,6 +255,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sse.on("training_step", (data) => dispatch({ type: "TRAINING_STEP", data: data as TrainingStepData }));
     sse.on("label",         (data) => dispatch({ type: "LABEL", data: data as LabelData }));
     sse.on("seeker_questions_ready", () => dispatch({ type: "SEEKER_QUESTIONS_READY" }));
+    sse.on("moment_completed", () => dispatch({ type: "TADA_NEW_MOMENT" }));
+    sse.on("memory_updated", () => dispatch({ type: "PENSIEVE_UPDATED" }));
 
     // server:ready — main sends URL once server is up; we initialize api + sse then seed state
     window.tada.onServerReady(async ({ url }: { url: string }) => {

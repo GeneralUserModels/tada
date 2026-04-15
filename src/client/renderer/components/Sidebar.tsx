@@ -6,6 +6,8 @@ interface Props {
   activeView: ActiveView;
   connected: boolean;
   seekerHasQuestions: boolean;
+  tadaHasNew: boolean;
+  pensieveHasNew: boolean;
   onNavigate: (view: ActiveView) => void;
 }
 
@@ -78,7 +80,7 @@ const FLAG_FOR_VIEW: Partial<Record<ActiveView, string>> = {
   seeker: "seeker",
 };
 
-export function Sidebar({ activeView, connected, seekerHasQuestions, onNavigate }: Props) {
+export function Sidebar({ activeView, connected, seekerHasQuestions, tadaHasNew, pensieveHasNew, onNavigate }: Props) {
   const featureFlags = useFeatureFlags();
 
   const visibleItems = navItems.filter(({ view }) => {
@@ -106,6 +108,8 @@ export function Sidebar({ activeView, connected, seekerHasQuestions, onNavigate 
           >
             {icon}
             {label}
+            {view === "tada" && tadaHasNew && <span className="nav-notify-dot" />}
+            {view === "pensieve" && pensieveHasNew && <span className="nav-notify-dot" />}
             {view === "seeker" && seekerHasQuestions && <span className="nav-notify-dot" />}
           </button>
         ))}

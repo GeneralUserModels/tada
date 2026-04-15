@@ -87,11 +87,12 @@ async def run_seeker_scheduler(state) -> None:
             model = cfg.seeker_model
             api_key = cfg.seeker_api_key or cfg.moments_agent_api_key or cfg.resolve_api_key("agent_api_key")
 
-            await asyncio.to_thread(_run_seek, log_dir, model, api_key)
-
+            # Record timestamp before running so failures don't cause retries within the same day
             seeker_state = _load_seeker_state(state)
             seeker_state["last_seek_run"] = datetime.now().isoformat()
             _save_seeker_state(state, seeker_state)
+
+            await asyncio.to_thread(_run_seek, log_dir, model, api_key)
 
             logger.info("Seeker scheduler: seek.py completed, broadcasting")
             await state.broadcast("seeker_questions_ready", {})

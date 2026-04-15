@@ -31,6 +31,8 @@ export function SeekerView() {
     endConversation,
   } = useSeeker();
   const [input, setInput] = useState("");
+  const [showEndedChat, setShowEndedChat] = useState(false);
+  const prevActiveRef = useRef<boolean | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -41,6 +43,13 @@ export function SeekerView() {
       loadHistory();
     }
   }, [state.connected, loadStatus, loadConversation, loadHistory]);
+
+  useEffect(() => {
+    if (prevActiveRef.current === true && status?.conversation_active === false) {
+      setShowEndedChat(true);
+    }
+    prevActiveRef.current = status?.conversation_active;
+  }, [status?.conversation_active]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -106,7 +115,7 @@ export function SeekerView() {
   }
 
   // Active conversation — chat UI
-  if (status.conversation_active) {
+  if (status.conversation_active || showEndedChat) {
     return (
       <div id="seeker-view" className="view active">
         <div className="seeker-chat">
@@ -120,24 +129,26 @@ export function SeekerView() {
             ))}
             <div ref={messagesEndRef} />
           </div>
-          <div className="seeker-input-area">
-            <textarea
-              ref={textareaRef}
-              className="seeker-input"
-              value={input}
-              onChange={handleInput}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your response..."
-              disabled={streaming}
-              rows={1}
-            />
-            <button className="pill-btn pill-start" onClick={handleSend} disabled={streaming || !input.trim()}>
-              Send
-            </button>
-            <button className="pill-btn pill-stop" onClick={endConversation} disabled={streaming}>
-              End
-            </button>
-          </div>
+          {status.conversation_active && (
+            <div className="seeker-input-area">
+              <textarea
+                ref={textareaRef}
+                className="seeker-input"
+                value={input}
+                onChange={handleInput}
+                onKeyDown={handleKeyDown}
+                placeholder="Type your response..."
+                disabled={streaming}
+                rows={1}
+              />
+              <button className="pill-btn pill-start" onClick={handleSend} disabled={streaming || !input.trim()}>
+                Send
+              </button>
+              <button className="pill-btn pill-stop" onClick={endConversation} disabled={streaming}>
+                End
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

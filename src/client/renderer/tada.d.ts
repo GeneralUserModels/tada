@@ -82,6 +82,7 @@ interface MomentResult {
   last_viewed: string | null;
   schedule_override: string | null;
   frequency_override: string | null;
+  thumbs: "up" | "down" | null;
 }
 
 interface SeekerStatus {

@@ -96,13 +96,14 @@ def _parse_conversation_markdown(text: str) -> list[dict]:
     """Parse a saved conversation markdown file back into messages."""
     messages = []
     for line in text.split("\n"):
-        line = line.strip()
         if line.startswith("**Seeker:**"):
             content = line.replace("**Seeker:**", "").strip()
             messages.append({"role": "assistant", "content": content})
         elif line.startswith("**User:**"):
             content = line.replace("**User:**", "").strip()
             messages.append({"role": "user", "content": content})
+        elif messages and line.strip() != "":
+            messages[-1]["content"] += "\n\n" + line
     return messages
 
 

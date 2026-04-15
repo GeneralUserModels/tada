@@ -1218,6 +1218,14 @@ button, input, select, textarea, canvas, a, label,
   color: var(--sage);
 }
 
+.tada-thumbs-up.active {
+  color: var(--sage);
+}
+
+.tada-thumbs-down.active {
+  color: #c47a7a;
+}
+
 /* ── Pinned / Dismissed card modifiers ─────────────────── */
 
 .tada-card--pinned {
