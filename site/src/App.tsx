@@ -4,7 +4,7 @@ import { DEMOS } from "./demos";
 const REPO = "GeneralUserModels/tada";
 const RELEASE_URL = `https://github.com/${REPO}/releases/latest`;
 
-const SPINNER_FRAMES = ["◐", "◓", "◑", "◒"];
+const SPINNER_FRAMES = ["|", "/", "-", "\\"];
 
 interface Segment {
   source: "user" | "assistant";
@@ -221,12 +221,16 @@ function useAutocompleteDemo() {
           setShowSpinner(true);
           setShowTabHint(step.trigger === "autocomplete");
 
-          const totalTicks = 6 + Math.floor(Math.random() * 4);
+          const TICK_MS = 120;
+          const PROGRESS_DURATION_MS = 9000;
+          const fakeTtft = 800 + Math.floor(Math.random() * 1400);
+          const totalTicks = Math.ceil(fakeTtft / TICK_MS);
           for (let tick = 0; tick < totalTicks; tick++) {
             if (cancelled) return;
             setSpinnerIdx(tick % SPINNER_FRAMES.length);
-            setSpinnerPct(Math.round(((tick + 1) / totalTicks) * 100));
-            await sleep(65 + Math.floor(Math.random() * 30));
+            const elapsed = (tick + 1) * TICK_MS;
+            setSpinnerPct(Math.min(100, Math.floor((elapsed / PROGRESS_DURATION_MS) * 100)));
+            await sleep(TICK_MS);
           }
 
           setShowSpinner(false);
@@ -302,7 +306,7 @@ function useAutocompleteDemo() {
 
   const spinnerText =
     showSpinner
-      ? `${SPINNER_FRAMES[spinnerIdx]} ${spinnerPct.toString().padStart(3, " ")}%`
+      ? `[${SPINNER_FRAMES[spinnerIdx]}] ${spinnerPct}%`
       : "";
 
   return {
