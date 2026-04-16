@@ -45,6 +45,16 @@ function ensureConfigDefaults(): void {
   }
 }
 
+function isOnboardingComplete(): boolean {
+  try {
+    const configPath = path.join(getDataDir(), "tada-config.json");
+    const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    return cfg.onboarding_complete === true;
+  } catch {
+    return false;
+  }
+}
+
 // ── Server management ─────────────────────────────────────────
 
 function findFreePort(): Promise<number> {
@@ -174,10 +184,11 @@ function createSetupWindow(): BrowserWindow {
   return setupWindow;
 }
 
-function createDashboard() {
+function createDashboard({ show = true }: { show?: boolean } = {}) {
   dashboardWindow = new BrowserWindow({
     width: 900,
     height: 700,
+    show,
     title: "Tada",
     titleBarStyle: "hiddenInset",
     backgroundColor: "#F4F2EE",
@@ -298,17 +309,19 @@ app.whenReady().then(async () => {
     startServer(port);
   }
 
-  // Show the window immediately so the user isn't staring at nothing
-  // while the Python server starts up. The renderer handles the
-  // "not connected" state and transitions once SERVER_READY arrives.
-  createDashboard();
+  const needsOnboarding = !isOnboardingComplete();
+
+  // Show the dashboard immediately for returning users so they see a
+  // loading state while the server starts. For first-launch, keep it
+  // hidden until onboarding finishes.
+  createDashboard({ show: !needsOnboarding });
   setupSseForwarding();
 
   await waitForServer(`${api.getServerUrl()}/api/status`);
 
-  const { complete } = await api.getOnboardingStatus() as { complete: boolean };
-  if (!complete) {
+  if (needsOnboarding) {
     await runOnboarding();
+    dashboardWindow?.show();
   }
 
   if (dashboardWindow) {
