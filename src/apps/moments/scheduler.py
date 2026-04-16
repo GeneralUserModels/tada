@@ -121,13 +121,15 @@ def should_run(slug: str, frequency: str, schedule: str, run_history: dict[str, 
     if last_run is None:
         return True
 
-    last_dt = datetime.fromtimestamp(last_run)
-    if (now - last_dt) < period - timedelta(hours=1):
-        return False
-
     # If next_run is more than 2 min away, the scheduled time for this
     # period has already passed — the moment is overdue.
     due_time = next_run if next_run <= now + timedelta(minutes=2) else next_run - period
+
+    # Already executed since the most recent scheduled time — skip.
+    last_dt = datetime.fromtimestamp(last_run)
+    if last_dt >= due_time:
+        return False
+
     return now >= due_time
 
 
