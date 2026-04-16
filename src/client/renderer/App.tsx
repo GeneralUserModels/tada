@@ -29,6 +29,7 @@ export function App() {
         {state.updateVersion && (
           <UpdateBanner
             version={state.updateVersion}
+            ready={state.updateReady}
             onDismiss={() => dispatch({ type: "UPDATE_DISMISSED" })}
           />
         )}

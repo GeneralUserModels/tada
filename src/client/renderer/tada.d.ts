@@ -109,8 +109,10 @@ interface TadaAPI {
 
   // Update check
   onUpdateAvailable: (cb: (data: UpdateData) => void) => void;
+  onUpdateDownloaded: (cb: (data: UpdateData) => void) => void;
   dismissUpdate: () => void;
   checkForUpdates: () => Promise<unknown>;
+  installUpdate: () => void;
 
   // External links
   openExternalUrl: (url: string) => Promise<boolean>;

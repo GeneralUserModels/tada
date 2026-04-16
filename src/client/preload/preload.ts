@@ -14,6 +14,11 @@ ipcRenderer.on("update:available", (_e, data: { version: string }) => {
   updateAvailableCache = data;
 });
 
+let updateDownloadedCache: { version: string } | null = null;
+ipcRenderer.on("update:downloaded", (_e, data: { version: string }) => {
+  updateDownloadedCache = data;
+});
+
 contextBridge.exposeInMainWorld("tada", {
   // App lifecycle
   onServerReady: (cb: (data: { url: string }) => void) => {
@@ -46,8 +51,13 @@ contextBridge.exposeInMainWorld("tada", {
     if (updateAvailableCache) cb(updateAvailableCache);
     ipcRenderer.on("update:available", (_e, data) => cb(data));
   },
+  onUpdateDownloaded: (cb: (data: { version: string }) => void) => {
+    if (updateDownloadedCache) cb(updateDownloadedCache);
+    ipcRenderer.on("update:downloaded", (_e, data) => cb(data));
+  },
   dismissUpdate: () => ipcRenderer.send("update:dismiss"),
   checkForUpdates: () => ipcRenderer.invoke("update:check"),
+  installUpdate: () => ipcRenderer.send("update:install"),
 
   // External links
   openExternalUrl: (url: string) => ipcRenderer.invoke("external:open-url", url),

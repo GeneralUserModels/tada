@@ -34,8 +34,10 @@ export const IPC = {
 
   // Update check
   UPDATE_AVAILABLE: "update:available",
+  UPDATE_DOWNLOADED: "update:downloaded",
   UPDATE_DISMISS: "update:dismiss",
   UPDATE_CHECK: "update:check",
+  UPDATE_INSTALL: "update:install",
 
   // External URLs
   OPEN_EXTERNAL_URL: "external:open-url",

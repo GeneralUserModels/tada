@@ -1,62 +1,40 @@
-/** Lightweight version checker — compares local version against GitHub Releases. */
+/** Auto-updater — uses electron-updater to download and install updates from GitHub Releases. */
 
-import { app, BrowserWindow, net } from "electron";
+import { BrowserWindow } from "electron";
+import { autoUpdater } from "electron-updater";
 import { IPC } from "../ipc";
 
 let mainWindow: BrowserWindow | null = null;
 
-const GITHUB_OWNER = "GeneralUserModels";
-const GITHUB_REPO = "tada";
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
-interface GitHubRelease {
-  tag_name: string;
-}
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
 
-function stripLeadingV(tag: string): string {
-  return tag.startsWith("v") ? tag.slice(1) : tag;
-}
+autoUpdater.on("update-available", (info) => {
+  const version = info.version;
+  console.log(`[updater] update available: ${version}`);
+  mainWindow?.webContents.send(IPC.UPDATE_AVAILABLE, { version });
+});
 
-function fetchLatestRelease(): Promise<string | null> {
-  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
-  return new Promise((resolve) => {
-    const request = net.request(url);
-    request.setHeader("Accept", "application/vnd.github.v3+json");
-    request.setHeader("User-Agent", `Tada/${app.getVersion()}`);
+autoUpdater.on("update-downloaded", (info) => {
+  const version = info.version;
+  console.log(`[updater] update downloaded: ${version}`);
+  mainWindow?.webContents.send(IPC.UPDATE_DOWNLOADED, { version });
+});
 
-    let body = "";
-    request.on("response", (response) => {
-      if (response.statusCode !== 200) {
-        console.log(`[updater] GitHub API returned ${response.statusCode}`);
-        resolve(null);
-        response.on("data", () => {});
-        return;
-      }
-      response.on("data", (chunk) => { body += chunk.toString(); });
-      response.on("end", () => {
-        try {
-          const data: GitHubRelease = JSON.parse(body);
-          resolve(stripLeadingV(data.tag_name));
-        } catch {
-          resolve(null);
-        }
-      });
-    });
-    request.on("error", (err) => { console.log(`[updater] request error:`, err); resolve(null); });
-    request.end();
+autoUpdater.on("error", (err) => {
+  console.log(`[updater] error:`, err.message);
+});
+
+export function checkForUpdates(): void {
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.log(`[updater] check failed:`, err.message);
   });
 }
 
-export async function checkForUpdates(): Promise<void> {
-  const latest = process.env.TADA_LATEST_OVERRIDE ?? await fetchLatestRelease();
-  const current = process.env.TADA_VERSION_OVERRIDE ?? app.getVersion();
-  console.log(`[updater] latest=${latest}, current=${current}`);
-  if (!latest) return;
-
-  if (latest !== current) {
-    console.log(`[updater] new version available: ${latest} (current: ${current})`);
-    mainWindow?.webContents.send(IPC.UPDATE_AVAILABLE, { version: latest });
-  }
+export function installUpdate(): void {
+  autoUpdater.quitAndInstall(false, true);
 }
 
 export function initUpdateChecker(win: BrowserWindow): void {

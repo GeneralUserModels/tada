@@ -1,30 +1,28 @@
 import React from "react";
 
-const DOWNLOAD_URL = "https://github.com/GeneralUserModels/tada/releases/latest";
-
 interface Props {
   version: string;
+  ready: boolean;
   onDismiss: () => void;
 }
 
-export function UpdateBanner({ version, onDismiss }: Props) {
-  const openDownload = (e: React.MouseEvent) => {
-    e.preventDefault();
-    window.open(DOWNLOAD_URL);
+export function UpdateBanner({ version, ready, onDismiss }: Props) {
+  const handleInstall = () => {
+    window.tada.installUpdate();
   };
 
   return (
     <div className="update-banner">
       <span className="update-banner-text">
-        Version {version} is available.
+        {ready
+          ? `Version ${version} is ready to install.`
+          : `Downloading version ${version}\u2026`}
       </span>
-      <a
-        className="pill-btn pill-start update-banner-link"
-        href={DOWNLOAD_URL}
-        onClick={openDownload}
-      >
-        Download
-      </a>
+      {ready && (
+        <button className="pill-btn pill-start update-banner-link" onClick={handleInstall}>
+          Install Now
+        </button>
+      )}
       <button className="update-banner-dismiss" onClick={onDismiss}>
         Dismiss
       </button>

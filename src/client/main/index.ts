@@ -17,7 +17,7 @@ import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogle
 import * as bootstrap from "./features/bootstrap";
 import { runOnboarding } from "./features/onboarding";
 import { setupConnectorIpc } from "./connectors/manager";
-import { initUpdateChecker, checkForUpdates } from "./features/updater";
+import { initUpdateChecker, checkForUpdates, installUpdate } from "./features/updater";
 
 let serverProc: ChildProcess | null = null;
 
@@ -225,6 +225,7 @@ function setupIpc() {
 
   // Update check
   ipcMain.handle(IPC.UPDATE_CHECK, () => checkForUpdates());
+  ipcMain.on(IPC.UPDATE_INSTALL, () => installUpdate());
 
   // Open URLs in the OS default browser
   ipcMain.handle(IPC.OPEN_EXTERNAL_URL, (_e, url: string) => {
@@ -332,6 +333,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  stopServer();
 });
 
 app.on("window-all-closed", () => {
