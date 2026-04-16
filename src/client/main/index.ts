@@ -15,7 +15,7 @@ import * as api from "./api";
 import * as sse from "./sse";
 import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogleTokenPath, getOutlookTokenPath } from "./paths";
 import * as bootstrap from "./features/bootstrap";
-import { runOnboarding } from "./features/onboarding";
+import { runOnboarding, getOnboardingWindow } from "./features/onboarding";
 import { setupConnectorIpc } from "./connectors/manager";
 import { initUpdateChecker, checkForUpdates, installUpdate } from "./features/updater";
 
@@ -362,7 +362,11 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-  if (dashboardWindow) {
+  const onboarding = getOnboardingWindow();
+  if (onboarding) {
+    onboarding.show();
+    onboarding.focus();
+  } else if (dashboardWindow) {
     dashboardWindow.show();
   }
 });

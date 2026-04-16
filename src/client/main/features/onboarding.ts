@@ -12,6 +12,12 @@ import { IPC } from "../ipc";
 import * as api from "../api";
 import { connectorPermissions } from "../connectors/permissions";
 
+let onboardingWindow: BrowserWindow | null = null;
+
+export function getOnboardingWindow(): BrowserWindow | null {
+  return onboardingWindow;
+}
+
 export function runOnboarding(): Promise<void> {
   return new Promise<void>((resolve) => {
     const win = new BrowserWindow({
@@ -27,6 +33,8 @@ export function runOnboarding(): Promise<void> {
         nodeIntegration: false,
       },
     });
+
+    onboardingWindow = win;
 
     if (isDev()) {
       win.loadURL("http://localhost:5173/onboarding.html");
@@ -76,6 +84,7 @@ export function runOnboarding(): Promise<void> {
     ipcMain.on(IPC.ONBOARDING_COMPLETE, handleComplete);
 
     win.on("closed", () => {
+      onboardingWindow = null;
       cleanup();
       if (!submitted) {
         app.quit();
