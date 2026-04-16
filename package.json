@@ -1,6 +1,6 @@
 {
   "name": "tada",
-  "version": "0.0.1-alpha",
+  "version": "0.0.2-alpha",
   "description": "Tada — predict what you'll do next",
   "author": "Tada",
   "main": "dist/main/index.js",
