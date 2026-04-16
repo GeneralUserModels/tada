@@ -10,6 +10,8 @@ Visit the site: **https://generalusermodels.github.io/tada/**
 
 Download the latest release [here](https://github.com/GeneralUserModels/tada/releases).
 
+## Developer Instructions
+
 ### Local install
 
 Make sure you have uv installed first. All you have to do then is:
@@ -21,7 +23,7 @@ npm install
 npm run dev
 ```
 
-### Research
+## Research
 
 Tada 🎉 builds on research across a few academic papers. If you're interested, you can read or cite the papers below!
 
