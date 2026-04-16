@@ -2,7 +2,32 @@ import React, { useEffect, useRef, useState } from "react";
 import { DEMOS } from "./demos";
 
 const REPO = "GeneralUserModels/tada";
-const RELEASE_URL = `https://github.com/${REPO}/releases/latest`;
+const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
+
+function useDmgUrl(): string {
+  const [url, setUrl] = useState(RELEASES_PAGE);
+
+  useEffect(() => {
+    fetch(`https://api.github.com/repos/${REPO}/releases`, {
+      headers: { Accept: "application/vnd.github.v3+json" },
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((releases: Array<{ assets: Array<{ name: string; browser_download_url: string }> }>) => {
+        for (const release of releases) {
+          const dmg = release.assets.find(
+            (a) => a.name.endsWith(".dmg") && a.name.includes("arm64")
+          );
+          if (dmg) {
+            setUrl(dmg.browser_download_url);
+            return;
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  return url;
+}
 
 const SPINNER_FRAMES = ["|", "/", "-", "\\"];
 
@@ -330,6 +355,7 @@ export function App() {
     showTabHint,
     running,
   } = useAutocompleteDemo();
+  const dmgUrl = useDmgUrl();
   const demoBodyRef = useRef<HTMLDivElement>(null);
 
   const demo = DEMOS[demoIdx];
@@ -404,9 +430,9 @@ export function App() {
         </p>
 
         <div className="hero-actions">
-          <a href={RELEASE_URL} className="btn btn-primary">
+          <a href={dmgUrl} className="btn btn-primary">
             <DownloadIcon />
-            Download for macOS
+            Download for macOS (Apple Silicon)
           </a>
           <a href={`https://github.com/${REPO}`} className="btn btn-secondary">
             <StarIcon />
