@@ -17,8 +17,13 @@ async def _debounce(data_manager) -> None:
         except asyncio.TimeoutError:
             break
 
+def _is_recording(state) -> bool:
+    screen = state.connectors.get("screen")
+    return screen is not None and not screen.paused
+
+
 async def run_prediction_loop(state) -> None:
-    """Run handle_prediction_request when new labels arrive, or on a fallback interval."""
+    """Run handle_prediction_request when new labels arrive while recording is active."""
     data_manager = state.model.data_manager
     logger.info("Prediction loop started (interval=%ss)", state.config.predict_every_n_seconds)
     while True:
@@ -29,7 +34,12 @@ async def run_prediction_loop(state) -> None:
             )
             await _debounce(data_manager)
         except asyncio.TimeoutError:
-            pass
+            continue
+
+        if not _is_recording(state):
+            logger.debug("Skipping prediction — recording is not active")
+            continue
+
         try:
             await handle_prediction_request(state, source="auto")
         except Exception as e:

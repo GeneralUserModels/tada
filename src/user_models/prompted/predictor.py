@@ -179,12 +179,13 @@ class PromptedPredictor(BasePredictor):
             {"type": "text", "text": actions_text}
         ]})
 
-        cached_messages = [self._ensure_cache_control(m) for m in messages]
+        if self.model.startswith("anthropic/"):
+            messages = [self._ensure_cache_control(m) for m in messages]
 
         result = {
             "retrieved": retrieved_text,
             "actions": actions_text,
-            "messages": cached_messages,
+            "messages": messages,
             "timestamp": datetime.now().isoformat(),
             "model": self.model,
         }

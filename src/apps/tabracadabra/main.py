@@ -13,10 +13,7 @@ import urllib.error
 from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
-import httpx
-import litellm
-from litellm import completion as litellm_completion
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter, before_sleep_log
+from apps.tabracadabra.llm import completion_with_retry, load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -56,11 +53,6 @@ _SUPPRESS_FLAG = os.path.join(tempfile.gettempdir(), "tada_tab_active")
 _DEBUG_RENDER_DIR = os.path.join(tempfile.gettempdir(), "tada_tabracadabra_debug")
 _DEBUG_RENDER_LATEST_PNG = os.path.join(_DEBUG_RENDER_DIR, "rendered_latest.png")
 
-
-def load_prompt() -> str:
-    """Load the tab prompt from the file next to this module."""
-    prompt_path = Path(__file__).parent / "tab_prompt.txt"
-    return prompt_path.read_text()
 
 
 # ------------- Screenshot (napsack shared frame only; screen MCP writes TABRACADABRA_LATEST_FRAME_PNG) -------------
@@ -470,22 +462,6 @@ class TabracadabraService:
             time.sleep(POST_SPINNER_DRAIN_S)
 
     @staticmethod
-    @retry(
-        stop=stop_after_attempt(2),
-        wait=wait_exponential_jitter(initial=1, max=20, jitter=2),
-        retry=retry_if_exception_type((
-            litellm.RateLimitError,
-            litellm.APIConnectionError,
-            litellm.InternalServerError,
-            litellm.Timeout,
-            httpx.ReadTimeout,
-        )),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-    )
-    def _completion_with_retry(**kwargs):
-        return litellm_completion(**kwargs)
-
-    @staticmethod
     def _log_usage(usage):
         details = getattr(usage, "prompt_tokens_details", None)
         cached = getattr(details, "cached_tokens", None) if details else None
@@ -513,7 +489,7 @@ class TabracadabraService:
         logger.info("[llm] tabracadabra")
         t_llm = time.perf_counter()
         try:
-            stream = self._completion_with_retry(
+            stream = completion_with_retry(
                 model=self._model,
                 messages=messages,
                 stream=True,

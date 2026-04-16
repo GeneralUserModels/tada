@@ -145,7 +145,7 @@ export function Onboarding() {
     return true;
   };
 
-  const handleSubmit = async () => {
+  const buildSettings = () => {
     const advanced: Record<string, string> = {};
     for (const [k, v] of Object.entries(advancedValues)) {
       if (v.trim()) advanced[k] = v.trim();
@@ -164,8 +164,13 @@ export function Onboarding() {
     };
     if (tinkerKey.trim()) settings.tinker_api_key = tinkerKey.trim();
     if (wandbKey.trim()) settings.wandb_api_key = wandbKey.trim();
+    return settings;
+  };
 
-    await updateSettings(settings);
+  const saveSettings = () => updateSettings(buildSettings());
+
+  const handleSubmit = async () => {
+    await saveSettings();
     await completeOnboarding();
     window.tada.onboardingComplete();
   };
@@ -255,7 +260,7 @@ export function Onboarding() {
           setAdvancedValues={setAdvancedValues}
           validateTinker={validateTinker}
           onBack={() => setStep(2)}
-          onFinish={() => setStep(4)}
+          onFinish={() => { saveSettings(); setStep(4); }}
         />
       )}
 
