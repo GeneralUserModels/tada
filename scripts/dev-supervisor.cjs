@@ -93,7 +93,7 @@ function shutdown(exitCode = 0) {
 }
 
 function maybeStartElectron(serverUrl) {
-  if (shuttingDown || electronStarted || !rendererReady || !serverReady) return;
+  if (shuttingDown || electronStarted || !rendererReady) return;
   electronStarted = true;
   console.log(`[dev-supervisor] starting Electron (server=${serverUrl})...`);
   spawnManaged("electron", "npx", ["electron", "dist/main/index.js"], {
