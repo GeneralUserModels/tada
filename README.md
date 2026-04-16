@@ -77,3 +77,17 @@ Tada 🎉 builds on research across a few academic papers. If you're interested,
 }
 ```
 </details>
+
+<details>
+<summary><a href="https://arxiv.org/abs/2601.04436">Behavior Latticing: Inferring User Motivations from Unstructured Interactions
+</a></summary>
+
+```bibtex
+@article{zhao2026behavior,
+  title={Behavior Latticing: Inferring User Motivations from Unstructured Interactions},
+  author={Zhao, Dora and Lam, Michelle S and Yang, Diyi and Bernstein, Michael S},
+  journal={arXiv preprint arXiv:2604.07629},
+  year={2026}
+}
+```
+</details>
