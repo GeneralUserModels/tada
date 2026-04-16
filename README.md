@@ -79,7 +79,7 @@ Tada 🎉 builds on research across a few academic papers. If you're interested,
 </details>
 
 <details>
-<summary><a href="https://arxiv.org/abs/2601.04436">Behavior Latticing: Inferring User Motivations from Unstructured Interactions
+<summary><a href="https://arxiv.org/abs/2604.07629">Behavior Latticing: Inferring User Motivations from Unstructured Interactions
 </a></summary>
 
 ```bibtex
