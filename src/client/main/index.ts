@@ -297,15 +297,19 @@ app.whenReady().then(async () => {
     api.setServerUrl(`http://127.0.0.1:${port}`);
     startServer(port);
   }
+
+  // Show the window immediately so the user isn't staring at nothing
+  // while the Python server starts up. The renderer handles the
+  // "not connected" state and transitions once SERVER_READY arrives.
+  createDashboard();
+  setupSseForwarding();
+
   await waitForServer(`${api.getServerUrl()}/api/status`);
 
   const { complete } = await api.getOnboardingStatus() as { complete: boolean };
   if (!complete) {
     await runOnboarding();
   }
-
-  createDashboard();
-  setupSseForwarding();
 
   if (dashboardWindow) {
     initUpdateChecker(dashboardWindow);
