@@ -1,22 +1,25 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { Onboarding } from "./components/onboarding/Onboarding";
 import { setServerUrl } from "./api/client";
 
-// Defer React render until the server URL is available so that
-// useEffect hooks (e.g. getGoogleUser) can reach the Python server.
+// Render React immediately so the Welcome step appears without waiting
+// for the Python server. Server-dependent work inside <Onboarding> is
+// gated on the serverReady prop, which flips once onServerReady fires.
 const root = document.getElementById("root")!;
 const reactRoot = createRoot(root);
 
-async function bootstrapOnboarding() {
-  try {
-    const url = await window.tada.getServerUrl();
-    if (url) setServerUrl(url);
-  } catch {
-    console.warn("[onboarding] failed to fetch server URL");
-  } finally {
-    reactRoot.render(<Onboarding />);
-  }
+function OnboardingRoot() {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    window.tada.onServerReady(({ url }) => {
+      setServerUrl(url);
+      setReady(true);
+    });
+  }, []);
+
+  return <Onboarding serverReady={ready} />;
 }
 
-void bootstrapOnboarding();
+reactRoot.render(<OnboardingRoot />);

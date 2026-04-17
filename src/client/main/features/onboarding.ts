@@ -18,7 +18,7 @@ export function getOnboardingWindow(): BrowserWindow | null {
   return onboardingWindow;
 }
 
-export function runOnboarding(): Promise<void> {
+export function runOnboarding(serverReady?: Promise<void>): Promise<void> {
   return new Promise<void>((resolve) => {
     const win = new BrowserWindow({
       width: 580,
@@ -42,8 +42,12 @@ export function runOnboarding(): Promise<void> {
       win.loadFile(path.join(__dirname, "..", "..", "renderer", "onboarding.html"));
     }
 
-    // Send server URL so the renderer can call Python directly
-    win.webContents.on("did-finish-load", () => {
+    // Send server URL once both the page and the server are ready.
+    // When serverReady is provided, the window can render its shell
+    // while the server is still starting up — eliminating the visible
+    // gap between the setup window closing and onboarding appearing.
+    win.webContents.on("did-finish-load", async () => {
+      if (serverReady) await serverReady;
       win.webContents.send(IPC.SERVER_READY, { url: api.getServerUrl() });
     });
 

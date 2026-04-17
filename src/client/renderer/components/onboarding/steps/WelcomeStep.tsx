@@ -2,9 +2,10 @@ import React from "react";
 
 type Props = {
   onStart: () => void;
+  serverReady?: boolean;
 };
 
-export function WelcomeStep({ onStart }: Props) {
+export function WelcomeStep({ onStart, serverReady = true }: Props) {
   return (
     <div className="page active">
       <div className="welcome-brand">
@@ -35,8 +36,12 @@ export function WelcomeStep({ onStart }: Props) {
         </div>
       </div>
       <div className="btn-row">
-        <div></div>
-        <button className="btn btn-primary" onClick={onStart}>Get Started</button>
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", opacity: serverReady ? 0 : 1, transition: "opacity 0.3s" }}>
+          Starting up…
+        </div>
+        <button className="btn btn-primary" onClick={onStart} disabled={!serverReady}>
+          Get Started
+        </button>
       </div>
     </div>
   );

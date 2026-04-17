@@ -317,11 +317,16 @@ app.whenReady().then(async () => {
   createDashboard({ show: !needsOnboarding });
   setupSseForwarding();
 
-  await waitForServer(`${api.getServerUrl()}/api/status`);
+  const serverReady = waitForServer(`${api.getServerUrl()}/api/status`);
 
   if (needsOnboarding) {
-    await runOnboarding();
+    // Open onboarding immediately so there's no windowless gap after
+    // setup closes. The server boots in parallel; onboarding defers
+    // its SERVER_READY IPC until the promise resolves.
+    await runOnboarding(serverReady);
     dashboardWindow?.show();
+  } else {
+    await serverReady;
   }
 
   if (dashboardWindow) {
