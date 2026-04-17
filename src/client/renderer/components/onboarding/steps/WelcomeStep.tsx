@@ -36,9 +36,14 @@ export function WelcomeStep({ onStart, serverReady = true }: Props) {
         </div>
       </div>
       <div className="btn-row">
-        <div style={{ fontSize: 11, color: "var(--text-tertiary)", opacity: serverReady ? 0 : 1, transition: "opacity 0.3s" }}>
-          Starting up…
-        </div>
+        {!serverReady ? (
+          <div className="startup-indicator">
+            <span className="startup-spinner" />
+            <span>Starting up…</span>
+          </div>
+        ) : (
+          <div />
+        )}
         <button className="btn btn-primary" onClick={onStart} disabled={!serverReady}>
           Get Started
         </button>
