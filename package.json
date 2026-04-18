@@ -37,7 +37,7 @@
     "wait-on": "^9.0.4"
   },
   "build": {
-    "appId": "com.tada.app",
+    "appId": "com.generalusermodels.tada",
     "productName": "Tada",
     "generateUpdatesFilesForAllChannels": true,
     "afterSign": "scripts/notarize.cjs",
