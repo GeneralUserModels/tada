@@ -3,7 +3,7 @@ import { useAppContext } from "../../context/AppContext";
 import { useFeatureFlag } from "../../featureFlags";
 import { getSettings, updateSettings } from "../../api/client";
 import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
-import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
+import { ModelDropdown, LLM_MODELS, AGENT_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 
 
 // All keys used across all sections
@@ -23,6 +23,10 @@ function allKeys(): string[] {
   keys.add("moments_agent_api_key");
   keys.add("memory_agent_model");
   keys.add("memory_agent_api_key");
+  keys.add("seeker_model");
+  keys.add("seeker_api_key");
+  keys.add("agent_model");
+  keys.add("agent_api_key");
   keys.add("tabracadabra_enabled");
   keys.add("moments_enabled");
   keys.add("memory_enabled");
@@ -73,6 +77,14 @@ export function SettingsView() {
     setValues(v => ({ ...v, reward_llm: val, label_model: val, filter_model: val, tabracadabra_model: val }));
   };
 
+  const handleAgentModelChange = (val: string) => {
+    setValues(v => ({ ...v, agent_model: val, moments_agent_model: val, memory_agent_model: val, seeker_model: val }));
+  };
+
+  const handleAgentApiKeyChange = (val: string) => {
+    setValues(v => ({ ...v, agent_api_key: val, moments_agent_api_key: val, memory_agent_api_key: val, seeker_api_key: val }));
+  };
+
   const hasUnsavedChanges = allKeys().some((key) => {
     const saved = state.settings[key];
     const current = values[key];
@@ -91,7 +103,7 @@ export function SettingsView() {
 
         <div className="settings-group">
           <div className="model-row">
-            <span className="model-row-label">LLM <span className="required-tag">Required</span></span>
+            <span className="model-row-label">Labeling LM <span className="required-tag">Required</span></span>
             <div className="model-row-fields">
               <label className="field">
                 <span>Model</span>
@@ -109,6 +121,30 @@ export function SettingsView() {
                   placeholder="AIza..."
                   value={values["default_llm_api_key"] ?? ""}
                   onChange={(e) => setValues(v => ({ ...v, default_llm_api_key: e.target.value }))}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="model-row">
+            <span className="model-row-label">Agent LM <span className="required-tag">Required</span></span>
+            <div className="model-row-fields">
+              <label className="field">
+                <span>Model</span>
+                <ModelDropdown
+                  value={values["agent_model"] ?? ""}
+                  onChange={handleAgentModelChange}
+                  options={AGENT_MODELS}
+                  placeholder="Select a model"
+                />
+              </label>
+              <label className="field">
+                <span>API Key</span>
+                <input
+                  type="text"
+                  placeholder="sk-ant-..."
+                  value={values["agent_api_key"] ?? ""}
+                  onChange={(e) => handleAgentApiKeyChange(e.target.value)}
                 />
               </label>
             </div>

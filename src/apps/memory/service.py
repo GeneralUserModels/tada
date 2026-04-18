@@ -96,7 +96,7 @@ async def run_memory_service(state) -> None:
             cfg = state.config
             logs_dir = str(Path(cfg.log_dir).resolve())
             model = cfg.memory_agent_model
-            api_key = cfg.resolve_api_key("memory_agent_api_key")
+            api_key = cfg.memory_agent_api_key or cfg.resolve_api_key("agent_api_key")
 
             # Always run ingest
             logger.info("Memory: running ingest")
