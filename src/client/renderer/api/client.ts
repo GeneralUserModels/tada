@@ -56,6 +56,12 @@ export const recordMomentView = (slug: string) =>
 export const recordMomentViewEnd = (slug: string, data: { duration_ms: number }) =>
   request("POST", `/api/moments/${slug}/view-end`, data);
 
+export const endMomentFeedback = (slug: string) =>
+  request("POST", `/api/moments/${slug}/feedback/end`);
+
+export const rerunMoment = (slug: string) =>
+  request("POST", `/api/moments/${slug}/rerun`);
+
 // ── Seeker ──────────────────────────────────────────────────
 export const getSeekerStatus = () =>
   request("GET", "/api/seeker/status") as Promise<SeekerStatus>;

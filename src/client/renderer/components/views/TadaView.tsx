@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { useMoments } from "../../hooks/useMoments";
+import { useMomentFeedback } from "../../hooks/useMomentFeedback";
+import { ChatView } from "../ChatView";
 import { getServerUrl } from "../../api/client";
 
 const FREQUENCY_OPTIONS = ["daily", "weekly", "once"] as const;
@@ -148,15 +150,18 @@ export function TadaView() {
   const { state } = useAppContext();
   const {
     results, loading, load, showDismissed, toggleShowDismissed,
-    dismiss, restore, pin, unpin, thumbs, editSchedule, startView, endView,
+    dismiss, restore, pin, unpin, thumbs, editSchedule, startView, endView, rerun,
+    rerunning, rerunFailed,
   } = useMoments();
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [editFreq, setEditFreq] = useState("");
   const [editTime, setEditTime] = useState("");
   const [editDay, setEditDay] = useState("Monday");
   const prevSlugRef = useRef<string | null>(null);
+  const feedback = useMomentFeedback(selectedSlug ?? "");
 
   useEffect(() => {
     if (state.connected) load();
@@ -179,9 +184,33 @@ export function TadaView() {
     };
   }, [selectedSlug]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleCardClick = (slug: string) => {
+  const handleCardClick = (slug: string, openFeedback = false) => {
     setSelectedSlug(slug);
     setResultUrl(`${getServerUrl()}/api/moments/results/${slug}/index.html`);
+    setFeedbackOpen(openFeedback);
+  };
+
+  const handleBack = () => {
+    if (feedback.active) feedback.endConversation();
+    setSelectedSlug(null);
+    setResultUrl(null);
+    setFeedbackOpen(false);
+  };
+
+  const handleEndFeedback = async () => {
+    await feedback.endConversation();
+    feedback.setMessages([]);
+    setFeedbackOpen(false);
+    load(); // reload to update has_feedback status
+  };
+
+  const handleFeedbackSend = (content: string) => {
+    if (!feedback.active) {
+      // First message — start the conversation
+      feedback.startConversation(content);
+    } else {
+      feedback.sendMessage(content);
+    }
   };
 
   const openScheduleEditor = (e: React.MouseEvent, r: MomentResult) => {
@@ -210,7 +239,7 @@ export function TadaView() {
     return (
       <div id="tada-view" className="view active">
         <div className="tada-detail-header glass-card">
-          <button className="tada-back-btn" onClick={() => { setSelectedSlug(null); setResultUrl(null); }}>
+          <button className="tada-back-btn" onClick={handleBack}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -219,7 +248,28 @@ export function TadaView() {
           {selected && (
             <>
               <span className="tada-detail-title">{selected.title}</span>
+              {rerunFailed.has(selected.slug) && <span className="tada-rerun-failed-badge">Rerun failed</span>}
               <div className="tada-card-actions">
+                <button
+                  className={`tada-card-action-btn${rerunning.has(selected.slug) ? " rerunning" : ""}`}
+                  title={rerunning.has(selected.slug) ? "Rerunning\u2026" : "Re-run"}
+                  onClick={() => rerun(selected.slug)}
+                  disabled={rerunning.has(selected.slug)}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M2 8a6 6 0 0110.47-4M14 8a6 6 0 01-10.47 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                    <path d="M12 1v3.5h-3.5M4 15v-3.5h3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  className={`tada-card-action-btn${feedbackOpen ? " active" : ""}`}
+                  title="Give feedback"
+                  onClick={() => setFeedbackOpen(!feedbackOpen)}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M2 3h12v8H5l-3 3V3z" stroke="currentColor" fill={feedbackOpen ? "currentColor" : "none"} strokeWidth="1.3" strokeLinejoin="round"/>
+                  </svg>
+                </button>
                 <button
                   className={`tada-card-action-btn tada-thumbs-up${selected.thumbs === "up" ? " active" : ""}`}
                   title="Thumbs up"
@@ -266,7 +316,7 @@ export function TadaView() {
                     <button
                       className="tada-card-action-btn"
                       title="Dismiss"
-                      onClick={() => { dismiss(selected.slug); setSelectedSlug(null); setResultUrl(null); }}
+                      onClick={() => { dismiss(selected.slug); handleBack(); }}
                     >
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                         <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -278,12 +328,26 @@ export function TadaView() {
             </>
           )}
         </div>
-        <div className="tada-detail glass-card">
-          <iframe
-            src={resultUrl}
-            sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-            style={{ width: "100%", height: "100%", border: "none", borderRadius: "var(--r-md)" }}
-          />
+        <div className={`tada-detail-split${feedbackOpen ? "" : " tada-detail-split--full"}`}>
+          <div className="tada-detail glass-card">
+            <iframe
+              src={resultUrl}
+              sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+              style={{ width: "100%", height: "100%", border: "none", borderRadius: "var(--r-md)" }}
+            />
+          </div>
+          {feedbackOpen && (
+            <div className="tada-feedback-panel glass-card">
+              <ChatView
+                messages={feedback.messages}
+                streaming={feedback.streaming}
+                active={true}
+                onSend={handleFeedbackSend}
+                onEnd={handleEndFeedback}
+                placeholder="Share your feedback..."
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -316,7 +380,7 @@ export function TadaView() {
         results.filter((r) => showDismissed ? r.dismissed : !r.dismissed).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)).map((r, i) => (
           <section
             key={r.slug}
-            className={`glass-card tada-card${r.pinned ? " tada-card--pinned" : ""}${r.dismissed ? " tada-card--dismissed" : ""}`}
+            className={`glass-card tada-card${r.pinned ? " tada-card--pinned" : ""}${r.dismissed ? " tada-card--dismissed" : ""}${rerunning.has(r.slug) ? " tada-card--rerunning" : ""}`}
             style={{ animationDelay: `${i * 0.04}s` }}
             onClick={() => handleCardClick(r.slug)}
           >
@@ -330,8 +394,29 @@ export function TadaView() {
                 )}
                 {r.title}
                 {r.dismissed && <span className="tada-dismissed-badge">Dismissed</span>}
+                {rerunFailed.has(r.slug) && <span className="tada-rerun-failed-badge">Rerun failed</span>}
               </h3>
               <div className="tada-card-actions" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className={`tada-card-action-btn${rerunning.has(r.slug) ? " rerunning" : ""}`}
+                  title={rerunning.has(r.slug) ? "Rerunning\u2026" : "Re-run"}
+                  onClick={() => rerun(r.slug)}
+                  disabled={rerunning.has(r.slug)}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <path d="M2 8a6 6 0 0110.47-4M14 8a6 6 0 01-10.47 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                    <path d="M12 1v3.5h-3.5M4 15v-3.5h3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  className="tada-card-action-btn"
+                  title="Give feedback"
+                  onClick={() => handleCardClick(r.slug, true)}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <path d="M2 3h12v8H5l-3 3V3z" stroke="currentColor" fill="none" strokeWidth="1.3" strokeLinejoin="round"/>
+                  </svg>
+                </button>
                 <button
                   className={`tada-card-action-btn tada-thumbs-up${r.thumbs === "up" ? " active" : ""}`}
                   title="Thumbs up"

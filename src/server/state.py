@@ -27,8 +27,11 @@ class ServerState:
 
     # Seeker
     seeker_scheduler_task: asyncio.Task | None = None
-    seeker_messages: list[dict] = field(default_factory=list)
-    seeker_conversation_active: bool = False
+    seeker_session: object | None = None  # ChatSession when active
+
+    # Moment feedback
+    feedback_session: object | None = None  # ChatSession when active
+    feedback_slug: str | None = None        # which moment is being given feedback
     
     # For Tabracadabra
     prediction_loop_task: asyncio.Task | None = None

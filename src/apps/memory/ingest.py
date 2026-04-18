@@ -151,6 +151,13 @@ session directories. Ignore raw_events. This is where the real patterns live.
 - audio/filtered.jsonl — fields: text, timestamp, summary (nested under "source"). Transcribed audio \
 from the user's microphone.
 
+**ALSO PRIMARY — Tada moment feedback:**
+- {logs_dir}/../logs-tada/results/*/feedback_*.md — conversational feedback the user gave on each \
+tada moment. These are first-person reactions to AI-generated content — what the user liked, disliked, \
+and wants changed. Extract preferences, opinions, and patterns from these conversations.
+- {logs_dir}/../logs-tada/results/_moment_state.json — per-tada signals: thumbs up/down, dismissed, \
+pinned, view counts. This reveals which kinds of AI outputs the user values.
+
 **SECONDARY — additional context:**
 - email/filtered.jsonl — fields: subject, from, date, summary (nested under "source")
 - calendar/events.jsonl — fields: summary, start, end, location, description (nested under "source")

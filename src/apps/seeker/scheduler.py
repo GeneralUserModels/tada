@@ -41,7 +41,7 @@ def _should_run(state) -> bool:
     if not (is_enabled(state.config, "seeker") and state.config.seeker_enabled):
         return False
 
-    if state.seeker_conversation_active:
+    if state.seeker_session is not None:
         return False
 
     seeker_state = _load_seeker_state(state)

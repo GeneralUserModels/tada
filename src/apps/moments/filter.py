@@ -55,14 +55,24 @@ papers/docs, compiling structured knowledge. This is where the agent provides th
 - **"Extra-mile" work** — things the user would benefit from but never gets around to doing.
 Deprioritize simple, shallow tasks that a human could do in a few minutes.
 
+## User signals on past tadas
+
+Before evaluating candidates, read `{tada_dir}/results/_moment_state.json` to see how the user has \
+reacted to existing tadas — thumbs up/down, dismissed, pinned, view counts. Also check for \
+`feedback_*.md` files in each result directory (`{tada_dir}/results/*/feedback_*.md`) — these contain \
+conversational feedback about what the user liked or disliked. Use these signals to calibrate your \
+filtering: favor candidates similar to thumbs-up/pinned tadas, reject candidates similar to \
+dismissed/thumbs-down ones.
+
 ## Steps
 
 1. Run `ls {tada_dir}/` to see which tasks have already been selected.
-2. Read ALL candidate `.md` files from {tasks_dir}/ and {oneoffs_dir}/. Use subagents to read \
+2. Read `{tada_dir}/results/_moment_state.json` and scan for feedback files to understand user preferences.
+3. Read ALL candidate `.md` files from {tasks_dir}/ and {oneoffs_dir}/. Use subagents to read \
 them in parallel — each subagent should read a batch of files and return a summary of each \
 (title, source dir, what it does, and a 1-10 quality score based on: grounded in real behavior, \
 genuinely useful, completable by the agent).
-3. For each candidate, decide whether to copy it. Default to REJECTING — only copy tasks that pass \
+4. For each candidate, decide whether to copy it. Default to REJECTING — only copy tasks that pass \
 ALL of these bars:
   - Clearly grounded in specific observed user behavior (not generic productivity advice)
   - Produces a concrete, useful artifact (summary, draft, report, analysis)
@@ -72,10 +82,10 @@ ALL of these bars:
   - Not reactive/trigger-based ("when X happens, do Y")
   - Does not require macOS accessibility/window-management APIs
   Prefer diversity — avoid copying tasks that overlap with existing ones in {tada_dir}/.
-4. Copy the good candidates to {tada_dir}/<filename>.md using write_file. Aim to keep up to {n} \
+5. Copy the good candidates to {tada_dir}/<filename>.md using write_file. Aim to keep up to {n} \
 total tasks in {tada_dir}/. Do NOT delete any files — not from source dirs and not from {tada_dir}/.
-5. Print which tasks you copied and why, and which you skipped and why.
-6. Run `ls {tada_dir}/` to verify.
+6. Print which tasks you copied and why, and which you skipped and why.
+7. Run `ls {tada_dir}/` to verify.
 """
 
 INCREMENTAL_SECTION = """\

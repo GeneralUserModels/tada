@@ -83,6 +83,8 @@ interface MomentResult {
   schedule_override: string | null;
   frequency_override: string | null;
   thumbs: "up" | "down" | null;
+  has_feedback: boolean;
+  feedback_incorporated: boolean;
 }
 
 interface SeekerStatus {
@@ -94,6 +96,11 @@ interface SeekerStatus {
 }
 
 interface SeekerMessage {
+  role: "assistant" | "user";
+  content: string;
+}
+
+interface ChatMessage {
   role: "assistant" | "user";
   content: string;
 }
