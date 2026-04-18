@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { useSeeker } from "../../hooks/useSeeker";
+import { ChatView } from "../ChatView";
 
 function formatDate(date: string): string {
   // date is YYYYMMDD_HHMMSS or YYYYMMDD
@@ -17,6 +18,7 @@ export function SeekerView() {
     status,
     messages,
     streaming,
+    active,
     loading,
     history,
     viewingFile,
@@ -30,11 +32,9 @@ export function SeekerView() {
     sendMessage,
     endConversation,
   } = useSeeker();
-  const [input, setInput] = useState("");
   const [showEndedChat, setShowEndedChat] = useState(false);
   const prevActiveRef = useRef<boolean | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (state.connected) {
@@ -45,39 +45,15 @@ export function SeekerView() {
   }, [state.connected, loadStatus, loadConversation, loadHistory]);
 
   useEffect(() => {
-    if (prevActiveRef.current === true && status?.conversation_active === false) {
+    if (prevActiveRef.current === true && active === false) {
       setShowEndedChat(true);
     }
-    prevActiveRef.current = status?.conversation_active;
-  }, [status?.conversation_active]);
+    prevActiveRef.current = active;
+  }, [active]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, viewingMessages]);
-
-  const handleSend = () => {
-    const text = input.trim();
-    if (!text || streaming) return;
-    setInput("");
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
-    sendMessage(text);
-  };
-
-  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    const el = e.target;
-    el.style.height = "auto";
-    const clamped = Math.min(el.scrollHeight, 120);
-    el.style.height = clamped + "px";
-    el.style.overflowY = el.scrollHeight > 120 ? "auto" : "hidden";
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+  }, [viewingMessages]);
 
   if (loading || !status) {
     return (
@@ -91,7 +67,7 @@ export function SeekerView() {
   if (viewingFile) {
     return (
       <div id="seeker-view" className="view active">
-        <div className="seeker-chat">
+        <div className="chat-container">
           <div className="seeker-history-bar">
             <button className="seeker-back-btn" onClick={clearViewing}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -101,10 +77,10 @@ export function SeekerView() {
             </button>
             <span className="seeker-history-date">{formatDate(viewingFile.replace("conversation_", "").replace(".md", ""))}</span>
           </div>
-          <div className="seeker-messages">
+          <div className="chat-messages">
             {viewingMessages.map((msg, i) => (
-              <div key={i} className={`seeker-message seeker-message--${msg.role}`}>
-                <div className="seeker-message-bubble">{msg.content}</div>
+              <div key={i} className={`chat-message chat-message--${msg.role}`}>
+                <div className="chat-message-bubble">{msg.content}</div>
               </div>
             ))}
             <div ref={messagesEndRef} />
@@ -115,41 +91,16 @@ export function SeekerView() {
   }
 
   // Active conversation — chat UI
-  if (status.conversation_active || showEndedChat) {
+  if (active || showEndedChat) {
     return (
       <div id="seeker-view" className="view active">
-        <div className="seeker-chat">
-          <div className="seeker-messages">
-            {messages.map((msg, i) => (
-              <div key={i} className={`seeker-message seeker-message--${msg.role}`}>
-                <div className="seeker-message-bubble">
-                  {msg.content || (streaming && i === messages.length - 1 ? <span className="seeker-typing" /> : null)}
-                </div>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-          {status.conversation_active && (
-            <div className="seeker-input-area">
-              <textarea
-                ref={textareaRef}
-                className="seeker-input"
-                value={input}
-                onChange={handleInput}
-                onKeyDown={handleKeyDown}
-                placeholder="Type your response..."
-                disabled={streaming}
-                rows={1}
-              />
-              <button className="pill-btn pill-start" onClick={handleSend} disabled={streaming || !input.trim()}>
-                Send
-              </button>
-              <button className="pill-btn pill-stop" onClick={endConversation} disabled={streaming}>
-                End
-              </button>
-            </div>
-          )}
-        </div>
+        <ChatView
+          messages={messages}
+          streaming={streaming}
+          active={active}
+          onSend={sendMessage}
+          onEnd={endConversation}
+        />
       </div>
     );
   }

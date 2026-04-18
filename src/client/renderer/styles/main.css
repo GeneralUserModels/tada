@@ -493,7 +493,7 @@ body {
 button, input, select, textarea, canvas, a, label,
 .pill-btn, .nav-item, .history-feed, .prediction-body,
 #reward-chart, #history-list, #dashboard-connectors,
-.seeker-chat, .seeker-messages, .seeker-input {
+.chat-container, .chat-messages, .chat-input {
   -webkit-app-region: no-drag;
   user-select: auto;
 }
@@ -1093,6 +1093,34 @@ button, input, select, textarea, canvas, a, label,
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);
 }
 
+/* ── Detail Split (iframe + feedback panel) ───────────── */
+
+.tada-detail-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+}
+
+.tada-detail-split--full .tada-detail {
+  flex: 1;
+}
+
+.tada-detail-split .tada-detail {
+  flex: 1;
+  min-width: 0;
+}
+
+.tada-feedback-panel {
+  width: 340px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  overflow: hidden;
+}
+
+
 /* ── Tada List Header ──────────────────────────────────── */
 
 .tada-list-header {
@@ -1235,7 +1263,7 @@ button, input, select, textarea, canvas, a, label,
 
 .tada-card--dismissed {
   opacity: 0.45;
-  padding: 8px 14px;
+  padding: 6px 12px;
   min-height: 0;
   gap: 0;
 }
@@ -1247,6 +1275,18 @@ button, input, select, textarea, canvas, a, label,
 .tada-card--dismissed .tada-card-title {
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tada-card--dismissed .tada-card-actions {
+  gap: 0;
+}
+
+.tada-card--dismissed .tada-card-action-btn {
+  width: 22px;
+  height: 22px;
 }
 
 .tada-card--dismissed .tada-card-schedule,
@@ -1265,6 +1305,47 @@ button, input, select, textarea, canvas, a, label,
   border-radius: 4px;
   margin-left: 8px;
   flex-shrink: 0;
+}
+
+/* ── Rerunning state ─────────────────────────────────── */
+
+.tada-card-action-btn.rerunning {
+  color: var(--sage);
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.tada-card-action-btn.rerunning svg {
+  animation: spin 1s linear infinite;
+}
+
+.tada-card--rerunning {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.tada-card--rerunning .tada-card-desc::after {
+  content: "Rerunning\2026";
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--sage);
+  letter-spacing: 0.03em;
+}
+
+.tada-rerun-failed-badge {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #c47a7a;
+  background: rgba(196, 122, 122, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  flex-shrink: 0;
+  animation: fadeSlideIn 0.25s ease both;
 }
 
 /* ── Schedule Editor ───────────────────────────────────── */
@@ -1923,16 +2004,16 @@ button, input, select, textarea, canvas, a, label,
   animation: spin 0.7s linear infinite;
 }
 
-/* ── Seeker View ──────────────────────────────────────────── */
+/* ── Chat (shared) ───────────────────────────────────────── */
 
-.seeker-chat {
+.chat-container {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
 }
 
-.seeker-messages {
+.chat-messages {
   flex: 1;
   overflow-y: auto;
   padding: 8px 0;
@@ -1941,29 +2022,29 @@ button, input, select, textarea, canvas, a, label,
   gap: 12px;
 }
 
-.seeker-messages::-webkit-scrollbar {
+.chat-messages::-webkit-scrollbar {
   width: 4px;
 }
 
-.seeker-messages::-webkit-scrollbar-thumb {
+.chat-messages::-webkit-scrollbar-thumb {
   background: rgba(var(--sage-rgb), 0.15);
   border-radius: 2px;
 }
 
-.seeker-message {
+.chat-message {
   display: flex;
   animation: fadeSlideIn 0.25s ease;
 }
 
-.seeker-message--assistant {
+.chat-message--assistant {
   justify-content: flex-start;
 }
 
-.seeker-message--user {
+.chat-message--user {
   justify-content: flex-end;
 }
 
-.seeker-message-bubble {
+.chat-message-bubble {
   max-width: 75%;
   padding: 10px 14px;
   border-radius: var(--r-md);
@@ -1973,7 +2054,7 @@ button, input, select, textarea, canvas, a, label,
   white-space: pre-wrap;
 }
 
-.seeker-message--assistant .seeker-message-bubble {
+.chat-message--assistant .chat-message-bubble {
   background: var(--glass);
   backdrop-filter: blur(30px) saturate(1.3);
   -webkit-backdrop-filter: blur(30px) saturate(1.3);
@@ -1982,13 +2063,13 @@ button, input, select, textarea, canvas, a, label,
   box-shadow: 0 1px 3px var(--glass-shadow);
 }
 
-.seeker-message--user .seeker-message-bubble {
+.chat-message--user .chat-message-bubble {
   background: rgba(var(--sage-rgb), 0.15);
   border: 1px solid rgba(var(--sage-rgb), 0.2);
   color: var(--text);
 }
 
-.seeker-input-area {
+.chat-input-area {
   display: flex;
   gap: 8px;
   padding-top: 12px;
@@ -1997,7 +2078,7 @@ button, input, select, textarea, canvas, a, label,
   align-items: flex-end;
 }
 
-.seeker-input {
+.chat-input {
   flex: 1;
   padding: 9px 14px;
   background: var(--glass);
@@ -2015,24 +2096,40 @@ button, input, select, textarea, canvas, a, label,
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.seeker-input::-webkit-scrollbar {
+.chat-input::-webkit-scrollbar {
   width: 4px;
 }
 
-.seeker-input::-webkit-scrollbar-thumb {
+.chat-input::-webkit-scrollbar-thumb {
   background: rgba(var(--sage-rgb), 0.15);
   border-radius: 2px;
 }
 
-.seeker-input::placeholder {
+.chat-input::placeholder {
   color: var(--text-tertiary);
 }
 
-.seeker-input:focus {
+.chat-input:focus {
   outline: none;
   border-color: rgba(var(--sage-rgb), 0.4);
   box-shadow: 0 0 0 3px rgba(var(--sage-rgb), 0.08);
 }
+
+.chat-typing {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sage);
+  animation: chatBlink 1s infinite;
+}
+
+@keyframes chatBlink {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+/* ── Seeker View ──────────────────────────────────────────── */
 
 .seeker-status {
   display: flex;
@@ -2054,20 +2151,6 @@ button, input, select, textarea, canvas, a, label,
   padding: 12px 16px;
   margin-top: 8px;
   flex-shrink: 0;
-}
-
-.seeker-typing {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--sage);
-  animation: seekerBlink 1s infinite;
-}
-
-@keyframes seekerBlink {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
 }
 
 /* ── Seeker History ───────────────────────────────────────── */

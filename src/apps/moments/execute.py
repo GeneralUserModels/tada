@@ -404,6 +404,30 @@ def run(
     effective_frequency = frequency_override or fm.get("frequency", "")
     effective_schedule = schedule_override or fm.get("schedule", "")
 
+    # Read user feedback files and state (thumbs, dismissed, etc.)
+    feedback_section = ""
+    slug = Path(output_dir).name
+    tada_dir = Path(output_dir).parent.parent
+    state_path = tada_dir / "results" / "_moment_state.json"
+    if state_path.exists():
+        all_state = json.loads(state_path.read_text())
+        slug_state = all_state.get(slug, {})
+        thumbs = slug_state.get("thumbs")
+        if thumbs:
+            feedback_section += f"\n\n## User Rating\n\nThe user gave this moment a **thumbs {thumbs}**."
+
+    feedback_files = sorted(Path(output_dir).glob("feedback_*.md"))
+    if feedback_files:
+        parts = []
+        for f in feedback_files:
+            parts.append(f"### {f.stem}\n\n{f.read_text()}")
+        feedback_section += (
+            "\n\n## User Feedback\n\n"
+            "The user has provided feedback on previous versions of this moment. Incorporate this feedback "
+            "into your output — address their concerns, adjust the content or presentation accordingly.\n\n"
+            + "\n\n".join(parts)
+        )
+
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     existing_index = Path(output_dir) / "index.html"
     if existing_index.exists():
@@ -415,7 +439,7 @@ def run(
             frequency=effective_frequency,
             schedule=effective_schedule,
             last_run_at=last_run_str,
-        )
+        ) + feedback_section
     else:
         instruction = f"Current date and time: **{now}**\n\n" + INSTRUCTION_TEMPLATE.format(
             task_content=task_content,
@@ -461,6 +485,17 @@ def run(
             _restore_backup(pre_refine_dir, output_dir)
         else:
             shutil.rmtree(pre_refine_dir)
+
+        # Mark any feedback as incorporated
+        if feedback_files:
+            from apps.moments.state import load_state, save_state
+            tada_dir = Path(output_dir).parent.parent
+            all_state = load_state(tada_dir)
+            slug = Path(output_dir).name
+            entry = {**all_state.get(slug, {})}
+            entry["last_feedback_incorporated_at"] = datetime.now(timezone.utc).isoformat()
+            all_state[slug] = entry
+            save_state(tada_dir, all_state)
 
         _cleanup_backup(backup_dir)
         return True

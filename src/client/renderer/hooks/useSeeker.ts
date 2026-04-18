@@ -1,8 +1,15 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { getSeekerStatus, getSeekerConversation, endSeekerConversation, getSeekerHistory, getSeekerPastConversation } from "../api/client";
-import { getServerUrl } from "../../shared/api-core";
+/**
+ * useSeeker — seeker-specific hook built on top of useChat.
+ *
+ * Adds: status polling, conversation history, past conversation viewing,
+ * SSE event listeners for seeker_questions_ready / seeker_conversation_ended.
+ */
+
+import { useState, useCallback, useEffect } from "react";
+import { getSeekerStatus, getSeekerConversation, getSeekerHistory, getSeekerPastConversation } from "../api/client";
 import { on as sseOn } from "../api/sse";
 import { useAppContext } from "../context/AppContext";
+import { useChat } from "./useChat";
 
 export interface HistoryEntry {
   filename: string;
@@ -11,19 +18,20 @@ export interface HistoryEntry {
 
 export function useSeeker() {
   const { dispatch } = useAppContext();
+  const chat = useChat({ apiPrefix: "/api/seeker", doneMarker: "[DONE]" });
   const [status, setStatus] = useState<SeekerStatus | null>(null);
-  const [messages, setMessages] = useState<SeekerMessage[]>([]);
-  const [streaming, setStreaming] = useState(false);
   const [loading, setLoading] = useState(true);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [viewingFile, setViewingFile] = useState<string | null>(null);
-  const [viewingMessages, setViewingMessages] = useState<SeekerMessage[]>([]);
-  const abortRef = useRef<AbortController | null>(null);
+  const [viewingMessages, setViewingMessages] = useState<ChatMessage[]>([]);
 
   const loadStatus = useCallback(async () => {
     try {
       const s = await getSeekerStatus();
       setStatus(s);
+      if (s.conversation_active) {
+        chat.setActive(true);
+      }
       if (s.has_questions && !s.questions_answered) {
         dispatch({ type: "SEEKER_QUESTIONS_READY" });
       } else {
@@ -32,18 +40,19 @@ export function useSeeker() {
     } catch (e) {
       console.error("[seeker] status load failed:", e);
     }
-  }, [dispatch]);
+  }, [dispatch, chat.setActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadConversation = useCallback(async () => {
     try {
       const conv = await getSeekerConversation();
-      setMessages(conv.messages);
+      chat.setMessages(conv.messages);
+      chat.setActive(conv.active);
     } catch (e) {
       console.error("[seeker] conversation load failed:", e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [chat.setMessages, chat.setActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadHistory = useCallback(async () => {
     try {
@@ -58,7 +67,9 @@ export function useSeeker() {
     try {
       const data = await getSeekerPastConversation(filename);
       setViewingFile(filename);
-      setViewingMessages(data.messages);
+      // Skip the first message (initial "ask me whatever" prompt)
+      const msgs = data.messages;
+      setViewingMessages(msgs.length > 0 && msgs[0].role === "user" ? msgs.slice(1) : msgs);
     } catch (e) {
       console.error("[seeker] past conversation load failed:", e);
     }
@@ -69,103 +80,17 @@ export function useSeeker() {
     setViewingMessages([]);
   }, []);
 
-  async function streamResponse(path: string, body?: unknown) {
-    setStreaming(true);
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const res = await fetch(`${getServerUrl()}${path}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: body ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("[seeker] stream error:", text);
-        setMessages((prev) => prev.slice(0, -1));
-        setStreaming(false);
-        return;
-      }
-
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop()!;
-
-        for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith("data: ")) continue;
-          const data = JSON.parse(line.slice(6));
-
-          if (data.token) {
-            setMessages((prev) => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              updated[updated.length - 1] = { ...last, content: last.content + data.token };
-              return updated;
-            });
-          }
-
-          if (data.done) {
-            if (data.conversation_ended) {
-              setMessages((prev) => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                updated[updated.length - 1] = {
-                  ...last,
-                  content: last.content.replace("[DONE]", "").trim(),
-                };
-                return updated;
-              });
-            }
-            await loadStatus();
-            await loadHistory();
-          }
-        }
-      }
-    } catch (e: unknown) {
-      if (e instanceof Error && e.name === "AbortError") return;
-      console.error("[seeker] stream error:", e);
-    } finally {
-      setStreaming(false);
-      abortRef.current = null;
-    }
-  }
-
   const startConversation = useCallback(async () => {
-    setMessages([]);
-    await streamResponse("/api/seeker/start");
+    await chat.startConversation();
     await loadStatus();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const sendMessage = useCallback(async (content: string) => {
-    setMessages((prev) => [...prev, { role: "user", content }]);
-    await streamResponse("/api/seeker/message", { content });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chat.startConversation, loadStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const endConversation = useCallback(async () => {
-    if (abortRef.current) abortRef.current.abort();
-    try {
-      await endSeekerConversation();
-    } catch (e) {
-      console.error("[seeker] end failed:", e);
-    }
+    await chat.endConversation();
     await loadStatus();
     await loadConversation();
     await loadHistory();
-  }, [loadStatus, loadConversation, loadHistory]);
+  }, [chat.endConversation, loadStatus, loadConversation, loadHistory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     sseOn("seeker_questions_ready", () => {
@@ -180,9 +105,13 @@ export function useSeeker() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
+    // Chat (generic)
+    messages: chat.messages,
+    streaming: chat.streaming,
+    active: chat.active,
+    sendMessage: chat.sendMessage,
+    // Seeker-specific
     status,
-    messages,
-    streaming,
     loading,
     history,
     viewingFile,
@@ -193,7 +122,6 @@ export function useSeeker() {
     viewPastConversation,
     clearViewing,
     startConversation,
-    sendMessage,
     endConversation,
   };
 }

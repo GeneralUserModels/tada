@@ -11,8 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-import litellm
-
+from chat import ChatAgent, ChatSession
 from server.config import DEFAULT_AGENT_MODEL
 
 SYSTEM_PROMPT = """\
@@ -52,25 +51,20 @@ def run(logs_dir: str, model: str = DEFAULT_AGENT_MODEL) -> str:
     if not questions.strip():
         return "questions.md is empty. Run seek.py first to generate questions."
 
-    system_prompt = SYSTEM_PROMPT.format(questions=questions)
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "Go ahead — ask me whatever you'd like to know."},
-    ]
+    agent = ChatAgent(model=model, system_prompt=SYSTEM_PROMPT.format(questions=questions))
+    session = ChatSession(
+        agent=agent,
+        done_marker=DONE_MARKER,
+        initial_user_message="Go ahead — ask me whatever you'd like to know.",
+    )
 
     print("Starting conversation (type 'q' to quit early)\n")
 
-    while True:
-        response = litellm.completion(model=model, messages=messages)
-        assistant_text = response.choices[0].message.content
+    while session.active:
+        response = session.respond()
+        print(f"\n{session.display_text(response)}\n")
 
-        done = DONE_MARKER in assistant_text
-        display_text = assistant_text.replace(DONE_MARKER, "").strip()
-        print(f"\n{display_text}\n")
-
-        messages.append({"role": "assistant", "content": assistant_text})
-
-        if done:
+        if session.ended:
             break
 
         try:
@@ -82,24 +76,12 @@ def run(logs_dir: str, model: str = DEFAULT_AGENT_MODEL) -> str:
         if user_input.strip().lower() in ("q", "quit", "exit"):
             break
 
-        messages.append({"role": "user", "content": user_input})
+        session.add_user_message(user_input)
 
     # Save conversation
     timestamp = datetime.now().strftime("%Y%m%d")
     output_path = conversations_dir / f"conversation_{timestamp}.md"
-
-    # Build markdown from the conversation
-    lines = ["# Conversation\n"]
-    for msg in messages:
-        if msg["role"] == "system":
-            continue
-        if msg["role"] == "assistant":
-            text = msg["content"].replace(DONE_MARKER, "").strip()
-            lines.append(f"**Seeker:** {text}\n")
-        else:
-            lines.append(f"**User:** {msg['content']}\n")
-
-    output_path.write_text("\n".join(lines))
+    session.save(output_path, assistant_label="Seeker")
     print(f"\nConversation saved to {output_path}")
     return str(output_path)
 

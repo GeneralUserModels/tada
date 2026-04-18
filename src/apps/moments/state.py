@@ -34,4 +34,5 @@ DEFAULT_SLUG_STATE = {
     "last_viewed": None,
     "schedule_override": None,
     "frequency_override": None,
+    "last_feedback_incorporated_at": None,
 }

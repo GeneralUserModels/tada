@@ -145,6 +145,14 @@ Read ALL existing task files in {logs_dir}/tasks/ — you must not duplicate any
 is to find NEW tasks that aren't already covered. If a new session reveals a variation or extension \
 of an existing task, note that in a new task file rather than modifying the existing one.
 
+### User signals on past tadas:
+The user's selected tadas live in {logs_dir}/../logs-tada/. Their results (executed output) are in \
+{logs_dir}/../logs-tada/results/. Read `{logs_dir}/../logs-tada/results/_moment_state.json` to see \
+user signals per tada — thumbs up/down, dismissed, pinned, view counts. Each result directory may \
+also contain `feedback_*.md` files with conversational feedback the user gave about that tada. \
+Use these signals to understand what kinds of tadas the user finds valuable and what they dislike, \
+so you can propose better tasks.
+
 When you are done, run `ls -la {logs_dir}/tasks/` to verify all task files exist and are non-empty. Read a few back to confirm they have real content, not placeholder text.
 """
 
