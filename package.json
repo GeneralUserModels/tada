@@ -105,7 +105,8 @@
     "publish": {
       "provider": "github",
       "owner": "GeneralUserModels",
-      "repo": "tada"
+      "repo": "tada",
+      "channel": "alpha"
     },
     "dmg": {
       "title": "Tada",

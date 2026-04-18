@@ -1,6 +1,6 @@
 /** Auto-updater — uses electron-updater to download and install updates from GitHub Releases. */
 
-import { BrowserWindow } from "electron";
+import { app, BrowserWindow } from "electron";
 import { autoUpdater } from "electron-updater";
 import { IPC } from "../ipc";
 
@@ -12,6 +12,7 @@ const CHECK_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.channel = app.getVersion().split("-")[1] ?? "latest";
 
 autoUpdater.on("update-available", (info) => {
   pendingVersion = info.version;
