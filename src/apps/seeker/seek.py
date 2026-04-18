@@ -87,7 +87,8 @@ or do you wish you could stay focused longer?" is good. "Do you like programming
 need, or feel in the future. "What's your favorite color?" fails. "Are you planning to deploy by end of \
 week?" passes.
 
-5. **Not duplicate any existing question** from questions.md or previously asked in conversation files.
+5. **Not duplicate** any question already answered in the conversation files, and (for newly added \
+questions) not overlap with questions you're keeping from questions.md.
 
 6. **Be conversational and direct** — these come from an AI that has been observing the user. \
 Acknowledge that naturally. Don't be creepy, but don't pretend you haven't been watching.

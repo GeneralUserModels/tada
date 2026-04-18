@@ -19,10 +19,6 @@ def _conversations_dir(state) -> Path:
     return Path(state.config.log_dir).resolve() / "active-conversations"
 
 
-def _questions_path(state) -> Path:
-    return _conversations_dir(state) / "questions.md"
-
-
 def _state_path(state) -> Path:
     return _conversations_dir(state) / "seeker_state.json"
 
