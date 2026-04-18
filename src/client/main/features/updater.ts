@@ -1,6 +1,6 @@
 /** Auto-updater — uses electron-updater to download and install updates from GitHub Releases. */
 
-import { BrowserWindow } from "electron";
+import { app, BrowserWindow } from "electron";
 import { autoUpdater } from "electron-updater";
 import { IPC } from "../ipc";
 
@@ -58,6 +58,13 @@ export function checkForUpdates(): void {
 }
 
 export function installUpdate(): void {
+  // On macOS the app stays alive after all windows close (standard behavior),
+  // which prevents quitAndInstall from actually restarting. Force-close all
+  // windows first so the quit goes through cleanly.
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.removeAllListeners("close");
+    win.destroy();
+  }
   autoUpdater.quitAndInstall(false, true);
 }
 
