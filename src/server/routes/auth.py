@@ -305,6 +305,9 @@ async def google_start(request: Request):
     port = _free_port()
     redirect_uri = f"http://localhost:{port}"
 
+    # access_type=offline + prompt=consent are required for Google to issue a
+    # provider refresh token. Without them, provider_token expires in 1h and
+    # Supabase session refresh can't mint a new one.
     auth_url = f"{alpha_url}/auth/v1/authorize?" + urllib.parse.urlencode({
         "provider": "google",
         "redirect_to": redirect_uri,
@@ -312,6 +315,8 @@ async def google_start(request: Request):
         "code_challenge_method": "S256",
         "flow_type": "pkce",
         "scopes": " ".join(GOOGLE_DATA_SCOPES),
+        "access_type": "offline",
+        "prompt": "consent",
     })
 
     code = await _oauth_loopback(auth_url, port)
