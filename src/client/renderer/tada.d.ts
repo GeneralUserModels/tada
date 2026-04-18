@@ -43,6 +43,13 @@ interface UpdateData {
   version: string;
 }
 
+interface UpdateProgressData {
+  percent: number;
+  transferred: number;
+  total: number;
+  bytesPerSecond: number;
+}
+
 interface ConnectorInfo {
   enabled: boolean;
   available: boolean;
@@ -130,8 +137,12 @@ interface TadaAPI {
 
   // Update check
   onUpdateAvailable: (cb: (data: UpdateData) => void) => void;
+  onUpdateProgress: (cb: (data: UpdateProgressData) => void) => void;
+  onUpdateDownloaded: (cb: (data: UpdateData) => void) => void;
+  onUpdateError: (cb: (data: { message: string }) => void) => void;
   dismissUpdate: () => void;
   checkForUpdates: () => Promise<unknown>;
+  installUpdate: () => void;
 
   // External links
   openExternalUrl: (url: string) => Promise<boolean>;

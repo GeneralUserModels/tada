@@ -14,6 +14,7 @@ from server.feature_flags import is_enabled
 from server.routes import settings, status, events
 from server.routes.auth import router as auth_router, refresh_expired_tokens, run_token_refresh
 from server.routes.onboarding import router as onboarding_router
+from server.routes.completions import router as completions_router
 from connectors.routes import router as connectors_router
 from user_models.routes import router as user_models_router
 
@@ -170,6 +171,7 @@ def create_app() -> FastAPI:
     # Register REST + SSE routes
     app.include_router(auth_router)
     app.include_router(onboarding_router)
+    app.include_router(completions_router)
     app.include_router(connectors_router)
     from apps.memory.routes import router as memory_router
     from apps.moments.routes import router as moments_router

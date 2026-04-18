@@ -10,6 +10,8 @@ Visit the site: **https://generalusermodels.github.io/tada/**
 
 Download the latest release [here](https://github.com/GeneralUserModels/tada/releases).
 
+## Developer Instructions
+
 ### Local install
 
 Make sure you have uv installed first. All you have to do then is:
@@ -21,7 +23,7 @@ npm install
 npm run dev
 ```
 
-### Research
+## Research
 
 Tada 🎉 builds on research across a few academic papers. If you're interested, you can read or cite the papers below!
 
@@ -73,6 +75,20 @@ Tada 🎉 builds on research across a few academic papers. If you're interested,
   title={Learning to Simulate Human Dialogue},
   author={Gandhi, Kanishk and Bhatia, Agam and Goodman, Noah D},
   journal={arXiv preprint arXiv:2601.04436},
+  year={2026}
+}
+```
+</details>
+
+<details>
+<summary><a href="https://arxiv.org/abs/2604.07629">Behavior Latticing: Inferring User Motivations from Unstructured Interactions
+</a></summary>
+
+```bibtex
+@article{zhao2026behavior,
+  title={Behavior Latticing: Inferring User Motivations from Unstructured Interactions},
+  author={Zhao, Dora and Lam, Michelle S and Yang, Diyi and Bernstein, Michael S},
+  journal={arXiv preprint arXiv:2604.07629},
   year={2026}
 }
 ```

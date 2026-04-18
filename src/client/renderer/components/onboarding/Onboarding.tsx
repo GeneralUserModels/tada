@@ -24,7 +24,7 @@ import {
 
 // ── Main Onboarding component ─────────────────────────────────
 
-export function Onboarding() {
+export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
   const [step, setStep] = useState(0);
   const [permModal, setPermModal] = useState<{ name: string; onGranted: () => void } | null>(null);
 
@@ -53,8 +53,12 @@ export function Onboarding() {
   const [connectingGoogle, setConnectingGoogle] = useState<string | null>(null);
   const [connectingOutlook, setConnectingOutlook] = useState(false);
 
-  // Load feature flags + restore saved Google user on mount
+  // Load feature flags + restore saved Google user once the server is reachable.
+  // On first launch the onboarding window opens before the server is up, so we
+  // wait for serverReady rather than firing on mount and failing silently.
   useEffect(() => {
+    if (!serverReady) return;
+
     getSettings()
       .then((s) => setFf((s as Record<string, unknown>).feature_flags as Record<string, boolean> | undefined))
       .catch(() => {});
@@ -65,7 +69,7 @@ export function Onboarding() {
         setStep(2);
       }
     }).catch(() => {});
-  }, []);
+  }, [serverReady]);
 
   // Model + API key state — defaults sourced from the shared model lists
   const [model, setModel] = useState(LLM_MODELS[0].value);
@@ -151,7 +155,7 @@ export function Onboarding() {
     return true;
   };
 
-  const handleSubmit = async () => {
+  const buildSettings = () => {
     const advanced: Record<string, string> = {};
     for (const [k, v] of Object.entries(advancedValues)) {
       if (v.trim()) advanced[k] = v.trim();
@@ -170,8 +174,13 @@ export function Onboarding() {
     };
     if (tinkerKey.trim()) settings.tinker_api_key = tinkerKey.trim();
     if (wandbKey.trim()) settings.wandb_api_key = wandbKey.trim();
+    return settings;
+  };
 
-    await updateSettings(settings);
+  const saveSettings = () => updateSettings(buildSettings());
+
+  const handleSubmit = async () => {
+    await saveSettings();
     await completeOnboarding();
     window.tada.onboardingComplete();
   };
@@ -203,7 +212,7 @@ export function Onboarding() {
 
       <StepIndicator current={step} total={5} />
 
-      {step === 0 && <WelcomeStep onStart={() => setStep(1)} />}
+      {step === 0 && <WelcomeStep onStart={() => setStep(1)} serverReady={serverReady} />}
 
       {step === 1 && (
         <GoogleSignInStep
@@ -265,7 +274,7 @@ export function Onboarding() {
           setAdvancedValues={setAdvancedValues}
           validateTinker={validateTinker}
           onBack={() => setStep(2)}
-          onFinish={() => setStep(4)}
+          onFinish={() => { saveSettings(); setStep(4); }}
         />
       )}
 

@@ -36,6 +36,11 @@ export function App() {
         {state.updateVersion && (
           <UpdateBanner
             version={state.updateVersion}
+            progress={state.updateProgress}
+            ready={state.updateReady}
+            installing={state.updateInstalling}
+            error={state.updateError}
+            onInstall={() => dispatch({ type: "UPDATE_INSTALLING" })}
             onDismiss={() => dispatch({ type: "UPDATE_DISMISSED" })}
           />
         )}

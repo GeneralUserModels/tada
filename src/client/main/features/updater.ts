@@ -1,66 +1,78 @@
-/** Lightweight version checker — compares local version against GitHub Releases. */
+/** Auto-updater — uses electron-updater to download and install updates from GitHub Releases. */
 
-import { app, BrowserWindow, net } from "electron";
+import { app, BrowserWindow } from "electron";
+import { autoUpdater } from "electron-updater";
 import { IPC } from "../ipc";
 
 let mainWindow: BrowserWindow | null = null;
+let pendingVersion: string | null = null;
+let pendingDownloaded = false;
 
-const GITHUB_OWNER = "GeneralUserModels";
-const GITHUB_REPO = "tada";
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
-interface GitHubRelease {
-  tag_name: string;
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+
+autoUpdater.on("update-available", (info) => {
+  pendingVersion = info.version;
+  pendingDownloaded = false;
+  console.log(`[updater] update available: ${pendingVersion}`);
+  mainWindow?.webContents.send(IPC.UPDATE_AVAILABLE, { version: pendingVersion });
+});
+
+autoUpdater.on("download-progress", (progress) => {
+  mainWindow?.webContents.send(IPC.UPDATE_PROGRESS, {
+    percent: progress.percent,
+    transferred: progress.transferred,
+    total: progress.total,
+    bytesPerSecond: progress.bytesPerSecond,
+  });
+});
+
+autoUpdater.on("update-downloaded", (info) => {
+  pendingVersion = info.version;
+  pendingDownloaded = true;
+  console.log(`[updater] update downloaded: ${pendingVersion}`);
+  mainWindow?.webContents.send(IPC.UPDATE_DOWNLOADED, { version: pendingVersion });
+});
+
+autoUpdater.on("error", (err) => {
+  console.log(`[updater] error:`, err.message);
+  mainWindow?.webContents.send(IPC.UPDATE_ERROR, { message: err.message });
+});
+
+function resendPendingUpdate(): void {
+  if (!pendingVersion || !mainWindow) return;
+  mainWindow.webContents.send(IPC.UPDATE_AVAILABLE, { version: pendingVersion });
+  if (pendingDownloaded) {
+    mainWindow.webContents.send(IPC.UPDATE_DOWNLOADED, { version: pendingVersion });
+  }
 }
 
-function stripLeadingV(tag: string): string {
-  return tag.startsWith("v") ? tag.slice(1) : tag;
-}
-
-function fetchLatestRelease(): Promise<string | null> {
-  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
-  return new Promise((resolve) => {
-    const request = net.request(url);
-    request.setHeader("Accept", "application/vnd.github.v3+json");
-    request.setHeader("User-Agent", `Tada/${app.getVersion()}`);
-
-    let body = "";
-    request.on("response", (response) => {
-      if (response.statusCode !== 200) {
-        console.log(`[updater] GitHub API returned ${response.statusCode}`);
-        resolve(null);
-        response.on("data", () => {});
-        return;
-      }
-      response.on("data", (chunk) => { body += chunk.toString(); });
-      response.on("end", () => {
-        try {
-          const data: GitHubRelease = JSON.parse(body);
-          resolve(stripLeadingV(data.tag_name));
-        } catch {
-          resolve(null);
-        }
-      });
-    });
-    request.on("error", (err) => { console.log(`[updater] request error:`, err); resolve(null); });
-    request.end();
+export function checkForUpdates(): void {
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.log(`[updater] check failed:`, err.message);
+    // Still re-surface a previously found update even if the check failed
+    resendPendingUpdate();
   });
 }
 
-export async function checkForUpdates(): Promise<void> {
-  const latest = process.env.TADA_LATEST_OVERRIDE ?? await fetchLatestRelease();
-  const current = process.env.TADA_VERSION_OVERRIDE ?? app.getVersion();
-  console.log(`[updater] latest=${latest}, current=${current}`);
-  if (!latest) return;
-
-  if (latest !== current) {
-    console.log(`[updater] new version available: ${latest} (current: ${current})`);
-    mainWindow?.webContents.send(IPC.UPDATE_AVAILABLE, { version: latest });
+export function installUpdate(): void {
+  // On macOS the app stays alive after all windows close (standard behavior),
+  // which prevents quitAndInstall from actually restarting. Force-close all
+  // windows first so the quit goes through cleanly.
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.removeAllListeners("close");
+    win.destroy();
   }
+  autoUpdater.quitAndInstall(false, true);
 }
 
 export function initUpdateChecker(win: BrowserWindow): void {
   mainWindow = win;
   checkForUpdates();
-  setInterval(checkForUpdates, CHECK_INTERVAL_MS);
+  setInterval(() => {
+    resendPendingUpdate();
+    checkForUpdates();
+  }, CHECK_INTERVAL_MS);
 }

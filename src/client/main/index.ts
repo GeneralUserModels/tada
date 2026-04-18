@@ -15,9 +15,9 @@ import * as api from "./api";
 import * as sse from "./sse";
 import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogleTokenPath, getOutlookTokenPath } from "./paths";
 import * as bootstrap from "./features/bootstrap";
-import { runOnboarding } from "./features/onboarding";
+import { runOnboarding, getOnboardingWindow } from "./features/onboarding";
 import { setupConnectorIpc } from "./connectors/manager";
-import { initUpdateChecker, checkForUpdates } from "./features/updater";
+import { initUpdateChecker, checkForUpdates, installUpdate } from "./features/updater";
 
 let serverProc: ChildProcess | null = null;
 
@@ -42,6 +42,16 @@ function ensureConfigDefaults(): void {
   if (changed) {
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
+  }
+}
+
+function isOnboardingComplete(): boolean {
+  try {
+    const configPath = path.join(getDataDir(), "tada-config.json");
+    const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    return cfg.onboarding_complete === true;
+  } catch {
+    return false;
   }
 }
 
@@ -174,10 +184,11 @@ function createSetupWindow(): BrowserWindow {
   return setupWindow;
 }
 
-function createDashboard() {
+function createDashboard({ show = true }: { show?: boolean } = {}) {
   dashboardWindow = new BrowserWindow({
     width: 900,
     height: 700,
+    show,
     title: "Tada",
     titleBarStyle: "hiddenInset",
     backgroundColor: "#F4F2EE",
@@ -225,6 +236,7 @@ function setupIpc() {
 
   // Update check
   ipcMain.handle(IPC.UPDATE_CHECK, () => checkForUpdates());
+  ipcMain.on(IPC.UPDATE_INSTALL, () => installUpdate());
 
   // Open URLs in the OS default browser
   ipcMain.handle(IPC.OPEN_EXTERNAL_URL, (_e, url: string) => {
@@ -296,15 +308,26 @@ app.whenReady().then(async () => {
     api.setServerUrl(`http://127.0.0.1:${port}`);
     startServer(port);
   }
-  await waitForServer(`${api.getServerUrl()}/api/status`);
 
-  const { complete } = await api.getOnboardingStatus() as { complete: boolean };
-  if (!complete) {
-    await runOnboarding();
-  }
+  const needsOnboarding = !isOnboardingComplete();
 
-  createDashboard();
+  // Show the dashboard immediately for returning users so they see a
+  // loading state while the server starts. For first-launch, keep it
+  // hidden until onboarding finishes.
+  createDashboard({ show: !needsOnboarding });
   setupSseForwarding();
+
+  const serverReady = waitForServer(`${api.getServerUrl()}/api/status`);
+
+  if (needsOnboarding) {
+    // Open onboarding immediately so there's no windowless gap after
+    // setup closes. The server boots in parallel; onboarding defers
+    // its SERVER_READY IPC until the promise resolves.
+    await runOnboarding(serverReady);
+    dashboardWindow?.show();
+  } else {
+    await serverReady;
+  }
 
   if (dashboardWindow) {
     initUpdateChecker(dashboardWindow);
@@ -332,6 +355,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  stopServer();
 });
 
 app.on("window-all-closed", () => {
@@ -343,7 +367,11 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-  if (dashboardWindow) {
+  const onboarding = getOnboardingWindow();
+  if (onboarding) {
+    onboarding.show();
+    onboarding.focus();
+  } else if (dashboardWindow) {
     dashboardWindow.show();
   }
 });

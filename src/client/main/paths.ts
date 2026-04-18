@@ -11,8 +11,8 @@ export function isDev(): boolean {
 
 export function getDataDir(): string {
   if (isDev()) {
-    // In dev, keep all config/assets rooted at the local project path.
-    return app.getAppPath();
+    // __dirname is dist/main/ at runtime; project root is two levels up.
+    return path.resolve(__dirname, "..", "..");
   }
 
   const appSupportDir = path.join(os.homedir(), "Library", "Application Support");

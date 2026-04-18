@@ -62,7 +62,7 @@ export function ConnectorsView() {
         {!state.servicesReady ? (
           <div style={{ color: "#9BA896", fontSize: 13, padding: "24px 12px", display: "flex", alignItems: "center", gap: 10 }}>
             <span className="spinner" />
-            Starting up...
+            Starting up (this can take a few minutes)...
           </div>
         ) : loading ? (
           <div style={{ color: "#9BA896", fontSize: 12, padding: 12 }}>Loading...</div>
