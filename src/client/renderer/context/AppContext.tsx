@@ -34,7 +34,10 @@ export interface AppState {
   historyItems: HistoryItem[];
   settings: Record<string, unknown>;
   updateVersion: string | null;
+  updateProgress: number | null;
   updateReady: boolean;
+  updateInstalling: boolean;
+  updateError: string | null;
 }
 
 type AppAction =
@@ -52,7 +55,10 @@ type AppAction =
   | { type: "SEED_LABEL_HISTORY"; history: { text: string; timestamp: number }[] }
   | { type: "LOAD_SETTINGS"; settings: Record<string, unknown> }
   | { type: "UPDATE_AVAILABLE"; version: string }
+  | { type: "UPDATE_PROGRESS"; percent: number }
   | { type: "UPDATE_DOWNLOADED" }
+  | { type: "UPDATE_INSTALLING" }
+  | { type: "UPDATE_ERROR"; message: string }
   | { type: "UPDATE_DISMISSED" };
 
 let historyCounter = 0;
@@ -81,7 +87,10 @@ const initialState: AppState = {
   historyItems: [],
   settings: {},
   updateVersion: null,
+  updateProgress: null,
   updateReady: false,
+  updateInstalling: false,
+  updateError: null,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -188,13 +197,22 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, settings: action.settings };
 
     case "UPDATE_AVAILABLE":
-      return { ...state, updateVersion: action.version };
+      return { ...state, updateVersion: action.version, updateError: null };
+
+    case "UPDATE_PROGRESS":
+      return { ...state, updateProgress: action.percent };
 
     case "UPDATE_DOWNLOADED":
-      return { ...state, updateReady: true };
+      return { ...state, updateReady: true, updateProgress: 100 };
+
+    case "UPDATE_INSTALLING":
+      return { ...state, updateInstalling: true };
+
+    case "UPDATE_ERROR":
+      return { ...state, updateError: action.message, updateInstalling: false };
 
     case "UPDATE_DISMISSED":
-      return { ...state, updateVersion: null, updateReady: false };
+      return { ...state, updateVersion: null, updateReady: false, updateProgress: null, updateInstalling: false, updateError: null };
 
     default:
       return state;
@@ -268,8 +286,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     window.tada.onUpdateAvailable((data) => {
       dispatch({ type: "UPDATE_AVAILABLE", version: data.version });
     });
+    window.tada.onUpdateProgress((data) => {
+      dispatch({ type: "UPDATE_PROGRESS", percent: data.percent });
+    });
     window.tada.onUpdateDownloaded(() => {
       dispatch({ type: "UPDATE_DOWNLOADED" });
+    });
+    window.tada.onUpdateError((data) => {
+      dispatch({ type: "UPDATE_ERROR", message: data.message });
     });
   }, []);
 

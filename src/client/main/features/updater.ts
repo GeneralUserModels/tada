@@ -20,6 +20,15 @@ autoUpdater.on("update-available", (info) => {
   mainWindow?.webContents.send(IPC.UPDATE_AVAILABLE, { version: pendingVersion });
 });
 
+autoUpdater.on("download-progress", (progress) => {
+  mainWindow?.webContents.send(IPC.UPDATE_PROGRESS, {
+    percent: progress.percent,
+    transferred: progress.transferred,
+    total: progress.total,
+    bytesPerSecond: progress.bytesPerSecond,
+  });
+});
+
 autoUpdater.on("update-downloaded", (info) => {
   pendingVersion = info.version;
   pendingDownloaded = true;
@@ -29,6 +38,7 @@ autoUpdater.on("update-downloaded", (info) => {
 
 autoUpdater.on("error", (err) => {
   console.log(`[updater] error:`, err.message);
+  mainWindow?.webContents.send(IPC.UPDATE_ERROR, { message: err.message });
 });
 
 function resendPendingUpdate(): void {

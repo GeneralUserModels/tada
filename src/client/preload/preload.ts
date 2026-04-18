@@ -2,6 +2,13 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 
+interface UpdateProgressData {
+  percent: number;
+  transferred: number;
+  total: number;
+  bytesPerSecond: number;
+}
+
 // Cache one-shot IPCs so late-registering renderers (e.g. after Vite JS load)
 // still get the payload even if the IPC fired before React mounted.
 let serverReadyCache: { url: string } | null = null;
@@ -12,6 +19,11 @@ ipcRenderer.once("server:ready", (_e, data: { url: string }) => {
 let updateAvailableCache: { version: string } | null = null;
 ipcRenderer.on("update:available", (_e, data: { version: string }) => {
   updateAvailableCache = data;
+});
+
+let updateProgressCache: UpdateProgressData | null = null;
+ipcRenderer.on("update:progress", (_e, data: UpdateProgressData) => {
+  updateProgressCache = data;
 });
 
 let updateDownloadedCache: { version: string } | null = null;
@@ -51,9 +63,16 @@ contextBridge.exposeInMainWorld("tada", {
     if (updateAvailableCache) cb(updateAvailableCache);
     ipcRenderer.on("update:available", (_e, data) => cb(data));
   },
+  onUpdateProgress: (cb: (data: UpdateProgressData) => void) => {
+    if (updateProgressCache) cb(updateProgressCache);
+    ipcRenderer.on("update:progress", (_e, data) => cb(data));
+  },
   onUpdateDownloaded: (cb: (data: { version: string }) => void) => {
     if (updateDownloadedCache) cb(updateDownloadedCache);
     ipcRenderer.on("update:downloaded", (_e, data) => cb(data));
+  },
+  onUpdateError: (cb: (data: { message: string }) => void) => {
+    ipcRenderer.on("update:error", (_e, data) => cb(data));
   },
   dismissUpdate: () => ipcRenderer.send("update:dismiss"),
   checkForUpdates: () => ipcRenderer.invoke("update:check"),

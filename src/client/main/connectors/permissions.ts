@@ -150,8 +150,7 @@ const accessibilityPermission: PermissionDescriptor = {
   body: "Tada needs Accessibility permission for Tab autocomplete (Tabracadabra).",
   steps: [
     "Open System Settings → Privacy & Security → Accessibility",
-    'Click the "+" button and select "Tada"',
-    "Toggle the switch on",
+    'Toggle on "Tada" switch on (or the terminal, if you\'re in developer mode)',
   ],
 };
 
