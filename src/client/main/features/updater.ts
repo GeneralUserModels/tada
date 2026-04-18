@@ -1,6 +1,6 @@
 /** Auto-updater — uses electron-updater to download and install updates from GitHub Releases. */
 
-import { app, BrowserWindow } from "electron";
+import { BrowserWindow } from "electron";
 import { autoUpdater } from "electron-updater";
 import { IPC } from "../ipc";
 
@@ -8,7 +8,7 @@ let mainWindow: BrowserWindow | null = null;
 let pendingVersion: string | null = null;
 let pendingDownloaded = false;
 
-const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const CHECK_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
@@ -58,13 +58,8 @@ export function checkForUpdates(): void {
 }
 
 export function installUpdate(): void {
-  // On macOS the app stays alive after all windows close (standard behavior),
-  // which prevents quitAndInstall from actually restarting. Force-close all
-  // windows first so the quit goes through cleanly.
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.removeAllListeners("close");
-    win.destroy();
-  }
+  // Force isSilent=false so electron-updater calls app.quit() internally,
+  // and isForceRunAfter=true so the new version launches after install.
   autoUpdater.quitAndInstall(false, true);
 }
 
