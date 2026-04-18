@@ -1,0 +1,8 @@
+
+## Incremental Discovery
+
+This is a RE-RUN. The last one-off discovery was on **{last_discovery_date}**. Prioritize labels with `start_time` after this date, but analyze ALL sessions thoroughly.
+
+### Sessions with new content since last discovery:
+{sessions_with_new_content_list}
+

@@ -280,22 +280,7 @@ async def rerun_moment(slug: str, request: Request):
 
 # ── Feedback ──────────────────────────────────────────────────
 
-FEEDBACK_SYSTEM_PROMPT = """\
-You are collecting feedback on a Tada moment called "{title}".
-
-Description: {description}
-
-Below are the moment's output files for context:
-
-{file_contents}
-
-Rules:
-- Respond in ONE short sentence. Never more than two sentences.
-- Acknowledge what the user said. Do NOT ask follow-up questions unless something is genuinely unclear.
-- You are a note-taker, not an interviewer. Just confirm you got it and wait for more.
-- Never summarize, restate, or list back what the user told you.
-- If the user seems done, just say something like "Got it" or "Noted".
-"""
+FEEDBACK_SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "feedback.txt").read_text()
 
 
 def _read_moment_files(result_dir: Path) -> str:

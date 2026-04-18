@@ -18,46 +18,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/seeker", tags=["seeker"])
 
-SYSTEM_PROMPT = """\
-You are having a conversation with a user to understand them better. You have a set of questions \
-generated from observing their digital activity logs. Your goal is to ask these questions naturally \
-in conversation — not as a survey, but as a genuine dialogue.
-
-Guidelines:
-- Ask one question at a time. Wait for the answer before moving on.
-- Follow up on interesting answers — dig deeper when something is revealing or surprising.
-- You don't have to ask every question. Skip ones that feel redundant given what you've learned.
-- Be conversational, warm, and direct. You're an AI that's been watching their activity — own that.
-- Keep your messages short. A question plus a brief observation or transition, nothing more.
-- When you feel you've learned enough or the user seems done, end the conversation.
-
-To end the conversation, include [DONE] at the very end of your message. Before ending, briefly \
-summarize what you've learned in 2-3 sentences.
-
-Here are the questions to guide the conversation:
-
-{questions}
-"""
+_PROMPTS = Path(__file__).parent / "prompts"
+SYSTEM_PROMPT = (_PROMPTS / "conversation.txt").read_text()
+CLEANUP_PROMPT = (_PROMPTS / "cleanup.txt").read_text()
 
 DONE_MARKER = "[DONE]"
-
-CLEANUP_PROMPT = """\
-Below is a conversation between a Seeker AI and a user, followed by a list of questions the Seeker \
-had available. Identify which questions were adequately covered or answered during the conversation. \
-A question counts as covered if the conversation addressed its core topic, even if the exact wording \
-differed.
-
-Return ONLY the exact heading lines (starting with ##) of the covered questions, one per line. \
-If none were covered, return "NONE".
-
-## Conversation
-
-{conversation}
-
-## Questions
-
-{questions}
-"""
 
 
 def _conversations_dir(state) -> Path:

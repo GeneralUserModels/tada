@@ -61,7 +61,7 @@ type AppAction =
   | { type: "SEEKER_QUESTIONS_READY" }
   | { type: "SEEKER_QUESTIONS_CLEARED" }
   | { type: "TADA_NEW_MOMENT" }
-  | { type: "PENSIEVE_UPDATED" };
+  | { type: "PENSIEVE_UPDATED" }
   | { type: "UPDATE_PROGRESS"; percent: number }
   | { type: "UPDATE_DOWNLOADED" }
   | { type: "UPDATE_INSTALLING" }
