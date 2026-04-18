@@ -93,8 +93,16 @@ async def list_results(request: Request, include_dismissed: bool = False):
         if slug_state["dismissed"] and not include_dismissed:
             continue
 
-        # Use the actual file modification time as "last updated"
-        mtime = os.path.getmtime(index_path)
+        # index.html's shell often stays stable across reruns and meta.json's
+        # agent-written completed_at can be hallucinated. Take the freshest
+        # mtime across agent-written output files, skipping user-interaction
+        # artifacts like feedback_*.md that would inflate "last updated".
+        result_dir = meta_path.parent
+        output_files = [
+            f for f in result_dir.iterdir()
+            if f.is_file() and not f.name.startswith("feedback_")
+        ]
+        mtime = max(f.stat().st_mtime for f in output_files)
         completed_at = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
 
         # Feedback status
@@ -259,8 +267,15 @@ async def rerun_moment(slug: str, request: Request):
                 effective_schedule = sched_override or fm.get("schedule", "")
                 meta_path = Path(output_dir) / "meta.json"
                 meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-                index_path = Path(output_dir) / "index.html"
-                true_updated = datetime.fromtimestamp(index_path.stat().st_mtime, tz=timezone.utc).isoformat() if index_path.exists() else datetime.now().isoformat()
+                result_dir = Path(output_dir)
+                output_files = [
+                    f for f in result_dir.iterdir()
+                    if f.is_file() and not f.name.startswith("feedback_")
+                ] if result_dir.exists() else []
+                true_updated = (
+                    datetime.fromtimestamp(max(f.stat().st_mtime for f in output_files), tz=timezone.utc).isoformat()
+                    if output_files else datetime.now().isoformat()
+                )
                 await state.broadcast("moment_completed", {
                     "slug": slug,
                     "title": meta.get("title", fm.get("title", slug)),
