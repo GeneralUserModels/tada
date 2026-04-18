@@ -1,4 +1,4 @@
-"""Scheduler: runs seek.py when all questions have been answered."""
+"""Scheduler: runs seek.py once every 24h. seek.py decides what to do with any existing questions."""
 
 from __future__ import annotations
 
@@ -40,20 +40,12 @@ def _save_seeker_state(state, data: dict):
     path.write_text(json.dumps(data, indent=2))
 
 
-def _has_questions(state) -> bool:
-    qp = _questions_path(state)
-    return qp.exists() and qp.read_text().strip() != ""
-
-
 def _should_run(state) -> bool:
-    """Check if seek.py should run: enabled, no pending questions, not mid-conversation, 24h cooldown."""
+    """Check if seek.py should run: enabled, not mid-conversation, 24h cooldown."""
     if not (is_enabled(state.config, "seeker") and state.config.seeker_enabled):
         return False
 
     if state.seeker_conversation_active:
-        return False
-
-    if _has_questions(state):
         return False
 
     seeker_state = _load_seeker_state(state)
@@ -67,7 +59,7 @@ def _should_run(state) -> bool:
 
 
 async def run_seeker_scheduler(state) -> None:
-    """Background task: run seek.py when all questions are answered (24h cooldown)."""
+    """Background task: run seek.py once every 24h; seek.py curates any pre-existing questions."""
     logger.info("Seeker scheduler started")
 
     from agent.builder import _ensure_sandbox_async

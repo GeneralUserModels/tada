@@ -23,7 +23,8 @@ Your questions will be presented to the user in a conversation. Their answers wi
 ## Step 1: Read existing conversations
 
 Check {logs_dir}/active-conversations/ for any existing files:
-- **questions.md** — previously generated questions. Read it to avoid duplicates.
+- **questions.md** — previously generated but still-unanswered questions. You will curate these in Step 3 \
+(keep, update, or delete each one) before adding new ones.
 - **conversation_*.md** — past conversations with the user. Read ALL of them. These are gold — they \
 tell you what the user has already shared about themselves. Use this to go deeper, not wider.
 
@@ -52,9 +53,19 @@ your questions go deeper, not wider. Ask about things the wiki is uncertain or s
 
 Use subagents to read session directories in parallel.
 
-## Step 3: Reflect and generate questions
+## Step 3: Curate existing questions, then generate new ones
 
-Generate 5-10 questions. Each question should:
+First, review each question currently in questions.md and decide one of:
+- **keep** — still relevant and well-phrased given what you've now observed
+- **update** — the underlying observation has evolved, or the phrasing can be sharpened; rewrite it
+- **delete** — no longer relevant (stale, overtaken by something the user clearly revealed in logs or \
+conversations, or low-value compared to better questions you could ask)
+
+Aim for a final questions.md that totals 5-10 high-quality questions (kept + updated + new combined). \
+If the file already has strong coverage, prefer deleting weaker ones over piling on new ones. \
+If the existing questions are all stale, it's fine to delete them all and start fresh.
+
+Each question (whether kept, updated, or new) should:
 
 1. **Be informed by observed behavior** — questions should emerge from what you saw in the logs, but \
 you don't need to cite specific moments. Synthesize across sessions to form abstract questions about \
@@ -83,7 +94,9 @@ Acknowledge that naturally. Don't be creepy, but don't pretend you haven't been 
 
 ## Output
 
-Write the questions to {logs_dir}/active-conversations/questions.md using write_file.
+Write the FINAL curated set of questions to {logs_dir}/active-conversations/questions.md using \
+write_file. This fully replaces the previous contents — the file you write should contain every \
+question you want kept (kept-as-is, updated, or newly generated) and nothing else.
 
 Format:
 ```
@@ -96,17 +109,13 @@ Why: brief note on what pattern or observation led to this question (optional).
 
 ```
 
-If questions.md already exists, APPEND your new questions to the end of the file. Do NOT overwrite \
-existing questions. Use bash to append (e.g. echo or cat >>), or read the file first and write back \
-the full contents plus your additions.
-
 ## How to work
 
 1. Use PlanWrite to outline your steps.
 2. Check for existing conversation files and questions.md.
 3. Use subagents to read session directories and log files in parallel.
 4. Reflect — what's interesting, surprising, or ambiguous about this user's behavior?
-5. Draft questions, check against existing ones, write output.
+5. Decide keep/update/delete for each existing question, draft new ones, write the final file.
 """
 
 
