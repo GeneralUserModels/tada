@@ -12,6 +12,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from chat import ChatAgent, ChatSession
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/seeker", tags=["seeker"])
@@ -107,43 +109,17 @@ def _parse_conversation_markdown(text: str) -> list[dict]:
     return messages
 
 
-def _save_conversation(state) -> str:
-    """Save current conversation to disk, return the filename."""
-    conversations_dir = _conversations_dir(state)
-    conversations_dir.mkdir(parents=True, exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"conversation_{timestamp}.md"
-    output_path = conversations_dir / filename
-
-    lines = ["# Conversation\n"]
-    for msg in state.seeker_messages:
-        if msg["role"] == "system":
-            continue
-        if msg["role"] == "assistant":
-            text = msg["content"].replace(DONE_MARKER, "").strip()
-            lines.append(f"**Seeker:** {text}\n")
-        elif msg["role"] == "user":
-            lines.append(f"**User:** {msg['content']}\n")
-
-    output_path.write_text("\n".join(lines))
-    logger.info(f"Seeker conversation saved to {output_path}")
-    return filename
-
-
 def _build_conversation_text(messages: list[dict]) -> str:
     """Build a plain-text version of the conversation for the cleanup prompt."""
     lines = []
     for msg in messages:
-        if msg["role"] == "system":
-            continue
         speaker = "Seeker" if msg["role"] == "assistant" else "User"
         text = msg["content"].replace(DONE_MARKER, "").strip()
         lines.append(f"{speaker}: {text}")
     return "\n\n".join(lines)
 
 
-async def _cleanup_questions(state):
+async def _cleanup_questions(state, messages: list[dict]):
     """Use LLM to identify covered questions and remove them from questions.md."""
     qp = _questions_path(state)
     if not qp.exists():
@@ -153,7 +129,7 @@ async def _cleanup_questions(state):
     if not questions_text:
         return
 
-    conversation_text = _build_conversation_text(state.seeker_messages)
+    conversation_text = _build_conversation_text(messages)
     prompt = CLEANUP_PROMPT.format(conversation=conversation_text, questions=questions_text)
 
     model = state.config.seeker_model
@@ -204,39 +180,39 @@ async def _cleanup_questions(state):
 
 async def _end_conversation(state):
     """Save conversation, clean up questions, reset state."""
-    filename = _save_conversation(state)
-    await _cleanup_questions(state)
+    session = state.seeker_session
 
+    # Save conversation
+    conversations_dir = _conversations_dir(state)
+    conversations_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"conversation_{timestamp}.md"
+    output_path = conversations_dir / filename
+    session.save(output_path, assistant_label="Seeker")
+    logger.info(f"Seeker conversation saved to {output_path}")
+
+    # Clean up covered questions
+    await _cleanup_questions(state, session.messages)
+
+    # Update seeker persistent state
     seeker_state = _load_seeker_state(state)
     seeker_state["last_conversation_file"] = filename
     _save_seeker_state(state, seeker_state)
 
-    state.seeker_conversation_active = False
-    state.seeker_messages = []
+    # Reset
+    state.seeker_session = None
 
     await state.broadcast("seeker_conversation_ended", {})
 
 
 async def _stream_llm_response(state):
     """Generator that streams LLM tokens as SSE data lines."""
-    model = state.config.seeker_model
-    api_key = _resolve_api_key(state.config)
+    session = state.seeker_session
 
-    kwargs = {"model": model, "messages": list(state.seeker_messages), "stream": True}
-    if api_key:
-        kwargs["api_key"] = api_key
+    async for token in session.respond_stream():
+        yield f"data: {json.dumps({'token': token})}\n\n"
 
-    response = await litellm.acompletion(**kwargs)
-    full_text = ""
-    async for chunk in response:
-        delta = chunk.choices[0].delta.content or ""
-        if delta:
-            full_text += delta
-            yield f"data: {json.dumps({'token': delta})}\n\n"
-
-    state.seeker_messages.append({"role": "assistant", "content": full_text})
-
-    conversation_ended = DONE_MARKER in full_text
+    conversation_ended = session.ended
     if conversation_ended:
         await _end_conversation(state)
 
@@ -251,10 +227,11 @@ async def get_status(request: Request):
     state = request.app.state.server
     seeker_state = _load_seeker_state(state)
     has_q = _has_questions(state)
+    conversation_active = state.seeker_session is not None
     return {
         "has_questions": has_q,
-        "conversation_active": state.seeker_conversation_active,
-        "questions_answered": not has_q and not state.seeker_conversation_active,
+        "conversation_active": conversation_active,
+        "questions_answered": not has_q and not conversation_active,
         "last_conversation_file": seeker_state.get("last_conversation_file"),
         "seeker_enabled": state.config.seeker_enabled,
     }
@@ -264,8 +241,8 @@ async def get_status(request: Request):
 async def get_conversation(request: Request):
     state = request.app.state.server
 
-    if state.seeker_conversation_active:
-        msgs = [m for m in state.seeker_messages if m["role"] in ("assistant", "user")]
+    if state.seeker_session is not None:
+        msgs = state.seeker_session.visible_messages()
         if msgs and msgs[0]["role"] == "user" and "ask me whatever" in msgs[0]["content"].lower():
             msgs = msgs[1:]
         return {"active": True, "messages": msgs}
@@ -285,7 +262,7 @@ async def get_conversation(request: Request):
 async def start_conversation(request: Request):
     state = request.app.state.server
 
-    if state.seeker_conversation_active:
+    if state.seeker_session is not None:
         return JSONResponse({"error": "Conversation already active"}, status_code=409)
 
     qp = _questions_path(state)
@@ -294,11 +271,16 @@ async def start_conversation(request: Request):
 
     questions = qp.read_text()
     system_prompt = SYSTEM_PROMPT.format(questions=questions)
-    state.seeker_messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "Go ahead \u2014 ask me whatever you'd like to know."},
-    ]
-    state.seeker_conversation_active = True
+    agent = ChatAgent(
+        model=state.config.seeker_model,
+        system_prompt=system_prompt,
+        api_key=_resolve_api_key(state.config),
+    )
+    state.seeker_session = ChatSession(
+        agent=agent,
+        done_marker=DONE_MARKER,
+        initial_user_message="Go ahead \u2014 ask me whatever you'd like to know.",
+    )
 
     return StreamingResponse(
         _stream_llm_response(state),
@@ -315,13 +297,13 @@ class MessageBody(BaseModel):
 async def send_message(body: MessageBody, request: Request):
     state = request.app.state.server
 
-    if not state.seeker_conversation_active:
+    if state.seeker_session is None:
         return JSONResponse({"error": "No active conversation"}, status_code=409)
 
     if not body.content.strip():
         return JSONResponse({"error": "Message cannot be empty"}, status_code=400)
 
-    state.seeker_messages.append({"role": "user", "content": body.content})
+    state.seeker_session.add_user_message(body.content)
 
     return StreamingResponse(
         _stream_llm_response(state),
@@ -334,7 +316,7 @@ async def send_message(body: MessageBody, request: Request):
 async def end_conversation(request: Request):
     state = request.app.state.server
 
-    if not state.seeker_conversation_active:
+    if state.seeker_session is None:
         return JSONResponse({"error": "No active conversation"}, status_code=409)
 
     await _end_conversation(state)

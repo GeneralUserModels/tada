@@ -1,21 +1,30 @@
 """REST endpoints for moments (Tada tab)."""
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+import asyncio
+import time as _time
+
 from apps.moments.execute import _parse_frontmatter as parse_frontmatter
+from apps.moments.execute import run as execute_moment
+from apps.moments.scheduler import save_run, load_run_history
 from apps.moments.state import (
     load_state,
     save_state,
     DEFAULT_SLUG_STATE,
 )
+from chat import ChatAgent, ChatSession
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/moments", tags=["moments"])
 
@@ -88,6 +97,17 @@ async def list_results(request: Request, include_dismissed: bool = False):
         mtime = os.path.getmtime(index_path)
         completed_at = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
 
+        # Feedback status
+        feedback_files = list(meta_path.parent.glob("feedback_*.md"))
+        has_feedback = len(feedback_files) > 0
+        feedback_incorporated = False
+        last_incorporated = slug_state.get("last_feedback_incorporated_at")
+        if has_feedback and last_incorporated:
+            latest_feedback_mtime = max(os.path.getmtime(f) for f in feedback_files)
+            latest_feedback_dt = datetime.fromtimestamp(latest_feedback_mtime, tz=timezone.utc)
+            incorporated_dt = datetime.fromisoformat(last_incorporated)
+            feedback_incorporated = latest_feedback_dt < incorporated_dt
+
         results.append({
             "slug": slug,
             "title": meta.get("title", slug),
@@ -95,6 +115,8 @@ async def list_results(request: Request, include_dismissed: bool = False):
             "completed_at": completed_at,
             "frequency": meta.get("frequency", ""),
             "schedule": meta.get("schedule", ""),
+            "has_feedback": has_feedback,
+            "feedback_incorporated": feedback_incorporated,
             **slug_state,
         })
 
@@ -187,3 +209,215 @@ async def record_view_end(slug: str, body: ViewEnd, request: Request):
     all_state[slug] = entry
     save_state(tada_dir, all_state)
     return {"time_spent_ms": entry["time_spent_ms"]}
+
+
+# ── Re-execution ─────────────────────────────────────────────
+
+@router.post("/{slug}/rerun")
+async def rerun_moment(slug: str, request: Request):
+    """Trigger an immediate re-execution of a moment."""
+    state = request.app.state.server
+    tada_dir = _get_tada_dir(request)
+    task_path = tada_dir / f"{slug}.md"
+
+    if not task_path.exists():
+        return JSONResponse({"error": "Task not found"}, status_code=404)
+
+    if state.moments_executor_lock.locked():
+        return JSONResponse({"error": "Another moment is currently executing"}, status_code=409)
+
+    cfg = state.config
+    model = cfg.moments_agent_model
+    api_key = cfg.resolve_api_key("moments_agent_api_key")
+    logs_dir = str(Path(cfg.log_dir).resolve())
+    results_dir = tada_dir / "results"
+    output_dir = str(results_dir / slug)
+
+    fm = parse_frontmatter(task_path.read_text())
+    all_state = load_state(tada_dir)
+    slug_state = all_state.get(slug, {})
+    freq_override = slug_state.get("frequency_override") or None
+    sched_override = slug_state.get("schedule_override") or None
+    run_history = load_run_history(results_dir)
+
+    async def _run_rerun():
+        async with state.moments_executor_lock:
+            await state.broadcast("moment_rerun_started", {"slug": slug})
+            started_at = _time.time()
+            logger.info(f"Re-executing moment: {slug}")
+            success = await asyncio.to_thread(
+                execute_moment, str(task_path), output_dir, logs_dir, model,
+                frequency_override=freq_override, schedule_override=sched_override,
+                api_key=api_key,
+                last_run_at=run_history.get(slug),
+            )
+            completed_at = _time.time()
+            save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")
+
+            if success:
+                effective_frequency = freq_override or fm.get("frequency", "")
+                effective_schedule = sched_override or fm.get("schedule", "")
+                meta_path = Path(output_dir) / "meta.json"
+                meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+                index_path = Path(output_dir) / "index.html"
+                true_updated = datetime.fromtimestamp(index_path.stat().st_mtime, tz=timezone.utc).isoformat() if index_path.exists() else datetime.now().isoformat()
+                await state.broadcast("moment_completed", {
+                    "slug": slug,
+                    "title": meta.get("title", fm.get("title", slug)),
+                    "description": meta.get("description", fm.get("description", "")),
+                    "completed_at": true_updated,
+                    "frequency": effective_frequency,
+                    "schedule": effective_schedule,
+                })
+                logger.info(f"Moment re-executed: {slug}")
+            else:
+                await state.broadcast("moment_rerun_failed", {"slug": slug})
+                logger.warning(f"Moment rerun failed: {slug}")
+
+    asyncio.create_task(_run_rerun())
+    return JSONResponse({"status": "started"}, status_code=202)
+
+
+# ── Feedback ──────────────────────────────────────────────────
+
+FEEDBACK_SYSTEM_PROMPT = """\
+You are collecting feedback on a Tada moment called "{title}".
+
+Description: {description}
+
+Below are the moment's output files for context:
+
+{file_contents}
+
+Rules:
+- Respond in ONE short sentence. Never more than two sentences.
+- Acknowledge what the user said. Do NOT ask follow-up questions unless something is genuinely unclear.
+- You are a note-taker, not an interviewer. Just confirm you got it and wait for more.
+- Never summarize, restate, or list back what the user told you.
+- If the user seems done, just say something like "Got it" or "Noted".
+"""
+
+
+def _read_moment_files(result_dir: Path) -> str:
+    """Read all moment output files for the feedback system prompt."""
+    parts = []
+    for name in ["meta.json", "app.js", "styles.css", "index.html"]:
+        path = result_dir / name
+        if path.exists():
+            content = path.read_text()
+            # Truncate very large files
+            if len(content) > 10000:
+                content = content[:10000] + "\n... (truncated)"
+            parts.append(f"### {name}\n```\n{content}\n```")
+    return "\n\n".join(parts)
+
+
+def _resolve_feedback_api_key(config) -> str | None:
+    return config.moments_agent_api_key or config.resolve_api_key("agent_api_key")
+
+
+async def _stream_feedback_response(state):
+    """Generator that streams LLM tokens as SSE data lines."""
+    session = state.feedback_session
+    async for token in session.respond_stream():
+        yield f"data: {json.dumps({'token': token})}\n\n"
+    yield f"data: {json.dumps({'done': True})}\n\n"
+
+
+class FeedbackMessageBody(BaseModel):
+    content: str
+
+
+@router.post("/{slug}/feedback/start")
+async def start_feedback(slug: str, body: FeedbackMessageBody, request: Request):
+    """Start a feedback conversation for a moment. First message comes from the user."""
+    state = request.app.state.server
+    tada_dir = _get_tada_dir(request)
+    result_dir = tada_dir / "results" / slug
+
+    if not (result_dir / "index.html").exists():
+        return JSONResponse({"error": "Moment not found"}, status_code=404)
+
+    if state.feedback_session is not None:
+        return JSONResponse({"error": "Feedback conversation already active"}, status_code=409)
+
+    # Build system prompt with moment context
+    meta_path = result_dir / "meta.json"
+    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+    file_contents = _read_moment_files(result_dir)
+    system_prompt = FEEDBACK_SYSTEM_PROMPT.format(
+        title=meta.get("title", slug),
+        description=meta.get("description", ""),
+        file_contents=file_contents,
+    )
+
+    agent = ChatAgent(
+        model=state.config.moments_agent_model,
+        system_prompt=system_prompt,
+        api_key=_resolve_feedback_api_key(state.config),
+    )
+    state.feedback_session = ChatSession(agent=agent, done_marker=None)
+    state.feedback_slug = slug
+
+    # User sends the first message
+    state.feedback_session.add_user_message(body.content)
+
+    return StreamingResponse(
+        _stream_feedback_response(state),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/{slug}/feedback/message")
+async def send_feedback_message(slug: str, body: FeedbackMessageBody, request: Request):
+    """Send a message in the active feedback conversation."""
+    state = request.app.state.server
+
+    if state.feedback_session is None or state.feedback_slug != slug:
+        return JSONResponse({"error": "No active feedback conversation for this moment"}, status_code=409)
+
+    if not body.content.strip():
+        return JSONResponse({"error": "Message cannot be empty"}, status_code=400)
+
+    state.feedback_session.add_user_message(body.content)
+
+    return StreamingResponse(
+        _stream_feedback_response(state),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/{slug}/feedback/end")
+async def end_feedback(slug: str, request: Request):
+    """End the feedback conversation and save the transcript."""
+    state = request.app.state.server
+
+    if state.feedback_session is None or state.feedback_slug != slug:
+        return JSONResponse({"error": "No active feedback conversation for this moment"}, status_code=409)
+
+    tada_dir = _get_tada_dir(request)
+    result_dir = tada_dir / "results" / slug
+
+    # Save feedback
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = result_dir / f"feedback_{timestamp}.md"
+    state.feedback_session.save(path, assistant_label="Tada")
+    logger.info(f"Feedback saved to {path}")
+
+    state.feedback_session = None
+    state.feedback_slug = None
+
+    return {"status": "ended", "filename": path.name}
+
+
+@router.get("/{slug}/feedback/conversation")
+async def get_feedback_conversation(slug: str, request: Request):
+    """Get the current feedback conversation state."""
+    state = request.app.state.server
+
+    if state.feedback_session is not None and state.feedback_slug == slug:
+        return {"active": True, "messages": state.feedback_session.visible_messages()}
+
+    return {"active": False, "messages": []}

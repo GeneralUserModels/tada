@@ -137,6 +137,14 @@ After the frontmatter, include:
 Read files in {logs_dir}/oneoffs/ to see what was already proposed. Do not duplicate these — find NEW \
 situational opportunities.
 
+### User signals on past tadas:
+The user's selected tadas live in {logs_dir}/../logs-tada/. Their results (executed output) are in \
+{logs_dir}/../logs-tada/results/. Read `{logs_dir}/../logs-tada/results/_moment_state.json` to see \
+user signals per tada — thumbs up/down, dismissed, pinned, view counts. Each result directory may \
+also contain `feedback_*.md` files with conversational feedback the user gave about that tada. \
+Use these signals to understand what kinds of tadas the user finds valuable and what they dislike, \
+so you can propose better one-off tasks.
+
 When you are done, run `ls -la {logs_dir}/oneoffs/` to verify all task files exist and are non-empty.
 """
 
