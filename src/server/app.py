@@ -44,13 +44,13 @@ async def start_services(state: ServerState) -> None:
     logger.info("DataManager started")
 
     # Refresh expired OAuth tokens before connectors start polling
-    refresh_expired_tokens(state.config)
+    refresh_expired_tokens(state)
 
     # Context logging service (creates and owns all connectors)
     state.context_logging_task = asyncio.create_task(run_context_logging_service(state))
 
     # Background OAuth token refresh
-    state.token_refresh_task = asyncio.create_task(run_token_refresh(state.config))
+    state.token_refresh_task = asyncio.create_task(run_token_refresh(state))
 
     # Memory wiki service
     if is_enabled(state.config, "memory") and state.config.memory_enabled:

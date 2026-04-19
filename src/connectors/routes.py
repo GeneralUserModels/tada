@@ -34,9 +34,7 @@ class ConnectorUpdate(BaseModel):
 async def get_connectors(request: Request):
     state = request.app.state.server
     config = state.config
-    google_ok = bool(
-        config.google_token_path and Path(config.google_token_path).exists()
-    )
+    google_ok = bool(getattr(state, "google_auth_ok", False))
     outlook_ok = bool(
         config.outlook_token_path and Path(config.outlook_token_path).exists()
     )

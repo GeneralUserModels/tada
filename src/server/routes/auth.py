@@ -19,6 +19,7 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
@@ -305,9 +306,6 @@ async def google_start(request: Request):
     port = _free_port()
     redirect_uri = f"http://localhost:{port}"
 
-    # access_type=offline + prompt=consent are required for Google to issue a
-    # provider refresh token. Without them, provider_token expires in 1h and
-    # Supabase session refresh can't mint a new one.
     auth_url = f"{alpha_url}/auth/v1/authorize?" + urllib.parse.urlencode({
         "provider": "google",
         "redirect_to": redirect_uri,
@@ -315,8 +313,6 @@ async def google_start(request: Request):
         "code_challenge_method": "S256",
         "flow_type": "pkce",
         "scopes": " ".join(GOOGLE_DATA_SCOPES),
-        "access_type": "offline",
-        "prompt": "consent",
     })
 
     code = await _oauth_loopback(auth_url, port)
@@ -327,16 +323,18 @@ async def google_start(request: Request):
     if not provider_token:
         raise HTTPException(status_code=500, detail="No provider token returned from Supabase")
 
+    expires_in = session.get("expires_in", 3600)
     token = {
         "access_token": provider_token,
         "refresh_token": provider_refresh_token,
         "supabase_refresh_token": session.get("refresh_token", ""),
         "alpha_supabase_url": alpha_url,
         "alpha_supabase_anon_key": alpha_key,
-        "expires_at": time.time() * 1000 + 3600 * 1000,
+        "expires_at": time.time() * 1000 + expires_in * 1000,
         "scopes": GOOGLE_DATA_SCOPES,
     }
     _write_token(state.config.google_token_path, token)
+    state.google_auth_ok = True
 
     # Re-enable google connectors that were disabled due to errors
     for name, auth in getattr(state, "connector_auth", {}).items():
@@ -359,6 +357,7 @@ async def google_disconnect(request: Request):
     token_path = state.config.google_token_path
     if token_path and Path(token_path).exists():
         Path(token_path).unlink()
+    state.google_auth_ok = False
     await state.broadcast("connectors", {})
     return {"ok": True}
 
@@ -366,9 +365,7 @@ async def google_disconnect(request: Request):
 @router.get("/google/status")
 async def google_status(request: Request):
     state = request.app.state.server
-    return {"connected": bool(
-        state.config.google_token_path and Path(state.config.google_token_path).exists()
-    )}
+    return {"connected": bool(getattr(state, "google_auth_ok", False))}
 
 
 # ── Outlook endpoints ──────────────────────────────────────────
@@ -471,12 +468,16 @@ def _refresh_if_expired(token_path: str | None, token_url: str, build_body: Call
     logger.info("[auth] %s token refreshed", name)
 
 
-def _refresh_google_via_supabase(token_path: str | None, force: bool = False) -> None:
-    """Refresh Google provider token via the alpha Supabase project."""
+def _refresh_google_via_supabase(token_path: str | None) -> None:
+    """Refresh Google provider token via the alpha Supabase project.
+
+    No local expires_at check: Supabase owns the provider-token lifecycle
+    (it may rotate tokens on its side without us knowing), so the only
+    honest "is this token still good" signal is an actual API call. Callers
+    invoke this when they need a fresh token.
+    """
     token = _read_token(token_path) if token_path else None
     if not token or not token.get("supabase_refresh_token"):
-        return
-    if not force and token.get("expires_at", 0) > time.time() * 1000 + 5 * 60 * 1000:
         return
     alpha_url = token.get("alpha_supabase_url", "")
     alpha_key = token.get("alpha_supabase_anon_key", "")
@@ -499,9 +500,54 @@ def _refresh_google_via_supabase(token_path: str | None, force: bool = False) ->
         token["refresh_token"] = session["provider_refresh_token"]
     if session.get("refresh_token"):
         token["supabase_refresh_token"] = session["refresh_token"]
-    token["expires_at"] = time.time() * 1000 + 3600 * 1000
+    token["expires_at"] = time.time() * 1000 + session.get("expires_in", 3600) * 1000
     _write_token(token_path, token)
     logger.info("[auth] Google token refreshed via Supabase")
+
+
+def _verify_google_token(token_path: str | None) -> bool | None:
+    """Call a cheap Google API endpoint to verify the token is currently live.
+
+    Returns True on 2xx, False on 401/403 (auth broken), None on network/other
+    errors (caller should treat as unknown, not as auth failure).
+    """
+    token = _read_token(token_path) if token_path else None
+    access_token = token.get("access_token") if token else None
+    if not access_token:
+        return False
+    req = urllib.request.Request(
+        "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15):
+            return True
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            return False
+        return None
+    except Exception:
+        return None
+
+
+def ensure_google_token_works(token_path: str | None) -> bool:
+    """Verify Google token via live API call; refresh and re-verify if it 401s.
+
+    Returns True if the token is live now. On transient network errors during
+    verification we return True (optimistic) so we don't mark connectors broken
+    when the user's wifi just blipped — the poll loop will catch real failures.
+    """
+    result = _verify_google_token(token_path)
+    if result is True:
+        return True
+    if result is None:
+        return True
+    try:
+        _refresh_google_via_supabase(token_path)
+    except Exception as e:
+        logger.warning("[auth] Google refresh during verify failed: %s", e)
+        return False
+    return _verify_google_token(token_path) is True
 
 
 def _provider_args(config) -> list[tuple]:
@@ -515,7 +561,7 @@ def _provider_args(config) -> list[tuple]:
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
 def _refresh_google_with_retry(token_path: str | None) -> None:
-    _refresh_google_via_supabase(token_path, force=True)
+    _refresh_google_via_supabase(token_path)
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
@@ -523,12 +569,16 @@ def _refresh_provider_with_retry(*args) -> None:
     _refresh_if_expired(*args, force=True)
 
 
-def refresh_expired_tokens(config) -> None:
-    """Force-refresh all OAuth tokens at startup with retries."""
+def refresh_expired_tokens(state) -> None:
+    """Refresh OAuth tokens at startup, then verify the Google token with a live
+    API call. Sets state.google_auth_ok so downstream code doesn't have to
+    re-probe on every request."""
+    config = state.config
     try:
         _refresh_google_with_retry(config.google_token_path)
     except Exception as e:
         logger.warning("[auth] Google startup refresh failed: %s", e)
+    state.google_auth_ok = ensure_google_token_works(config.google_token_path)
     for args in _provider_args(config):
         try:
             _refresh_provider_with_retry(*args)
@@ -536,11 +586,16 @@ def refresh_expired_tokens(config) -> None:
             logger.warning("[auth] %s startup refresh failed: %s", args[3], e)
 
 
-async def run_token_refresh(config) -> None:
-    """Background task: refresh Google & Outlook tokens every 45 minutes."""
+async def run_token_refresh(state) -> None:
+    """Background task: refresh Google & Outlook tokens every 45 minutes and
+    keep state.google_auth_ok in sync with the result."""
+    config = state.config
     while True:
         try:
             _refresh_google_via_supabase(config.google_token_path)
+            verified = _verify_google_token(config.google_token_path)
+            if verified is not None:
+                state.google_auth_ok = verified
         except Exception as e:
             logger.warning("[auth] Google token refresh failed: %s", e)
         for args in _provider_args(config):

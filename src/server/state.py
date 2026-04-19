@@ -41,6 +41,12 @@ class ServerState:
     connectors: dict = field(default_factory=dict)
     connector_auth: dict = field(default_factory=dict)  # name → requires_auth value
 
+    # Live result of the last Google token probe (GET gmail users/me/profile).
+    # Maintained by auth.refresh_expired_tokens / run_token_refresh and the 401
+    # handler in connectors/service.py. Used by the connectors route to report
+    # availability without re-probing on every request.
+    google_auth_ok: bool = False
+
     # Tabracadabra event tap service (macOS only)
     tabracadabra_service: object | None = None
 

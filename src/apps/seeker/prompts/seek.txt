@@ -35,7 +35,7 @@ First, review each question currently in questions.md and decide one of:
 - **update** — the underlying observation has evolved, or the phrasing can be sharpened; rewrite it
 - **delete** — no longer relevant (stale, overtaken by something the user clearly revealed in logs or conversations, or low-value compared to better questions you could ask)
 
-Aim for a final questions.md that totals 5-10 high-quality questions (kept + updated + new combined). If the file already has strong coverage, prefer deleting weaker ones over piling on new ones. If the existing questions are all stale, it's fine to delete them all and start fresh.
+Add or update questions if they are still genuinely worth asking — a real pattern, tension, or ambiguity in the logs that you can't resolve from what's already known. Do not invent questions to fill space. Repetitive or generic questions are worse than no questions, because they erode the user's trust that the ones you do ask are worth answering. If the existing questions already cover what's interesting, leave them and add nothing. If they're stale, delete them.
 
 Each question (whether kept, updated, or new) should:
 
