@@ -1,11 +1,13 @@
 import React, { useState } from "react";
-import { ModelDropdown, LLM_MODELS, ModelOption } from "./ModelDropdown";
+import { ModelDropdown, LLM_MODELS, AGENT_MODELS, ModelOption } from "./ModelDropdown";
 
-export const ADVANCED_ROWS: { label: string; modelKey: string; apiKeyKey: string }[] = [
+export const ADVANCED_ROWS: { label: string; modelKey: string; apiKeyKey: string; options?: ModelOption[] }[] = [
   { label: "Reward LM",        modelKey: "reward_llm",            apiKeyKey: "reward_llm_api_key" },
   { label: "Labeling LM",      modelKey: "label_model",           apiKeyKey: "label_model_api_key" },
   { label: "Filter LM",        modelKey: "filter_model",          apiKeyKey: "filter_model_api_key" },
-  { label: "Ta-Da LM",         modelKey: "moments_agent_model",   apiKeyKey: "moments_agent_api_key" },
+  { label: "Tada LM",          modelKey: "moments_agent_model",   apiKeyKey: "moments_agent_api_key", options: AGENT_MODELS },
+  { label: "Pensieve LM",      modelKey: "memory_agent_model",    apiKeyKey: "memory_agent_api_key",  options: AGENT_MODELS },
+  { label: "Seeker LM",        modelKey: "seeker_model",          apiKeyKey: "seeker_api_key",        options: AGENT_MODELS },
   { label: "Tabracadabra LM",  modelKey: "tabracadabra_model",    apiKeyKey: "tabracadabra_api_key" },
 ];
 
@@ -81,8 +83,8 @@ export function AdvancedLLMSection({ values, setValues, children }: Props) {
       {open && (
         <div className="advanced-section">
           <p className="advanced-hint">Override model and/or API key per LLM. Leave blank to use the shared values above.</p>
-          {ADVANCED_ROWS.map((row) => (
-            <ModelApiKeyRow key={row.modelKey} {...row} values={values} setValues={setValues} modelPlaceholder="Use shared model" />
+          {ADVANCED_ROWS.map(({ options: rowOptions, ...row }) => (
+            <ModelApiKeyRow key={row.modelKey} {...row} options={rowOptions} values={values} setValues={setValues} modelPlaceholder="Use shared model" />
           ))}
           {children}
         </div>

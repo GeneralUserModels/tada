@@ -28,9 +28,11 @@ def get_slug_state(tada_dir: Path, slug: str) -> dict:
 DEFAULT_SLUG_STATE = {
     "dismissed": False,
     "pinned": False,
+    "thumbs": None,
     "view_count": 0,
     "time_spent_ms": 0,
     "last_viewed": None,
     "schedule_override": None,
     "frequency_override": None,
+    "last_feedback_incorporated_at": None,
 }

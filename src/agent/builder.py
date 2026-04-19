@@ -39,28 +39,28 @@ Be concise. Use tools proactively.
 _sandbox_initialized = False
 
 
-def _ensure_sandbox(data_dir: str):
+def _ensure_sandbox(write_dirs: list[str]):
     global _sandbox_initialized
     if _sandbox_initialized:
         return
     asyncio.run(SandboxManager.initialize(SandboxRuntimeConfig(
         network={},
         filesystem={
-            "allow_write": [data_dir, "/tmp"],
+            "allow_write": write_dirs + ["/tmp"],
             "deny_read": ["~/.ssh", "~/.gnupg", "~/.aws/credentials"],
         },
     )))
     _sandbox_initialized = True
 
 
-async def _ensure_sandbox_async(data_dir: str):
+async def _ensure_sandbox_async(write_dirs: list[str]):
     global _sandbox_initialized
     if _sandbox_initialized:
         return
     await SandboxManager.initialize(SandboxRuntimeConfig(
         network={},
         filesystem={
-            "allow_write": [data_dir, "/tmp"],
+            "allow_write": write_dirs + ["/tmp"],
             "deny_read": ["~/.ssh", "~/.gnupg", "~/.aws/credentials"],
         },
     ))
@@ -88,10 +88,11 @@ def _make_child_agent(model: str, system_prompt: str, api_key: str | None = None
     return factory
 
 
-def build_agent(model: str, data_dir: str, api_key: str | None = None):
+def build_agent(model: str, data_dir: str, extra_write_dirs: list[str] | None = None, api_key: str | None = None):
     """Build a fully configured Agent with all tools. Initializes sandbox on first call."""
     data_dir = str(Path(data_dir).resolve())
-    _ensure_sandbox(data_dir)
+    write_dirs = [data_dir] + [str(Path(d).resolve()) for d in (extra_write_dirs or [])]
+    _ensure_sandbox(write_dirs)
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(data_dir=data_dir)
     transcript_dir = Path(data_dir) / "transcripts"
     compact_tool = CompactTool(transcript_dir, _make_summarizer(model, api_key), model=model)

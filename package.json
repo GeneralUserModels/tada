@@ -1,6 +1,6 @@
 {
   "name": "tada",
-  "version": "0.0.4-alpha",
+  "version": "0.0.5-alpha",
   "description": "Tada — predict what you'll do next",
   "author": "Tada",
   "main": "dist/main/index.js",
@@ -20,7 +20,10 @@
     "eventsource": "^3.0.7",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "recharts": "^2.13.0"
+    "react-markdown": "^9.1.0",
+    "recharts": "^2.13.0",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@electron/notarize": "^2.0.0",

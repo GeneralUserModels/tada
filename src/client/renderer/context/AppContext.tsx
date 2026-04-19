@@ -4,7 +4,7 @@ import * as sse from "../api/sse";
 
 // ── Types ─────────────────────────────────────────────────────
 
-export type ActiveView = "connectors" | "tada" | "usermodel" | "settings";
+export type ActiveView = "connectors" | "tada" | "pensieve" | "seeker" | "usermodel" | "settings";
 
 export interface HistoryItem {
   id: number;
@@ -34,6 +34,9 @@ export interface AppState {
   historyItems: HistoryItem[];
   settings: Record<string, unknown>;
   updateVersion: string | null;
+  seekerHasQuestions: boolean;
+  tadaHasNew: boolean;
+  pensieveHasNew: boolean;
   updateProgress: number | null;
   updateReady: boolean;
   updateInstalling: boolean;
@@ -55,6 +58,10 @@ type AppAction =
   | { type: "SEED_LABEL_HISTORY"; history: { text: string; timestamp: number }[] }
   | { type: "LOAD_SETTINGS"; settings: Record<string, unknown> }
   | { type: "UPDATE_AVAILABLE"; version: string }
+  | { type: "SEEKER_QUESTIONS_READY" }
+  | { type: "SEEKER_QUESTIONS_CLEARED" }
+  | { type: "TADA_NEW_MOMENT" }
+  | { type: "PENSIEVE_UPDATED" }
   | { type: "UPDATE_PROGRESS"; percent: number }
   | { type: "UPDATE_DOWNLOADED" }
   | { type: "UPDATE_INSTALLING" }
@@ -87,6 +94,9 @@ const initialState: AppState = {
   historyItems: [],
   settings: {},
   updateVersion: null,
+  seekerHasQuestions: false,
+  tadaHasNew: false,
+  pensieveHasNew: false,
   updateProgress: null,
   updateReady: false,
   updateInstalling: false,
@@ -96,7 +106,12 @@ const initialState: AppState = {
 function reducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case "NAVIGATE":
-      return { ...state, activeView: action.view };
+      return {
+        ...state,
+        activeView: action.view,
+        tadaHasNew: action.view === "tada" ? false : state.tadaHasNew,
+        pensieveHasNew: action.view === "pensieve" ? false : state.pensieveHasNew,
+      };
 
     case "SERVER_READY":
       return {
@@ -214,6 +229,18 @@ function reducer(state: AppState, action: AppAction): AppState {
     case "UPDATE_DISMISSED":
       return { ...state, updateVersion: null, updateReady: false, updateProgress: null, updateInstalling: false, updateError: null };
 
+    case "SEEKER_QUESTIONS_READY":
+      return { ...state, seekerHasQuestions: true };
+
+    case "SEEKER_QUESTIONS_CLEARED":
+      return { ...state, seekerHasQuestions: false };
+
+    case "TADA_NEW_MOMENT":
+      return { ...state, tadaHasNew: true };
+
+    case "PENSIEVE_UPDATED":
+      return { ...state, pensieveHasNew: true };
+
     default:
       return state;
   }
@@ -251,6 +278,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sse.on("elbo_score",    (data) => dispatch({ type: "ELBO_SCORE", data: data as ElboScoreData }));
     sse.on("training_step", (data) => dispatch({ type: "TRAINING_STEP", data: data as TrainingStepData }));
     sse.on("label",         (data) => dispatch({ type: "LABEL", data: data as LabelData }));
+    sse.on("seeker_questions_ready", () => dispatch({ type: "SEEKER_QUESTIONS_READY" }));
+    sse.on("moment_completed", () => dispatch({ type: "TADA_NEW_MOMENT" }));
+    sse.on("memory_updated", () => dispatch({ type: "PENSIEVE_UPDATED" }));
 
     // server:ready — main sends URL once server is up; we initialize api + sse then seed state
     window.tada.onServerReady(async ({ url }: { url: string }) => {
@@ -280,6 +310,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const settings = await api.getSettings();
           dispatch({ type: "LOAD_SETTINGS", settings: settings as Record<string, unknown> });
         } catch { /* settings fetch failed */ }
+
+        try {
+          const seekerStatus = await api.getSeekerStatus();
+          if (seekerStatus.has_questions && !seekerStatus.questions_answered) {
+            dispatch({ type: "SEEKER_QUESTIONS_READY" });
+          }
+        } catch { /* seeker may not be enabled */ }
       } catch (e) { console.error("[app] getStatus failed:", e); }
     });
 

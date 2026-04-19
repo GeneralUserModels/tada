@@ -81,7 +81,7 @@ contextBridge.exposeInMainWorld("tada", {
   // External links
   openExternalUrl: (url: string) => ipcRenderer.invoke("external:open-url", url),
 
-  // Moments (Ta-Da)
+  // Moments (Tada)
   getMomentsTasks: () => ipcRenderer.invoke("moments:get-tasks"),
   getMomentsResults: () => ipcRenderer.invoke("moments:get-results"),
   getServerUrl: () => ipcRenderer.invoke("get:server-url"),

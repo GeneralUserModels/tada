@@ -8,7 +8,7 @@ import { GoogleSignInStep } from "./steps/GoogleSignInStep";
 import { ConnectorsStep } from "./steps/ConnectorsStep";
 import { TabracadabraStep } from "./steps/TabracadabraStep";
 import { ModelsKeysStep } from "./steps/ModelsKeysStep";
-import { LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
+import { LLM_MODELS, AGENT_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 import {
   startGoogleSignIn,
   getGoogleUser,
@@ -48,6 +48,8 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
   const [fsEnabled, setFsEnabled] = useState(false);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [browserCookiesGranted, setBrowserCookiesGranted] = useState(false);
+  const [micGranted, setMicGranted] = useState(false);
+  const [sysAudioGranted, setSysAudioGranted] = useState(false);
   const [connectingGoogle, setConnectingGoogle] = useState<string | null>(null);
   const [connectingOutlook, setConnectingOutlook] = useState(false);
 
@@ -71,8 +73,10 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
 
   // Model + API key state — defaults sourced from the shared model lists
   const [model, setModel] = useState(LLM_MODELS[0].value);
+  const [agentModel, setAgentModel] = useState(AGENT_MODELS[0].value);
   const [tinkerModel, setTinkerModel] = useState(TINKER_MODELS[0].value);
-  const [geminiKey, setGeminiKey] = useState("");
+  const [labelerKey, setLabelerKey] = useState("");
+  const [agentKey, setAgentKey] = useState("");
   const [tinkerKey, setTinkerKey] = useState("");
   const [wandbKey, setWandbKey] = useState("");
   const [tinkerError, setTinkerError] = useState("");
@@ -100,6 +104,10 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
       // after explicit user action via the "Grant Access" modal.
       const cookiesOk = await window.tada.checkConnectorPermission("browser_cookies");
       setBrowserCookiesGranted(cookiesOk);
+      const micOk = await window.tada.checkConnectorPermission("microphone");
+      setMicGranted(micOk);
+      const sysAudioOk = await window.tada.checkConnectorPermission("system_audio");
+      setSysAudioGranted(sysAudioOk);
     }
     checkAvailability();
   }, [step]);
@@ -155,17 +163,29 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
       if (v.trim()) advanced[k] = v.trim();
     }
     const selectedLlmModel = model || LLM_MODELS[0].value;
+    const selectedAgentModel = agentModel || AGENT_MODELS[0].value;
+    const trimmedAgentKey = agentKey.trim();
     const settings: Record<string, unknown> = {
-      // Keep default LLM consumers aligned unless explicitly overridden in Advanced.
+      // Labeling LM fans out to labeling-type consumers.
       reward_llm: selectedLlmModel,
       label_model: selectedLlmModel,
       filter_model: selectedLlmModel,
-      moments_agent_model: selectedLlmModel,
       tabracadabra_model: selectedLlmModel,
+      // Agent LM fans out to agentic consumers (Tada, Pensieve, Seeker).
+      agent_model: selectedAgentModel,
+      moments_agent_model: selectedAgentModel,
+      memory_agent_model: selectedAgentModel,
+      seeker_model: selectedAgentModel,
       model: tinkerModel || undefined,
-      default_llm_api_key: geminiKey.trim(),
+      default_llm_api_key: labelerKey.trim(),
       ...advanced,
     };
+    if (trimmedAgentKey) {
+      settings.agent_api_key = trimmedAgentKey;
+      settings.moments_agent_api_key = trimmedAgentKey;
+      settings.memory_agent_api_key = trimmedAgentKey;
+      settings.seeker_api_key = trimmedAgentKey;
+    }
     if (tinkerKey.trim()) settings.tinker_api_key = tinkerKey.trim();
     if (wandbKey.trim()) settings.wandb_api_key = wandbKey.trim();
     return settings;
@@ -243,6 +263,10 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           setFsEnabled={setFsEnabled}
           setBrowserCookiesGranted={setBrowserCookiesGranted}
           setAccessibilityGranted={setAccessibilityGranted}
+          micGranted={micGranted}
+          setMicGranted={setMicGranted}
+          sysAudioGranted={sysAudioGranted}
+          setSysAudioGranted={setSysAudioGranted}
         />
       )}
 
@@ -250,15 +274,19 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
         <ModelsKeysStep
           flag={flag}
           model={model}
+          agentModel={agentModel}
           tinkerModel={tinkerModel}
-          geminiKey={geminiKey}
+          labelerKey={labelerKey}
+          agentKey={agentKey}
           tinkerKey={tinkerKey}
           wandbKey={wandbKey}
           tinkerError={tinkerError}
           advancedValues={advancedValues}
           setModel={setModel}
+          setAgentModel={setAgentModel}
           setTinkerModel={setTinkerModel}
-          setGeminiKey={setGeminiKey}
+          setLabelerKey={setLabelerKey}
+          setAgentKey={setAgentKey}
           setTinkerKey={setTinkerKey}
           setWandbKey={setWandbKey}
           setAdvancedValues={setAdvancedValues}

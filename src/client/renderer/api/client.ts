@@ -1,7 +1,7 @@
 /** REST client — thin fetch wrapper for the Tada server. */
 
 export { setServerUrl, getServerUrl } from "../../shared/api-core";
-import { request } from "../../shared/api-core";
+import { request, requestText } from "../../shared/api-core";
 
 // ── User model control ────────────────────────────────────────
 export const startTraining = () => request("POST", "/api/user_models/training/start");
@@ -44,7 +44,7 @@ export const getMomentsTasks = () => request("GET", "/api/moments/tasks");
 export const getMomentsResults = (includeDismissed = false) =>
   request("GET", `/api/moments/results${includeDismissed ? "?include_dismissed=true" : ""}`) as Promise<MomentResult[]>;
 
-export const updateMomentState = (slug: string, data: { dismissed?: boolean; pinned?: boolean }) =>
+export const updateMomentState = (slug: string, data: { dismissed?: boolean; pinned?: boolean; thumbs?: "up" | "down" | null }) =>
   request("PUT", `/api/moments/${slug}/state`, data);
 
 export const updateMomentSchedule = (slug: string, data: { frequency: string; schedule: string }) =>
@@ -55,6 +55,40 @@ export const recordMomentView = (slug: string) =>
 
 export const recordMomentViewEnd = (slug: string, data: { duration_ms: number }) =>
   request("POST", `/api/moments/${slug}/view-end`, data);
+
+export const endMomentFeedback = (slug: string) =>
+  request("POST", `/api/moments/${slug}/feedback/end`);
+
+export const rerunMoment = (slug: string) =>
+  request("POST", `/api/moments/${slug}/rerun`);
+
+// ── Seeker ──────────────────────────────────────────────────
+export const getSeekerStatus = () =>
+  request("GET", "/api/seeker/status") as Promise<SeekerStatus>;
+export const getSeekerConversation = () =>
+  request("GET", "/api/seeker/conversation") as Promise<{ active: boolean; messages: SeekerMessage[] }>;
+export const endSeekerConversation = () =>
+  request("POST", "/api/seeker/end");
+export const getSeekerHistory = () =>
+  request("GET", "/api/seeker/history") as Promise<{ filename: string; date: string }[]>;
+export const getSeekerPastConversation = (filename: string) =>
+  request("GET", `/api/seeker/history/${filename}`) as Promise<{ filename: string; messages: SeekerMessage[] }>;
+
+// ── Memory wiki ─────────────────────────────────────────────
+export const getMemoryPages = () =>
+  request("GET", "/api/memory/pages") as Promise<{ path: string; title: string; confidence: number | null; last_updated: string | null; category: string | null }[]>;
+
+export const getMemoryPage = (path: string) =>
+  requestText("GET", `/api/memory/pages/${path}`);
+
+export const updateMemoryPage = (path: string, content: string) =>
+  request("PUT", `/api/memory/pages/${path}`, { content });
+
+export const getMemoryStatus = () =>
+  request("GET", "/api/memory/status") as Promise<{ exists: boolean; last_ingest: string | null; last_lint: string | null; page_count: number }>;
+
+export const getMemoryLog = () =>
+  requestText("GET", "/api/memory/log");
 
 // ── Onboarding ───────────────────────────────────────────────
 export const getOnboardingStatus = () =>

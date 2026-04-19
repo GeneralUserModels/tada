@@ -9,8 +9,8 @@ export const LLM_MODELS: ModelOption[] = [
   { value: "gemini/gemini-3.1-flash-lite-preview",  label: "Gemini 3.1 Flash-Lite Preview" },
 ];
 
-export const TADA_MODELS: ModelOption[] = [
-  { value: "gemini/gemini-3.1-flash-lite-preview",  label: "Gemini 3.1 Flash-Lite Preview" },
+export const AGENT_MODELS: ModelOption[] = [
+  { value: "anthropic/claude-sonnet-4-6",            label: "Claude Sonnet 4.6" },
 ];
 
 export const TINKER_MODELS: ModelOption[] = [

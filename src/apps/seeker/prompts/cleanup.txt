@@ -1,0 +1,11 @@
+Below is a conversation between a Seeker AI and a user, followed by a list of questions the Seeker had available. Identify which questions were adequately covered or answered during the conversation. A question counts as covered if the conversation addressed its core topic, even if the exact wording differed.
+
+Return ONLY the exact heading lines (starting with ##) of the covered questions, one per line. If none were covered, return "NONE".
+
+## Conversation
+
+{conversation}
+
+## Questions
+
+{questions}

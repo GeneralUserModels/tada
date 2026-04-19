@@ -3,7 +3,7 @@ import { useAppContext } from "../../context/AppContext";
 import { useFeatureFlag } from "../../featureFlags";
 import { getSettings, updateSettings } from "../../api/client";
 import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
-import { ModelDropdown, LLM_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
+import { ModelDropdown, LLM_MODELS, AGENT_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 
 
 // All keys used across all sections
@@ -21,8 +21,16 @@ function allKeys(): string[] {
   keys.add("wandb_api_key");
   keys.add("moments_agent_model");
   keys.add("moments_agent_api_key");
+  keys.add("memory_agent_model");
+  keys.add("memory_agent_api_key");
+  keys.add("seeker_model");
+  keys.add("seeker_api_key");
+  keys.add("agent_model");
+  keys.add("agent_api_key");
   keys.add("tabracadabra_enabled");
   keys.add("moments_enabled");
+  keys.add("memory_enabled");
+  keys.add("seeker_enabled");
   return Array.from(keys);
 }
 
@@ -30,6 +38,8 @@ function allKeys(): string[] {
 export function SettingsView() {
   const { state, dispatch } = useAppContext();
   const momentsEnabled = useFeatureFlag("moments");
+  const memoryEnabled = useFeatureFlag("memory");
+  const seekerFlagEnabled = useFeatureFlag("seeker");
   const tabracadabraEnabled = useFeatureFlag("tabracadabra");
   const tinkerEnabled = useFeatureFlag("tinker");
   const [values, setValues] = useState<Record<string, string>>({});
@@ -54,6 +64,8 @@ export function SettingsView() {
     // boolean fields
     data["tabracadabra_enabled"] = (values["tabracadabra_enabled"] ?? "true") === "true";
     data["moments_enabled"] = (values["moments_enabled"] ?? "true") === "true";
+    data["memory_enabled"] = (values["memory_enabled"] ?? "true") === "true";
+    data["seeker_enabled"] = (values["seeker_enabled"] ?? "true") === "true";
     if (Object.keys(data).length > 0) {
       await updateSettings(data);
       const fresh = await getSettings();
@@ -63,6 +75,14 @@ export function SettingsView() {
 
   const handleLLMModelChange = (val: string) => {
     setValues(v => ({ ...v, reward_llm: val, label_model: val, filter_model: val, tabracadabra_model: val }));
+  };
+
+  const handleAgentModelChange = (val: string) => {
+    setValues(v => ({ ...v, agent_model: val, moments_agent_model: val, memory_agent_model: val, seeker_model: val }));
+  };
+
+  const handleAgentApiKeyChange = (val: string) => {
+    setValues(v => ({ ...v, agent_api_key: val, moments_agent_api_key: val, memory_agent_api_key: val, seeker_api_key: val }));
   };
 
   const hasUnsavedChanges = allKeys().some((key) => {
@@ -83,7 +103,7 @@ export function SettingsView() {
 
         <div className="settings-group">
           <div className="model-row">
-            <span className="model-row-label">LLM <span className="required-tag">Required</span></span>
+            <span className="model-row-label">Labeling LM <span className="required-tag">Required</span></span>
             <div className="model-row-fields">
               <label className="field">
                 <span>Model</span>
@@ -106,9 +126,33 @@ export function SettingsView() {
             </div>
           </div>
 
+          <div className="model-row">
+            <span className="model-row-label">Agent LM <span className="required-tag">Required</span></span>
+            <div className="model-row-fields">
+              <label className="field">
+                <span>Model</span>
+                <ModelDropdown
+                  value={values["agent_model"] ?? ""}
+                  onChange={handleAgentModelChange}
+                  options={AGENT_MODELS}
+                  placeholder="Select a model"
+                />
+              </label>
+              <label className="field">
+                <span>API Key</span>
+                <input
+                  type="text"
+                  placeholder="sk-ant-..."
+                  value={values["agent_api_key"] ?? ""}
+                  onChange={(e) => handleAgentApiKeyChange(e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+
           {momentsEnabled && (
           <div className="model-row">
-            <span className="model-row-label">Ta-Da</span>
+            <span className="model-row-label">Tada</span>
             <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, cursor: "pointer" }}>
               <input
                 type="checkbox"
@@ -126,6 +170,54 @@ export function SettingsView() {
                 background: "#fff", borderRadius: "50%", transition: "transform 0.2s",
                 boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
                 transform: (values["moments_enabled"] ?? "true") === "true" ? "translateX(16px)" : "translateX(0)",
+              }} />
+            </label>
+          </div>
+          )}
+          {memoryEnabled && (
+          <div className="model-row" style={{ marginTop: 10 }}>
+            <span className="model-row-label">Pensieve</span>
+            <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={(values["memory_enabled"] ?? "true") === "true"}
+                style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
+                onChange={(e) => setValues(v => ({ ...v, memory_enabled: e.target.checked ? "true" : "false" }))}
+              />
+              <span style={{
+                position: "absolute", inset: 0,
+                background: (values["memory_enabled"] ?? "true") === "true" ? "#84B179" : "rgba(132,177,121,0.15)",
+                borderRadius: 20, transition: "background 0.2s",
+              }} />
+              <span style={{
+                position: "absolute", height: 14, width: 14, left: 3, bottom: 3,
+                background: "#fff", borderRadius: "50%", transition: "transform 0.2s",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                transform: (values["memory_enabled"] ?? "true") === "true" ? "translateX(16px)" : "translateX(0)",
+              }} />
+            </label>
+          </div>
+          )}
+          {seekerFlagEnabled && (
+          <div className="model-row" style={{ marginTop: 10 }}>
+            <span className="model-row-label">Seeker</span>
+            <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={(values["seeker_enabled"] ?? "true") === "true"}
+                style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
+                onChange={(e) => setValues(v => ({ ...v, seeker_enabled: e.target.checked ? "true" : "false" }))}
+              />
+              <span style={{
+                position: "absolute", inset: 0,
+                background: (values["seeker_enabled"] ?? "true") === "true" ? "#84B179" : "rgba(132,177,121,0.15)",
+                borderRadius: 20, transition: "background 0.2s",
+              }} />
+              <span style={{
+                position: "absolute", height: 14, width: 14, left: 3, bottom: 3,
+                background: "#fff", borderRadius: "50%", transition: "transform 0.2s",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                transform: (values["seeker_enabled"] ?? "true") === "true" ? "translateX(16px)" : "translateX(0)",
               }} />
             </label>
           </div>

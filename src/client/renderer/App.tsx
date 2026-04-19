@@ -6,11 +6,15 @@ import { ConnectorsView } from "./components/views/ConnectorsView";
 import { UserModelView } from "./components/views/UserModelView";
 import { SettingsView } from "./components/views/SettingsView";
 import { TadaView } from "./components/views/TadaView";
+import { PensieveView } from "./components/views/PensieveView";
+import { SeekerView } from "./components/views/SeekerView";
 import { UpdateBanner } from "./components/UpdateBanner";
 
 export function App() {
   const { state, dispatch } = useAppContext();
   const momentsEnabled = useFeatureFlag("moments");
+  const memoryEnabled = useFeatureFlag("memory");
+  const seekerEnabled = useFeatureFlag("seeker");
 
   const navigate = (view: typeof state.activeView) => {
     dispatch({ type: "NAVIGATE", view });
@@ -23,6 +27,9 @@ export function App() {
       <Sidebar
         activeView={state.activeView}
         connected={state.connected}
+        seekerHasQuestions={state.seekerHasQuestions}
+        tadaHasNew={state.tadaHasNew}
+        pensieveHasNew={state.pensieveHasNew}
         onNavigate={navigate}
       />
       <main id="content">
@@ -39,6 +46,8 @@ export function App() {
         )}
         {state.activeView === "connectors" && <ConnectorsView />}
         {state.activeView === "tada" && momentsEnabled && <TadaView />}
+        {state.activeView === "pensieve" && memoryEnabled && <PensieveView />}
+        {state.activeView === "seeker" && seekerEnabled && <SeekerView />}
         {state.activeView === "usermodel" && <UserModelView />}
         {state.activeView === "settings" && <SettingsView />}
       </main>

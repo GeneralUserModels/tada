@@ -192,6 +192,57 @@ const browserCookiesPermission: PermissionDescriptor = {
   ],
 };
 
+// ── Microphone ──────────────────────────────────────────────────────────────
+
+const microphonePermission: PermissionDescriptor = {
+  check: () => systemPreferences.getMediaAccessStatus("microphone") === "granted",
+
+  request: async () => {
+    const granted = await systemPreferences.askForMediaAccess("microphone");
+    return granted;
+  },
+
+  fixUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+  title: "Microphone Access Required",
+  body: "Tada needs microphone access to transcribe your speech.",
+  steps: [
+    "Open System Settings \u2192 Privacy & Security \u2192 Microphone",
+    'Toggle on "Tada"',
+  ],
+};
+
+// ── System Audio (uses Screen Recording via ScreenCaptureKit) ───────────────
+
+const systemAudioPermission: PermissionDescriptor = {
+  check: () => systemPreferences.getMediaAccessStatus("screen") === "granted",
+
+  request: async () => {
+    // ScreenCaptureKit requires Screen Recording permission even for audio-only.
+    try {
+      await desktopCapturer.getSources({
+        types: ["screen"],
+        thumbnailSize: { width: 1, height: 1 },
+      });
+    } catch { /* falls through */ }
+    const status = systemPreferences.getMediaAccessStatus("screen");
+    if (status !== "granted") {
+      shell.openExternal(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+      );
+    }
+    return status === "granted";
+  },
+
+  fixUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+  title: "Screen Recording Required for System Audio",
+  body: "System audio capture uses ScreenCaptureKit, which requires Screen Recording permission.",
+  steps: [
+    "Open System Settings \u2192 Privacy & Security \u2192 Screen Recording",
+    'Toggle on "Tada"',
+    "Restart Tada if prompted",
+  ],
+};
+
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 export const connectorPermissions: Partial<Record<string, PermissionDescriptor>> = {
@@ -199,6 +250,8 @@ export const connectorPermissions: Partial<Record<string, PermissionDescriptor>>
   notifications: notificationsPermission,
   accessibility: accessibilityPermission,
   browser_cookies: browserCookiesPermission,
+  microphone: microphonePermission,
+  system_audio: systemAudioPermission,
 };
 
 /** Returns true if the named connector either has no permission requirement or passes its check. */

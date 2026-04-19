@@ -89,6 +89,27 @@ interface MomentResult {
   last_viewed: string | null;
   schedule_override: string | null;
   frequency_override: string | null;
+  thumbs: "up" | "down" | null;
+  has_feedback: boolean;
+  feedback_incorporated: boolean;
+}
+
+interface SeekerStatus {
+  has_questions: boolean;
+  conversation_active: boolean;
+  questions_answered: boolean;
+  last_conversation_file: string | null;
+  seeker_enabled: boolean;
+}
+
+interface SeekerMessage {
+  role: "assistant" | "user";
+  content: string;
+}
+
+interface ChatMessage {
+  role: "assistant" | "user";
+  content: string;
 }
 
 interface TadaAPI {
@@ -108,7 +129,7 @@ interface TadaAPI {
   requestConnectorPermission: (name: string) => Promise<boolean>;
   checkConnectorPermission: (name: string) => Promise<boolean>;
 
-  // Moments (Ta-Da)
+  // Moments (Tada)
   getMomentsTasks: () => Promise<MomentTask[]>;
   getMomentsResults: () => Promise<MomentResult[]>;
   getServerUrl: () => Promise<string>;

@@ -44,13 +44,18 @@ async def start_services(state: ServerState) -> None:
     logger.info("DataManager started")
 
     # Refresh expired OAuth tokens before connectors start polling
-    refresh_expired_tokens(state.config)
+    refresh_expired_tokens(state)
 
     # Context logging service (creates and owns all connectors)
     state.context_logging_task = asyncio.create_task(run_context_logging_service(state))
 
     # Background OAuth token refresh
-    state.token_refresh_task = asyncio.create_task(run_token_refresh(state.config))
+    state.token_refresh_task = asyncio.create_task(run_token_refresh(state))
+
+    # Memory wiki service
+    if is_enabled(state.config, "memory") and state.config.memory_enabled:
+        from apps.memory.service import run_memory_service
+        state.memory_task = asyncio.create_task(run_memory_service(state))
 
     # Moments services
     if is_enabled(state.config, "moments") and state.config.moments_enabled:
@@ -58,6 +63,11 @@ async def start_services(state: ServerState) -> None:
         from apps.moments.discovery import run_moments_discovery
         state.moments_scheduler_task = asyncio.create_task(run_moments_scheduler(state))
         state.moments_discovery_task = asyncio.create_task(run_moments_discovery(state))
+
+    # Seeker service
+    if is_enabled(state.config, "seeker") and state.config.seeker_enabled:
+        from apps.seeker.scheduler import run_seeker_scheduler
+        state.seeker_scheduler_task = asyncio.create_task(run_seeker_scheduler(state))
 
     # Initialize predictor and start training loop
     await init_model(state)
@@ -114,8 +124,10 @@ async def lifespan(app: FastAPI):
         state.model.training_task,
         state.context_logging_task,
         state.token_refresh_task,
+        state.memory_task,
         state.moments_scheduler_task,
         state.moments_discovery_task,
+        state.seeker_scheduler_task,
         state.prediction_loop_task,
         state.cost_logger_task,
     ]
@@ -161,8 +173,12 @@ def create_app() -> FastAPI:
     app.include_router(onboarding_router)
     app.include_router(completions_router)
     app.include_router(connectors_router)
+    from apps.memory.routes import router as memory_router
     from apps.moments.routes import router as moments_router
+    from apps.seeker.routes import router as seeker_router
+    app.include_router(memory_router)
     app.include_router(moments_router)
+    app.include_router(seeker_router)
     app.include_router(settings.router)
     app.include_router(status.router)
     app.include_router(user_models_router)

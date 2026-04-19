@@ -15,83 +15,9 @@ from agent.builder import build_agent
 from apps.moments._incremental import read_checkpoint, write_checkpoint
 from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
 
-INSTRUCTION_TEMPLATE = """\
-You are a strict filter. Your job is to incrementally select only the BEST task candidates and copy \
-them to {tada_dir}/. Be very picky — most candidates should be rejected. Only pass through tasks that \
-are clearly high-value, specific, and grounded in real observed behavior.
-
-## Source directories
-
-- **Moments** (recurring tasks): {tasks_dir}/
-- **One-offs** (situational tasks): {oneoffs_dir}/
-
-## Output directory
-
-- **Selected tasks**: {tada_dir}/
-
-## Agent capabilities (for judging whether a task is completable)
-
-The agent that will execute these tasks is powerful. It can:
-- Search the web, crawl pages, and fetch live data
-- Browse authenticated websites (GitHub, Gmail, Twitter/X, YouTube, Slack, Google Docs, etc.) using the user's Chrome cookies
-- Do deep research and analysis — read papers, compare approaches, synthesize across dozens of sources
-- Read files on the user's machine for context
-- Run shell commands, scripts, git operations, Python/Node code
-- Pre-draft emails, Slack messages, documents, and code for the user to review
-- Generate reports, build slide decks, create static HTML interfaces to present results
-- Spawn subagents to parallelize work across different data sources
-- Read local logs: notifications, calendar, email, filesystem changes, screen sessions
-
-The agent CANNOT: call LLMs at runtime in its output, modify arbitrary files on the user's machine, \
-or build interactive interfaces that require a backend. It produces static artifacts (HTML, markdown, \
-drafts) that the user reviews.
-
-Every task is run as a one-shot execution (not a daemon). "Daily digest" means "generate one now."
-
-**When ranking, prioritize tasks that amplify the user's abilities:**
-- **Information foraging and synthesis** — deep research, comparing tools/approaches, reading \
-papers/docs, compiling structured knowledge. This is where the agent provides the most value.
-- **Complex multi-step workflows** — ambitious tasks that chain many operations together.
-- **"Extra-mile" work** — things the user would benefit from but never gets around to doing.
-Deprioritize simple, shallow tasks that a human could do in a few minutes.
-
-## Steps
-
-1. Run `ls {tada_dir}/` to see which tasks have already been selected.
-2. Read ALL candidate `.md` files from {tasks_dir}/ and {oneoffs_dir}/. Use subagents to read \
-them in parallel — each subagent should read a batch of files and return a summary of each \
-(title, source dir, what it does, and a 1-10 quality score based on: grounded in real behavior, \
-genuinely useful, completable by the agent).
-3. For each candidate, decide whether to copy it. Default to REJECTING — only copy tasks that pass \
-ALL of these bars:
-  - Clearly grounded in specific observed user behavior (not generic productivity advice)
-  - Produces a concrete, useful artifact (summary, draft, report, analysis)
-  - Completable by the agent with its available tools in a single run
-  - Not a duplicate or near-duplicate of a task already in {tada_dir}/
-  - Not vague, fluffy, or overly broad
-  - Not reactive/trigger-based ("when X happens, do Y")
-  - Does not require macOS accessibility/window-management APIs
-  Prefer diversity — avoid copying tasks that overlap with existing ones in {tada_dir}/.
-4. Copy the good candidates to {tada_dir}/<filename>.md using write_file. Aim to keep up to {n} \
-total tasks in {tada_dir}/. Do NOT delete any files — not from source dirs and not from {tada_dir}/.
-5. Print which tasks you copied and why, and which you skipped and why.
-6. Run `ls {tada_dir}/` to verify.
-"""
-
-INCREMENTAL_SECTION = """\
-
-## Incremental Filter
-
-This is a RE-RUN. The last filter was on **{last_filter_date}**. Prioritize evaluating new \
-candidates, but review all candidates thoroughly.
-
-### New candidates since last filter (prioritize these):
-{new_candidates_list}
-
-### Previously evaluated candidates:
-{old_candidates_list}
-
-"""
+_PROMPTS = Path(__file__).parent / "prompts"
+INSTRUCTION_TEMPLATE = (_PROMPTS / "filter.txt").read_text()
+INCREMENTAL_SECTION = (_PROMPTS / "filter_incremental.txt").read_text()
 
 
 def _classify_candidates(dirs: list[str], since: datetime | None) -> tuple[list[str], list[str]]:

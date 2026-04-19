@@ -16,34 +16,17 @@ from tenacity import (
 
 logger = logging.getLogger(__name__)
 
-_PROMPT_PATH = Path(__file__).parent / "tab_prompt.txt"
+_PROMPTS = Path(__file__).parent / "prompts"
 
 
 def load_prompt() -> str:
     """Load the full tab prompt (multimodal, references screenshot)."""
-    return _PROMPT_PATH.read_text()
+    return (_PROMPTS / "tab.txt").read_text()
 
 
 def load_prompt_text_only() -> str:
     """Load a text-only variant of the tab prompt (no screenshot references)."""
-    return (
-        "You are an advanced autocomplete system and assistant.\n"
-        "\n"
-        "The user will provide the text they have already written in a textbox. "
-        "If it looks like the user wants you to complete a task, answer based on their above context.\n"
-        "\n"
-        "Otherwise, generate a natural completion for the textbox.\n"
-        "\n"
-        "IMPORTANT:\n"
-        "- Mirror the user's writing style.\n"
-        "- Avoid special formatting: this includes things like new lines or lists.\n"
-        "- Don't be overly positive or negative.\n"
-        "- Don't generate any filler phrases (e.g. it's essential to, feedback is vital, let's keep iterating, etc.).\n"
-        "\n"
-        "NEVER generate or repeat anything that the user has ALREADY written.\n"
-        "\n"
-        "Generate 3-4 sentences of text for the user."
-    )
+    return (_PROMPTS / "tab_text_only.txt").read_text()
 
 
 @retry(
