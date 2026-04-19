@@ -87,8 +87,9 @@ const screenPermission: PermissionDescriptor = {
   body: "Tada needs Screen Recording permission to observe your workflow.",
   steps: [
     "Open System Settings → Privacy & Security → Screen Recording",
-    'Toggle on "Tada"',
-    "Restart Tada if prompted",
+    'If Tada isn\'t an option, click the "+" button and select "Tada"',
+    'Toggle on "Tada" switch on',
+    '(Note: if you\'re in developer mode, you may need to toggle on the terminal switch instead)',
   ],
 };
 
@@ -123,9 +124,9 @@ const notificationsPermission: PermissionDescriptor = {
   body: "Tada needs Full Disk Access to read notifications, files, and browser data.",
   steps: [
     "Open System Settings → Privacy & Security → Full Disk Access",
-    'Click the "+" button',
-    'Select "Tada"',
-    "Toggle the switch on",
+    'If Tada isn\'t an option, click the "+" button and select "Tada"',
+    'Toggle on "Tada" switch on',
+    '(Note: if you\'re in developer mode, you may need to toggle on the terminal switch instead)',
   ],
 };
 
@@ -150,7 +151,8 @@ const accessibilityPermission: PermissionDescriptor = {
   body: "Tada needs Accessibility permission for Tab autocomplete (Tabracadabra).",
   steps: [
     "Open System Settings → Privacy & Security → Accessibility",
-    'Toggle on "Tada" switch on (or the terminal, if you\'re in developer mode)',
+    'Toggle on "Tada" switch on',
+    '(Note: if you\'re in developer mode, you may need to toggle on the terminal switch instead)',
   ],
 };
 
@@ -184,9 +186,9 @@ const browserCookiesPermission: PermissionDescriptor = {
   body: "Tada needs Full Disk Access to read Chrome cookies for web browsing.",
   steps: [
     "Open System Settings → Privacy & Security → Full Disk Access",
-    'Click the "+" button',
-    'Select "Tada"',
-    "Toggle the switch on",
+    'If the Tada isn\'t an option, click the "+" button and select "Tada"',
+    'Toggle on "Tada" switch on',
+    '(Note: if you\'re in developer mode, you may need to toggle on the terminal switch instead)',
   ],
 };
 

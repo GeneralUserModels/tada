@@ -1,6 +1,6 @@
 {
   "name": "tada",
-  "version": "0.0.3-alpha",
+  "version": "0.0.5-alpha",
   "description": "Tada — predict what you'll do next",
   "author": "Tada",
   "main": "dist/main/index.js",
@@ -40,7 +40,7 @@
     "wait-on": "^9.0.4"
   },
   "build": {
-    "appId": "com.tada.app",
+    "appId": "com.generalusermodels.tada",
     "productName": "Tada",
     "generateUpdatesFilesForAllChannels": true,
     "afterSign": "scripts/notarize.cjs",
@@ -108,7 +108,8 @@
     "publish": {
       "provider": "github",
       "owner": "GeneralUserModels",
-      "repo": "tada"
+      "repo": "tada",
+      "channel": "alpha"
     },
     "dmg": {
       "title": "Tada",
