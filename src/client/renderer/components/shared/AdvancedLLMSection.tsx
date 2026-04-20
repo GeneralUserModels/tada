@@ -33,7 +33,7 @@ export function ModelApiKeyRow({
   label, modelKey, apiKeyKey, values, setValues,
   options = LLM_MODELS,
   modelPlaceholder = "Select a model",
-  apiKeyPlaceholder = "Leave blank to use shared key",
+  apiKeyPlaceholder = "Override shared key",
 }: ModelApiKeyRowProps) {
   return (
     <div className="model-row">
@@ -89,7 +89,7 @@ export function AdvancedLLMSection({ values, setValues, children }: Props) {
 
       {open && (
         <div className="advanced-section">
-          <p className="advanced-hint">Override model and/or API key per LLM. Leave blank to use the shared values above.</p>
+          <p className="advanced-hint">Override model and/or API key per LLM.</p>
           {ADVANCED_ROWS.map(({ options: rowOptions, ...row }) => (
             <ModelApiKeyRow key={row.modelKey} {...row} options={rowOptions} values={values} setValues={setValues} modelPlaceholder="Use shared model" />
           ))}
