@@ -186,18 +186,24 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
                 elif "No such file or directory" in raw or "FileNotFoundError" in raw:
                     user_msg = "Not signed in"
                 elif "401" in raw or "Unauthorized" in raw:
-                    # Try refreshing the token before giving up. ensure_google_token_works
-                    # refreshes via Supabase and then verifies with a live Google API call,
-                    # so we don't falsely declare the token dead on a stale expires_at.
+                    # Refresh silently via the edge function and retry.
+                    # refresh_google_via_edge deletes the token file on
+                    # invalid_grant, so a missing file afterwards means the
+                    # user really does need to re-sign-in.
                     if cfg.requires_auth == "google":
-                        from server.routes.auth import ensure_google_token_works
-                        if ensure_google_token_works(state.config.google_token_path):
-                            state.google_auth_ok = True
+                        from server.routes.auth import refresh_google_via_edge
+                        if refresh_google_via_edge(state.config.google_token_path):
                             logger.info(f"{cfg.name}: refreshed Google token after 401, retrying")
                             error_occurred = True
                             continue
-                        state.google_auth_ok = False
-                    user_msg = "Authentication expired — reconnect your account"
+                        if not Path(state.config.google_token_path).exists():
+                            user_msg = "Not signed in"
+                        else:
+                            logger.warning(f"{cfg.name}: transient refresh failure, will retry")
+                            error_occurred = True
+                            continue
+                    else:
+                        user_msg = "Authentication expired — reconnect your account"
                 else:
                     user_msg = raw
                 logger.warning(f"{cfg.name}: pausing — {user_msg}")
@@ -394,21 +400,17 @@ async def run_context_logging_service(state) -> None:
         if both_off:
             audio_conn.pause()
 
-    # Re-enable auth-error connectors whose tokens are verified live at startup.
-    # Google uses state.google_auth_ok (set by auth.refresh_expired_tokens via a
-    # real Gmail API probe); Outlook still uses file-exists since we control
-    # that refresh token directly.
-    def _auth_live(requires_auth: str) -> bool:
-        if requires_auth == "google":
-            return bool(getattr(state, "google_auth_ok", False))
-        if requires_auth == "outlook":
-            return bool(config.outlook_token_path and Path(config.outlook_token_path).exists())
-        return False
-
+    # Re-enable auth-error connectors whose tokens exist on disk — the startup
+    # refresh in auth.refresh_expired_tokens has already rotated them.
+    _auth_token_paths = {
+        "google": config.google_token_path,
+        "outlook": config.outlook_token_path,
+    }
     for cfg in connector_configs:
         if not cfg.requires_auth or not cfg.connector.paused:
             continue
-        if _auth_live(cfg.requires_auth):
+        token_path = _auth_token_paths.get(cfg.requires_auth, "")
+        if token_path and Path(token_path).exists():
             cfg.connector.resume()
             if cfg.name in config.disabled_connectors:
                 config.disabled_connectors.remove(cfg.name)

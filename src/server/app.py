@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from server.state import ServerState
 from server.feature_flags import is_enabled
 from server.routes import settings, status, events
-from server.routes.auth import router as auth_router, refresh_expired_tokens, run_token_refresh
+from server.routes.auth import router as auth_router, refresh_expired_tokens
 from server.routes.onboarding import router as onboarding_router
 from server.routes.completions import router as completions_router
 from connectors.routes import router as connectors_router
@@ -48,9 +48,6 @@ async def start_services(state: ServerState) -> None:
 
     # Context logging service (creates and owns all connectors)
     state.context_logging_task = asyncio.create_task(run_context_logging_service(state))
-
-    # Background OAuth token refresh
-    state.token_refresh_task = asyncio.create_task(run_token_refresh(state))
 
     # Memory wiki service
     if is_enabled(state.config, "memory") and state.config.memory_enabled:
@@ -123,7 +120,6 @@ async def lifespan(app: FastAPI):
     all_tasks = [
         state.model.training_task,
         state.context_logging_task,
-        state.token_refresh_task,
         state.memory_task,
         state.moments_scheduler_task,
         state.moments_discovery_task,
