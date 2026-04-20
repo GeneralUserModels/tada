@@ -93,6 +93,10 @@
         "to": "python-src/retrievers"
       },
       {
+        "from": "./src/chat",
+        "to": "python-src/chat"
+      },
+      {
         "from": "./bootstrap/requirements.txt",
         "to": "python-src/requirements.txt"
       },
