@@ -9,6 +9,7 @@ import { ConnectorsStep } from "./steps/ConnectorsStep";
 import { TabracadabraStep } from "./steps/TabracadabraStep";
 import { ModelsKeysStep } from "./steps/ModelsKeysStep";
 import { LLM_MODELS, AGENT_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
+import { LLM_ROWS, AGENT_ROWS, fanOut } from "../shared/AdvancedLLMSection";
 import {
   startGoogleSignIn,
   getGoogleUser,
@@ -165,27 +166,17 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
     const selectedLlmModel = model || LLM_MODELS[0].value;
     const selectedAgentModel = agentModel || AGENT_MODELS[0].value;
     const trimmedAgentKey = agentKey.trim();
+    const trimmedLabelerKey = labelerKey.trim();
     const settings: Record<string, unknown> = {
-      // Labeling LM fans out to labeling-type consumers.
-      reward_llm: selectedLlmModel,
-      label_model: selectedLlmModel,
-      filter_model: selectedLlmModel,
-      tabracadabra_model: selectedLlmModel,
-      // Agent LM fans out to agentic consumers (Tada, Pensieve, Seeker).
+      ...fanOut(LLM_ROWS, "modelKey", selectedLlmModel),
+      ...fanOut(AGENT_ROWS, "modelKey", selectedAgentModel),
       agent_model: selectedAgentModel,
-      moments_agent_model: selectedAgentModel,
-      memory_agent_model: selectedAgentModel,
-      seeker_model: selectedAgentModel,
       model: tinkerModel || undefined,
-      default_llm_api_key: labelerKey.trim(),
+      default_llm_api_key: trimmedLabelerKey,
+      ...fanOut(LLM_ROWS, "apiKeyKey", trimmedLabelerKey),
+      ...(trimmedAgentKey ? { agent_api_key: trimmedAgentKey, ...fanOut(AGENT_ROWS, "apiKeyKey", trimmedAgentKey) } : {}),
       ...advanced,
     };
-    if (trimmedAgentKey) {
-      settings.agent_api_key = trimmedAgentKey;
-      settings.moments_agent_api_key = trimmedAgentKey;
-      settings.memory_agent_api_key = trimmedAgentKey;
-      settings.seeker_api_key = trimmedAgentKey;
-    }
     if (tinkerKey.trim()) settings.tinker_api_key = tinkerKey.trim();
     if (wandbKey.trim()) settings.wandb_api_key = wandbKey.trim();
     return settings;

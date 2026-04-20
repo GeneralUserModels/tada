@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { useFeatureFlag } from "../../featureFlags";
 import { getSettings, updateSettings } from "../../api/client";
-import { AdvancedLLMSection, ADVANCED_ROWS } from "../shared/AdvancedLLMSection";
+import { AdvancedLLMSection, ADVANCED_ROWS, LLM_ROWS, AGENT_ROWS, fanOut } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, AGENT_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 
 
@@ -74,15 +74,19 @@ export function SettingsView() {
   };
 
   const handleLLMModelChange = (val: string) => {
-    setValues(v => ({ ...v, reward_llm: val, label_model: val, filter_model: val, tabracadabra_model: val }));
+    setValues(v => ({ ...v, ...fanOut(LLM_ROWS, "modelKey", val) }));
   };
 
   const handleAgentModelChange = (val: string) => {
-    setValues(v => ({ ...v, agent_model: val, moments_agent_model: val, memory_agent_model: val, seeker_model: val }));
+    setValues(v => ({ ...v, agent_model: val, ...fanOut(AGENT_ROWS, "modelKey", val) }));
+  };
+
+  const handleDefaultApiKeyChange = (val: string) => {
+    setValues(v => ({ ...v, default_llm_api_key: val, ...fanOut(LLM_ROWS, "apiKeyKey", val) }));
   };
 
   const handleAgentApiKeyChange = (val: string) => {
-    setValues(v => ({ ...v, agent_api_key: val, moments_agent_api_key: val, memory_agent_api_key: val, seeker_api_key: val }));
+    setValues(v => ({ ...v, agent_api_key: val, ...fanOut(AGENT_ROWS, "apiKeyKey", val) }));
   };
 
   const hasUnsavedChanges = allKeys().some((key) => {
@@ -120,7 +124,7 @@ export function SettingsView() {
                   type="text"
                   placeholder="AIza..."
                   value={values["default_llm_api_key"] ?? ""}
-                  onChange={(e) => setValues(v => ({ ...v, default_llm_api_key: e.target.value }))}
+                  onChange={(e) => handleDefaultApiKeyChange(e.target.value)}
                 />
               </label>
             </div>
