@@ -14,6 +14,8 @@ class ServerState:
 
     # Whether heavy services have been started
     services_started: bool = False
+    _services_starting: bool = False
+    connectors_ready: asyncio.Event = field(default_factory=asyncio.Event)
 
     # Service tasks
     context_logging_task: asyncio.Task | None = None

@@ -415,6 +415,7 @@ async def run_context_logging_service(state) -> None:
             config.connector_errors.pop(cfg.name, None)
     config.save()
 
+    state.connectors_ready.set()
     logger.info("Context logging service started")
     filter_api_key = config.resolve_api_key("filter_model_api_key")
 

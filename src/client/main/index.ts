@@ -5,6 +5,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  Menu,
   shell,
 } from "electron";
 import * as fs from "fs";
@@ -208,6 +209,24 @@ function createDashboard({ show = true }: { show?: boolean } = {}) {
   dashboardWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  dashboardWindow.webContents.on("context-menu", (_event, params) => {
+    const items: Electron.MenuItemConstructorOptions[] = [];
+    if (params.selectionText) {
+      items.push({ label: "Copy", role: "copy" });
+    }
+    if (params.isEditable) {
+      items.push(
+        { label: "Cut", role: "cut" },
+        { label: "Paste", role: "paste" },
+      );
+    }
+    if (params.selectionText || params.isEditable) {
+      items.push({ type: "separator" });
+    }
+    items.push({ label: "Select All", role: "selectAll" });
+    Menu.buildFromTemplate(items).popup();
   });
 
   dashboardWindow.on("close", (event) => {

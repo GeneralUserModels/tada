@@ -1,3 +1,4 @@
+import tempfile
 from pathlib import Path
 
 from .base_tool import BaseTool
@@ -18,7 +19,7 @@ from .browser import (
 )
 
 SKILLS_DIR = Path(__file__).parent.parent / "skills"
-TASKS_DIR = Path("/tmp/tada_tasks")
+TASKS_DIR = Path(tempfile.gettempdir()) / "tada_tasks"
 
 _bg_manager = BackgroundManager()
 _task_manager = TaskManager(TASKS_DIR)
