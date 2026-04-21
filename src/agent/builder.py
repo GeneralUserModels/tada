@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import tempfile
 from pathlib import Path
 
 import litellm
@@ -22,7 +23,7 @@ You are an agent with tools to read, write, edit files, run shell commands, sear
 
 You can read any file on the system. You can write files to:
 - {data_dir}/ (app data, logs, tasks)
-- /tmp/
+- {tmp_dir}/ (temporary files)
 
 You can browse the web using the browser_navigate, browser_read_text, browser_click, browser_type, and browser_screenshot tools. These use the user's Chrome cookies, so you can access authenticated pages (Twitter, Gmail, etc.). Use browser_read_text with a CSS selector to narrow down content on large pages.
 
@@ -46,7 +47,7 @@ def _ensure_sandbox(write_dirs: list[str]):
     asyncio.run(SandboxManager.initialize(SandboxRuntimeConfig(
         network={},
         filesystem={
-            "allow_write": write_dirs + ["/tmp"],
+            "allow_write": write_dirs + [tempfile.gettempdir()],
             "deny_read": ["~/.ssh", "~/.gnupg", "~/.aws/credentials"],
         },
     )))
@@ -60,7 +61,7 @@ async def _ensure_sandbox_async(write_dirs: list[str]):
     await SandboxManager.initialize(SandboxRuntimeConfig(
         network={},
         filesystem={
-            "allow_write": write_dirs + ["/tmp"],
+            "allow_write": write_dirs + [tempfile.gettempdir()],
             "deny_read": ["~/.ssh", "~/.gnupg", "~/.aws/credentials"],
         },
     ))
@@ -93,7 +94,7 @@ def build_agent(model: str, data_dir: str, extra_write_dirs: list[str] | None = 
     data_dir = str(Path(data_dir).resolve())
     write_dirs = [data_dir] + [str(Path(d).resolve()) for d in (extra_write_dirs or [])]
     _ensure_sandbox(write_dirs)
-    system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(data_dir=data_dir)
+    system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(data_dir=data_dir, tmp_dir=tempfile.gettempdir())
     transcript_dir = Path(data_dir) / "transcripts"
     compact_tool = CompactTool(transcript_dir, _make_summarizer(model, api_key), model=model)
     subagent_tool = SubAgentTool(_make_child_agent(model, system_prompt, api_key), ALL_TOOLS)

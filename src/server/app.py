@@ -18,26 +18,30 @@ from server.routes.completions import router as completions_router
 from connectors.routes import router as connectors_router
 from user_models.routes import router as user_models_router
 
+from connectors.service import run_context_logging_service
+from user_models.training import init_model, run_training_service
+from apps.tabracadabra.prediction_loop import run_prediction_loop
+from server.cost_tracker import init_cost_tracking, run_cost_logger
+from user_models.data_manager import DataManager
+
+from apps.memory.routes import router as memory_router
+from apps.moments.routes import router as moments_router
+from apps.seeker.routes import router as seeker_router
+
 logger = logging.getLogger(__name__)
 
 
 async def start_services(state: ServerState) -> None:
     """Start all heavy background services. Called once after onboarding completes."""
-    if state.services_started:
+    if state.services_started or state._services_starting:
         return
-    state.services_started = True
-
-    from connectors.service import run_context_logging_service
-    from user_models.training import init_model, run_training_service
-    from apps.tabracadabra.prediction_loop import run_prediction_loop
-    from server.cost_tracker import init_cost_tracking, run_cost_logger
+    state._services_starting = True
 
     # LLM cost tracking (must be before any litellm calls)
     cost_tracker = init_cost_tracking()
     state.cost_logger_task = asyncio.create_task(run_cost_logger(cost_tracker))
 
     # DataManager
-    from user_models.data_manager import DataManager
     dm = DataManager(log_dir=state.config.log_dir)
     await dm.start()
     state.model.data_manager = dm
@@ -48,6 +52,15 @@ async def start_services(state: ServerState) -> None:
 
     # Context logging service (creates and owns all connectors)
     state.context_logging_task = asyncio.create_task(run_context_logging_service(state))
+
+    # Mark services as ready as soon as connectors are populated —
+    # the frontend needs this before it can show connector status.
+    # Remaining services (model, tabracadabra, etc.) continue in the background.
+    await state.connectors_ready.wait()
+    state.services_started = True
+
+    # Background OAuth token refresh
+    state.token_refresh_task = asyncio.create_task(run_token_refresh(state))
 
     # Memory wiki service
     if is_enabled(state.config, "memory") and state.config.memory_enabled:
@@ -99,14 +112,24 @@ async def lifespan(app: FastAPI):
     state.config.load_persisted()
     app.state.server = state
 
-    # If onboarding already done, start services immediately
+    # If onboarding already done, start services in the background so the
+    # HTTP server begins accepting requests (e.g. /api/status) immediately.
     if state.config.onboarding_complete:
-        await start_services(state)
+        state._startup_task = asyncio.create_task(start_services(state))
 
     yield
 
     # Graceful shutdown
     state = app.state.server
+
+    # If services are still initializing, wait for that to finish first
+    startup_task = getattr(state, "_startup_task", None)
+    if startup_task and not startup_task.done():
+        startup_task.cancel()
+        try:
+            await startup_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
     # Stop Tabracadabra first (synchronous, quick)
     if state.tabracadabra_service is not None:
@@ -169,9 +192,6 @@ def create_app() -> FastAPI:
     app.include_router(onboarding_router)
     app.include_router(completions_router)
     app.include_router(connectors_router)
-    from apps.memory.routes import router as memory_router
-    from apps.moments.routes import router as moments_router
-    from apps.seeker.routes import router as seeker_router
     app.include_router(memory_router)
     app.include_router(moments_router)
     app.include_router(seeker_router)

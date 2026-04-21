@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
+import os
 import asyncio
 import logging
 import re
@@ -9,9 +11,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from server.feature_flags import is_enabled
+from agent.builder import _ensure_sandbox_async
+from apps.moments.scheduler import _next_run_time, _parse_time
+from server.cost_tracker import init_cost_tracking
 
 logger = logging.getLogger(__name__)
-
 
 class MemoryIngest:
     """Ingests new activity logs into the personal knowledge wiki."""
@@ -57,7 +61,6 @@ async def run_memory_service(state) -> None:
     If the scheduled time has already passed today but we haven't run yet
     (e.g. the computer was off at 3am), run immediately on wake.
     """
-    from apps.moments.scheduler import _next_run_time, _parse_time
 
     logger.info("Memory wiki service started")
 
@@ -98,6 +101,10 @@ async def run_memory_service(state) -> None:
             model = cfg.memory_agent_model
             api_key = cfg.memory_agent_api_key or cfg.resolve_api_key("agent_api_key")
 
+            # Pre-initialize sandbox on the event-loop thread (signal handlers
+            # can only be registered here, not inside the worker thread).
+            await _ensure_sandbox_async([logs_dir])
+
             # Always run ingest
             logger.info("Memory: running ingest")
             await asyncio.to_thread(MemoryIngest(logs_dir, model, api_key).run)
@@ -129,8 +136,6 @@ async def run_memory_service(state) -> None:
 
 def main():
     """Run ingest (and optionally lint) once from the command line."""
-    import argparse
-    import os
 
     parser = argparse.ArgumentParser(description="Run memory wiki pipeline")
     parser.add_argument("--logs-dir", default=os.getenv("TADA_LOG_DIR", "./logs"),
@@ -144,7 +149,6 @@ def main():
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-    from server.cost_tracker import init_cost_tracking
     tracker = init_cost_tracking()
 
     logs_dir = str(Path(args.logs_dir).resolve())

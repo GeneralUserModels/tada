@@ -1838,6 +1838,8 @@ button, input, select, textarea, canvas, a, label,
   padding: 4px 4px 16px;
   line-height: 1.7;
   color: var(--text);
+  user-select: text;
+  cursor: auto;
 }
 
 .pensieve-content h1 {
