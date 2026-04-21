@@ -17,29 +17,18 @@ export function TadasStep({ onBack, onContinue, isFinal = false }: Props) {
       </div>
       <div className="page-title">Tadas</div>
       <p className="page-desc">
-        Proactive, just-in-time mini-apps your assistant builds for you. They run on their own schedule, so the answer is already waiting the moment you need it — no prompt, no asking.
+        Proactive mini-apps that run on their own schedule — answers waiting before you need to ask.
       </p>
 
-      <div className="tadas-meta-card">
-        <div className="tadas-meta-title">Yellow Brick Road — Journey Planner</div>
-        <div className="tadas-meta-desc">
-          Today's route options, party status, and where to commit the next leg — updated each morning based on yesterday's march.
-        </div>
-        <div className="tadas-meta-schedule">
-          <span className="tadas-schedule-chip">daily · at dawn</span>
-          <span className="tadas-meta-sep">Next run tomorrow</span>
-        </div>
-      </div>
-
       <iframe
-        className="tadas-iframe"
+        className="sample-iframe"
         sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
         srcDoc={SAMPLE_TADA_HTML}
         title="Sample tada"
       />
 
-      <p className="tadas-hint">
-        Pick a path to commit — the tada remembers your choice and plans tomorrow around it.
+      <p className="sample-hint">
+        Four tabs of what Dorothy knows about Oz — assembled fresh each dawn.
       </p>
 
       <div className="btn-row">

@@ -16,7 +16,7 @@ const TUTORIALS: TutorialConfig[] = [
   {
     title: "Autocomplete",
     description: "Press Option + Tab to complete text from context.",
-    prefill: "We tested the model on three benchmarks and found that ",
+    prefill: "Day two of my apprenticeship with the sorcerer, and I've already ",
     placeholder: "Type some context, then press Option + Tab.",
     hintIdle: "Press Option + Tab to autocomplete.",
     hintDone: "Option + Tab continues from where you left off.",
@@ -25,7 +25,7 @@ const TUTORIALS: TutorialConfig[] = [
     title: "You can also prompt it",
     description: "Type a question or instruction, then press Option + Tab.",
     prefill:
-      "We tested the model on three benchmarks and found that performance scaled consistently with context length, particularly on long-form summarization tasks. The largest gains appeared when the model had access to at least two prior turns of interaction history.\n\nplz emojify this text\n\n",
+      "Official notice from the Headmaster: dueling practice in the courtyard is denied. Get a permit from your Head of House by Friday, or the charms wing stays locked.\n\nrewrite this like Hagrid would say it\n\n",
     placeholder: "Write a prompt, then press Option + Tab.",
     hintIdle: "Press Option + Tab to get a response.",
     hintDone: "Tabracadabra responds to instructions too, not just autocomplete.",
@@ -69,6 +69,7 @@ export function TabracadabraStep({ onBack, onContinue, isFinal = true }: Props) 
   const loadingStartedAtRef = useRef<number | null>(null);
   const baseTextRef = useRef(TUTORIALS[0].prefill);
   const cancelledRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const tutorial = TUTORIALS[tutorialStep];
 
@@ -95,6 +96,12 @@ export function TabracadabraStep({ onBack, onContinue, isFinal = true }: Props) 
     setText(t.prefill);
     baseTextRef.current = t.prefill;
     setPhase("idle");
+    const el = textareaRef.current;
+    if (el) {
+      el.focus();
+      const end = t.prefill.length;
+      el.setSelectionRange(end, end);
+    }
   }, [tutorialStep]);
 
   const startSpinner = () => {
@@ -184,6 +191,7 @@ export function TabracadabraStep({ onBack, onContinue, isFinal = true }: Props) 
       <div className="page-icon">
         <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M3 8h10M3 11.5h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M11.2 10.7 13.5 8.4l-2.3-2.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </div>
+      <div className="page-kicker">Tabracadabra</div>
       <div className="page-title">{tutorial.title}</div>
       <p className="page-desc">{tutorial.description}</p>
       <p className="page-desc" style={{ fontSize: "12px", opacity: 0.5, marginTop: -4 }}>
@@ -193,6 +201,8 @@ export function TabracadabraStep({ onBack, onContinue, isFinal = true }: Props) 
         <div className="field">
           <span className="field-label">Practice prompt</span>
           <textarea
+            ref={textareaRef}
+            autoFocus
             className="tutorial-box"
             value={text}
             rows={8}
