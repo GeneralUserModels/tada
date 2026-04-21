@@ -19,7 +19,6 @@ class ServerState:
 
     # Service tasks
     context_logging_task: asyncio.Task | None = None
-    token_refresh_task: asyncio.Task | None = None
     moments_scheduler_task: asyncio.Task | None = None
     moments_discovery_task: asyncio.Task | None = None
     memory_task: asyncio.Task | None = None
@@ -42,12 +41,6 @@ class ServerState:
     # Connector instances (populated by connectors service on startup)
     connectors: dict = field(default_factory=dict)
     connector_auth: dict = field(default_factory=dict)  # name → requires_auth value
-
-    # Live result of the last Google token probe (GET gmail users/me/profile).
-    # Maintained by auth.refresh_expired_tokens / run_token_refresh and the 401
-    # handler in connectors/service.py. Used by the connectors route to report
-    # availability without re-probing on every request.
-    google_auth_ok: bool = False
 
     # Tabracadabra event tap service (macOS only)
     tabracadabra_service: object | None = None

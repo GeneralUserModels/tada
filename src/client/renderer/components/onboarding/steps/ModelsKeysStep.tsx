@@ -90,11 +90,11 @@ export function ModelsKeysStep(props: Props) {
             </div>
           </div>
           <p className="onboarding-api-key-hint">
-            Powers Tada, Pensieve, and Seeker. Get your key at{" "}
+            You can get your key at{" "}
             <a href={ANTHROPIC_API_KEY_URL} onClick={openAnthropicApiKeyPage}>
               Anthropic Console
             </a>
-            .
+            {" "}. Make sure your account is upgraded from the free tier so you don't run into rate limits.
           </p>
         </div>
         <AdvancedLLMSection values={props.advancedValues} setValues={props.setAdvancedValues} />
