@@ -56,9 +56,10 @@ async function* streamCompletion(text: string, signal: AbortSignal) {
 type Props = {
   onBack: () => void;
   onContinue: () => void;
+  isFinal?: boolean;
 };
 
-export function TabracadabraStep({ onBack, onContinue }: Props) {
+export function TabracadabraStep({ onBack, onContinue, isFinal = true }: Props) {
   const [tutorialStep, setTutorialStep] = useState(0);
   const [text, setText] = useState(TUTORIALS[0].prefill);
   const [phase, setPhase] = useState<DemoPhase>("idle");
@@ -232,7 +233,7 @@ export function TabracadabraStep({ onBack, onContinue }: Props) {
       <div className="btn-row">
         <button className="btn btn-ghost" onClick={handleBack}>Back</button>
         <button className="btn btn-primary" onClick={handleNext}>
-          {tutorialStep < TUTORIALS.length - 1 ? "Next" : "Finish Setup"}
+          {tutorialStep < TUTORIALS.length - 1 ? "Next" : isFinal ? "Finish Setup" : "Next"}
         </button>
       </div>
     </div>

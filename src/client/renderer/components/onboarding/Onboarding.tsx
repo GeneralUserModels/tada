@@ -7,6 +7,8 @@ import { WelcomeStep } from "./steps/WelcomeStep";
 import { GoogleSignInStep } from "./steps/GoogleSignInStep";
 import { ConnectorsStep } from "./steps/ConnectorsStep";
 import { TabracadabraStep } from "./steps/TabracadabraStep";
+import { TadasStep } from "./steps/TadasStep";
+import { PensieveStep } from "./steps/PensieveStep";
 import { ModelsKeysStep } from "./steps/ModelsKeysStep";
 import { LLM_MODELS, AGENT_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 import {
@@ -199,6 +201,38 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
     window.tada.onboardingComplete();
   };
 
+  const tadasEnabled = flag("moments");
+  const pensieveEnabled = flag("memory");
+
+  // Step visibility — indexed by step id. Keep fixed ids so step handlers read naturally.
+  // Connectors is always shown: screen + accessibility permissions are unconditionally required.
+  const stepEnabled = [
+    true,              // 0 Welcome
+    true,              // 1 Google
+    true,              // 2 Connectors
+    true,              // 3 Models
+    true,              // 4 Tabracadabra
+    tadasEnabled,      // 5 Tadas
+    pensieveEnabled,   // 6 Pensieve
+  ];
+  const totalSteps = stepEnabled.filter(Boolean).length;
+  const visibleStepIndex = stepEnabled.slice(0, step + 1).filter(Boolean).length - 1;
+
+  const nextStep = (from: number): number | null => {
+    for (let i = from + 1; i < stepEnabled.length; i++) if (stepEnabled[i]) return i;
+    return null;
+  };
+  const prevStep = (from: number): number => {
+    for (let i = from - 1; i >= 0; i--) if (stepEnabled[i]) return i;
+    return 0;
+  };
+  const advance = (from: number) => {
+    const n = nextStep(from);
+    if (n === null) handleSubmit();
+    else setStep(n);
+  };
+  const isFinal = (from: number) => nextStep(from) === null;
+
   const openPermissionModal = (name: string, onGranted: () => void) => {
     setPermModal({ name, onGranted });
   };
@@ -224,7 +258,7 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
         />
       )}
 
-      <StepIndicator current={step} total={5} />
+      <StepIndicator current={visibleStepIndex} total={totalSteps} />
 
       {step === 0 && <WelcomeStep onStart={() => setStep(1)} serverReady={serverReady} />}
 
@@ -233,8 +267,8 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           googleUser={googleUser}
           googleLoading={googleLoading}
           googleError={googleError}
-          onBack={() => setStep(0)}
-          onContinue={() => setStep(2)}
+          onBack={() => setStep(prevStep(1))}
+          onContinue={() => advance(1)}
           onGoogleLogin={handleGoogleLogin}
         />
       )}
@@ -251,8 +285,8 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           browserCookiesGranted={browserCookiesGranted}
           connectingGoogle={connectingGoogle}
           connectingOutlook={connectingOutlook}
-          onBack={() => setStep(1)}
-          onContinue={() => setStep(3)}
+          onBack={() => setStep(prevStep(2))}
+          onContinue={() => advance(2)}
           onOpenPermissionModal={openPermissionModal}
           onConnectGoogle={handleConnectGoogle}
           onConnectOutlook={handleConnectOutlook}
@@ -291,14 +325,30 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           setWandbKey={setWandbKey}
           setAdvancedValues={setAdvancedValues}
           validateTinker={validateTinker}
-          onBack={() => setStep(2)}
-          onFinish={() => { saveSettings(); setStep(4); }}
+          onBack={() => setStep(prevStep(3))}
+          onFinish={() => { saveSettings(); advance(3); }}
         />
       )}
 
       {step === 4 && (
         <TabracadabraStep
-          onBack={() => setStep(3)}
+          onBack={() => setStep(prevStep(4))}
+          onContinue={() => advance(4)}
+          isFinal={isFinal(4)}
+        />
+      )}
+
+      {step === 5 && tadasEnabled && (
+        <TadasStep
+          onBack={() => setStep(prevStep(5))}
+          onContinue={() => advance(5)}
+          isFinal={isFinal(5)}
+        />
+      )}
+
+      {step === 6 && pensieveEnabled && (
+        <PensieveStep
+          onBack={() => setStep(prevStep(6))}
           onContinue={handleSubmit}
         />
       )}
