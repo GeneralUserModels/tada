@@ -14,7 +14,9 @@ FEATURE_FLAG_DEFAULTS: dict[str, bool] = {
     "seeker": False,
     "tabracadabra": True,
     "tinker": False,
-    # Connectors
+    # Connectors — flags on so the toggles show in Settings; initial on/off state is
+    # controlled via `disabled_connectors` in tada-config.defaults.json so connectors
+    # don't auto-start and trigger TCC prompts on first launch.
     "connector_screen": True,
     "connector_gmail": True,
     "connector_calendar": True,

@@ -38,6 +38,8 @@ export function ModelsKeysStep(props: Props) {
     e.preventDefault();
     void window.tada.openExternalUrl(ANTHROPIC_API_KEY_URL);
   };
+  const agentLmNeeded =
+    props.flag("moments") || props.flag("memory") || props.flag("seeker");
 
   return (
     <div className="page active">
@@ -72,31 +74,33 @@ export function ModelsKeysStep(props: Props) {
             {" "}. Make sure your account is upgraded from the free tier so you don't run into rate limits.
           </p>
         </div>
-        <div className="model-row">
-          <span className="model-row-label">Agent LM <span className="required-tag">Required</span></span>
-          <div className="model-row-fields">
-            <div className="field">
-              <span>Model</span>
-              <ModelDropdown
-                value={props.agentModel}
-                onChange={props.setAgentModel}
-                options={AGENT_MODELS}
-                placeholder="Select a model"
-              />
+        {agentLmNeeded && (
+          <div className="model-row">
+            <span className="model-row-label">Agent LM <span className="required-tag">Required</span></span>
+            <div className="model-row-fields">
+              <div className="field">
+                <span>Model</span>
+                <ModelDropdown
+                  value={props.agentModel}
+                  onChange={props.setAgentModel}
+                  options={AGENT_MODELS}
+                  placeholder="Select a model"
+                />
+              </div>
+              <div className="field">
+                <span>API Key</span>
+                <input type="password" placeholder="sk-ant-..." value={props.agentKey} onChange={(e) => props.setAgentKey(e.target.value)}/>
+              </div>
             </div>
-            <div className="field">
-              <span>API Key</span>
-              <input type="password" placeholder="sk-ant-..." value={props.agentKey} onChange={(e) => props.setAgentKey(e.target.value)}/>
-            </div>
+            <p className="onboarding-api-key-hint">
+              You can get your key at{" "}
+              <a href={ANTHROPIC_API_KEY_URL} onClick={openAnthropicApiKeyPage}>
+                Anthropic Console
+              </a>
+              {" "}. Make sure your account is upgraded from the free tier so you don't run into rate limits.
+            </p>
           </div>
-          <p className="onboarding-api-key-hint">
-            You can get your key at{" "}
-            <a href={ANTHROPIC_API_KEY_URL} onClick={openAnthropicApiKeyPage}>
-              Anthropic Console
-            </a>
-            {" "}. Make sure your account is upgraded from the free tier so you don't run into rate limits.
-          </p>
-        </div>
+        )}
         <AdvancedLLMSection values={props.advancedValues} setValues={props.setAdvancedValues} />
         {props.flag("tinker") && (
           <div className="model-row">
@@ -128,7 +132,7 @@ export function ModelsKeysStep(props: Props) {
       </div>
       <div className="btn-row">
         <button className="btn btn-ghost" onClick={props.onBack}>Back</button>
-        <button className="btn btn-primary" disabled={!props.model.trim() || !props.labelerKey.trim() || !props.agentModel.trim() || !props.agentKey.trim() || (props.flag("tinker") && !!props.tinkerError)} onClick={props.onFinish}>Continue</button>
+        <button className="btn btn-primary" disabled={!props.model.trim() || !props.labelerKey.trim() || (agentLmNeeded && (!props.agentModel.trim() || !props.agentKey.trim())) || (props.flag("tinker") && !!props.tinkerError)} onClick={props.onFinish}>Continue</button>
       </div>
     </div>
   );

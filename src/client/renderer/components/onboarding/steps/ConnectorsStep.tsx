@@ -31,9 +31,9 @@ type Props = {
 
 export function ConnectorsStep(props: Props) {
   const canContinue = !(
-    (props.flag("permission_screen") && !props.screenGranted)
+    !props.screenGranted
+    || !props.accessibilityGranted
     || (props.flag("permission_browser_cookies") && !props.browserCookiesGranted)
-    || (props.flag("permission_accessibility") && !props.accessibilityGranted)
   );
 
   return (
@@ -45,23 +45,21 @@ export function ConnectorsStep(props: Props) {
       <p className="page-desc">Choose which data sources Tada can access to learn your patterns.</p>
       <div className="glass-card" style={{ padding: 16 }}>
         <div className="connector-list">
-          {props.flag("permission_screen") && (
-            <div className="connector-row">
-              <div className="connector-icon">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
-              </div>
-              <div className="connector-info">
-                <div className="connector-name">Screen Recording <span className="required-tag">Required</span></div>
-                <div className="connector-desc">Captures your screen to observe workflow</div>
-              </div>
-              <div className="connector-action">
-                {props.screenGranted
-                  ? <span className="perm-badge granted">Granted</span>
-                  : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("screen", () => props.setScreenGranted(true))}>Grant Access</button>
-                }
-              </div>
+          <div className="connector-row">
+            <div className="connector-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
             </div>
-          )}
+            <div className="connector-info">
+              <div className="connector-name">Screen Recording <span className="required-tag">Required</span></div>
+              <div className="connector-desc">Captures your screen to observe workflow</div>
+            </div>
+            <div className="connector-action">
+              {props.screenGranted
+                ? <span className="perm-badge granted">Granted</span>
+                : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("screen", () => props.setScreenGranted(true))}>Grant Access</button>
+              }
+            </div>
+          </div>
 
           {props.flag("permission_microphone") && (
             <div className="connector-row">
@@ -69,8 +67,8 @@ export function ConnectorsStep(props: Props) {
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="6" y="1" width="4" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M4 7a4 4 0 008 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M8 11v3M6 14h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
               </div>
               <div className="connector-info">
-                <div className="connector-name">Microphone</div>
-                <div className="connector-desc">Transcribe speech from your microphone</div>
+                <div className="connector-name">Microphone <span className="optional-tag">optional</span></div>
+                <div className="connector-desc">Transcribe your voice in meetings</div>
               </div>
               <div className="connector-action">
                 {props.micGranted
@@ -87,8 +85,8 @@ export function ConnectorsStep(props: Props) {
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 5.5h2.5L8 2v12l-3.5-3.5H2a1 1 0 01-1-1v-3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M11 5.5a3.5 3.5 0 010 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M13 3.5a6.5 6.5 0 010 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
               </div>
               <div className="connector-info">
-                <div className="connector-name">System Audio</div>
-                <div className="connector-desc">Transcribe system audio output</div>
+                <div className="connector-name">System Audio <span className="optional-tag">optional</span></div>
+                <div className="connector-desc">Transcribe other participants in meetings</div>
               </div>
               <div className="connector-action">
                 {props.sysAudioGranted
@@ -97,6 +95,12 @@ export function ConnectorsStep(props: Props) {
                 }
               </div>
             </div>
+          )}
+
+          {(props.flag("permission_microphone") || props.flag("permission_system_audio")) && (
+            <p className="connector-hint">
+              Audio is only used when you hit record for meeting notes.
+            </p>
           )}
 
           {(props.flag("connector_gmail") || props.flag("connector_calendar")) && (
@@ -171,23 +175,21 @@ export function ConnectorsStep(props: Props) {
             </div>
           )}
 
-          {props.flag("permission_accessibility") && (
-            <div className="connector-row">
-              <div className="connector-icon">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="5.5" r="1" fill="currentColor"/><path d="M5.5 7.5h5M8 7.5v4M6.5 11.5L8 9.5l1.5 2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </div>
-              <div className="connector-info">
-                <div className="connector-name">Accessibility <span className="required-tag">Required</span></div>
-                <div className="connector-desc">Tab autocomplete (Tabracadabra)</div>
-              </div>
-              <div className="connector-action">
-                {props.accessibilityGranted
-                  ? <span className="perm-badge granted">Granted</span>
-                  : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("accessibility", () => props.setAccessibilityGranted(true))}>Grant Access</button>
-                }
-              </div>
+          <div className="connector-row">
+            <div className="connector-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="5.5" r="1" fill="currentColor"/><path d="M5.5 7.5h5M8 7.5v4M6.5 11.5L8 9.5l1.5 2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </div>
-          )}
+            <div className="connector-info">
+              <div className="connector-name">Accessibility <span className="required-tag">Required</span></div>
+              <div className="connector-desc">Tab autocomplete (Tabracadabra)</div>
+            </div>
+            <div className="connector-action">
+              {props.accessibilityGranted
+                ? <span className="perm-badge granted">Granted</span>
+                : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("accessibility", () => props.setAccessibilityGranted(true))}>Grant Access</button>
+              }
+            </div>
+          </div>
         </div>
       </div>
       <div className="btn-row">

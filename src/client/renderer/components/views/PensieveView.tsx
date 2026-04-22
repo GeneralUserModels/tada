@@ -4,57 +4,13 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { useAppContext } from "../../context/AppContext";
 import { useMemory, WikiPage } from "../../hooks/useMemory";
-
-/** Strip YAML frontmatter from markdown text. */
-function stripFrontmatter(md: string): string {
-  if (!md.startsWith("---")) return md;
-  const end = md.indexOf("---", 3);
-  if (end === -1) return md;
-  return md.slice(end + 3).trimStart();
-}
-
-/** Parse YAML frontmatter into a simple key-value map. */
-function parseFrontmatter(md: string): Record<string, string> {
-  if (!md.startsWith("---")) return {};
-  const end = md.indexOf("---", 3);
-  if (end === -1) return {};
-  const fm: Record<string, string> = {};
-  for (const line of md.slice(3, end).trim().split("\n")) {
-    const idx = line.indexOf(":");
-    if (idx > 0) fm[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-  }
-  return fm;
-}
-
-/** Replace [[wiki-links]] with markdown links using a custom scheme. */
-function processWikiLinks(md: string): string {
-  return md.replace(/\[\[([^\]]+)\]\]/g, (_, name: string) => {
-    const slug = name
-      .trim()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9\/]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    return `[${name}](wiki:${slug})`;
-  });
-}
-
-/** Confidence badge color: red → yellow → green. */
-function confidenceColor(c: number): string {
-  if (c < 0.3) return "#C9594B";
-  if (c < 0.6) return "#D4A843";
-  if (c < 0.8) return "#8BB97E";
-  return "#5DA34E";
-}
-
-function confidenceLabel(c: number): string {
-  if (c < 0.3) return "speculative";
-  if (c < 0.6) return "probable";
-  if (c < 0.8) return "confident";
-  return "certain";
-}
+import {
+  stripFrontmatter,
+  parseFrontmatter,
+  processWikiLinks,
+  confidenceColor,
+  confidenceLabel,
+} from "./pensieveHelpers";
 
 /** Format a relative time string. */
 function timeAgo(dateStr: string): string {
