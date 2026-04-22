@@ -14,9 +14,8 @@ FEATURE_FLAG_DEFAULTS: dict[str, bool] = {
     "seeker": False,
     "tabracadabra": True,
     "tinker": False,
-    # Connectors — flags on so the toggles show in Settings; initial on/off state is
-    # controlled via `disabled_connectors` in tada-config.defaults.json so connectors
-    # don't auto-start and trigger TCC prompts on first launch.
+    # Connectors — flags on so the toggles show in Settings; connectors only run if
+    # listed in `enabled_connectors`, which is populated during onboarding.
     "connector_screen": True,
     "connector_gmail": True,
     "connector_calendar": True,
@@ -29,7 +28,7 @@ FEATURE_FLAG_DEFAULTS: dict[str, bool] = {
     "connector_system_audio": True,
     # OS-level permissions
     "permission_screen": True,
-    "permission_notifications": True,
+    "permission_disk_access": True,
     "permission_accessibility": True,
     "permission_browser_cookies": True,
     "permission_microphone": True,

@@ -210,8 +210,8 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
                 cfg.connector.stop(error=user_msg)
                 await cfg.connector.disconnect_if_needed()
                 # Persist so the connector stays paused-with-error across restarts
-                if cfg.name not in state.config.disabled_connectors:
-                    state.config.disabled_connectors.append(cfg.name)
+                if cfg.name in state.config.enabled_connectors:
+                    state.config.enabled_connectors.remove(cfg.name)
                 state.config.connector_errors[cfg.name] = user_msg
                 state.config.save()
                 if state is not None:
@@ -335,8 +335,8 @@ async def run_context_logging_service(state) -> None:
     # Audio connector — one server managing both mic and system audio.
     # The UI shows two virtual connectors ("microphone", "system_audio") mapped via routes.
     if is_enabled(config, "connector_microphone") or is_enabled(config, "connector_system_audio"):
-        mic_on = "microphone" not in config.disabled_connectors
-        sys_on = "system_audio" not in config.disabled_connectors
+        mic_on = "microphone" in config.enabled_connectors
+        sys_on = "system_audio" in config.enabled_connectors
         connector_configs.append(ConnectorConfig(
             name="audio", interval=0, log_subdir="audio",
             filter=False,
@@ -388,7 +388,7 @@ async def run_context_logging_service(state) -> None:
 
     # Apply persisted enabled/disabled state and error messages from server config
     for cfg in connector_configs:
-        if cfg.name in config.disabled_connectors:
+        if cfg.name not in config.enabled_connectors:
             cfg.connector.pause()
         if cfg.name in config.connector_errors:
             cfg.connector.error = config.connector_errors[cfg.name]
@@ -396,7 +396,7 @@ async def run_context_logging_service(state) -> None:
     # Audio connector: pause if both virtual sources are disabled
     audio_conn = state.connectors.get("audio")
     if audio_conn is not None:
-        both_off = "microphone" in config.disabled_connectors and "system_audio" in config.disabled_connectors
+        both_off = "microphone" not in config.enabled_connectors and "system_audio" not in config.enabled_connectors
         if both_off:
             audio_conn.pause()
 
@@ -412,8 +412,8 @@ async def run_context_logging_service(state) -> None:
         token_path = _auth_token_paths.get(cfg.requires_auth, "")
         if token_path and Path(token_path).exists():
             cfg.connector.resume()
-            if cfg.name in config.disabled_connectors:
-                config.disabled_connectors.remove(cfg.name)
+            if cfg.name not in config.enabled_connectors:
+                config.enabled_connectors.append(cfg.name)
             config.connector_errors.pop(cfg.name, None)
     config.save()
 

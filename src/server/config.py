@@ -39,7 +39,7 @@ SETTINGS_API_FIELDS: frozenset[str] = frozenset({
 # Superset of SETTINGS_API_FIELDS — includes internal fields not shown in the UI.
 _PERSISTED_FIELDS = SETTINGS_API_FIELDS | {
     "model_type",
-    "disabled_connectors", "connector_errors", "mcp_connectors",
+    "enabled_connectors", "connector_errors", "mcp_connectors",
     "onboarding_complete",
     "memory_enabled", "memory_agent_model", "memory_agent_api_key", "memory_schedule",
     "tada_dir", "moments_agent_model", "moments_agent_api_key", "moments_discovery_schedule", "moments_enabled",
@@ -181,8 +181,8 @@ class ServerConfig(BaseModel):
     moments_agent_api_key: str = ""
     moments_enabled: bool = True
 
-    # Connectors: names of connectors that are disabled (paused)
-    disabled_connectors: list[str] = Field(default_factory=list)
+    # Connectors: names of connectors that are enabled (running)
+    enabled_connectors: list[str] = Field(default_factory=list)
 
     # Connector error messages persisted across restarts (name → error string)
     connector_errors: dict[str, str] = Field(default_factory=dict)

@@ -93,7 +93,8 @@ export const getMemoryLog = () =>
 // ── Onboarding ───────────────────────────────────────────────
 export const getOnboardingStatus = () =>
   request("GET", "/api/onboarding/status") as Promise<{ complete: boolean }>;
-export const completeOnboarding = () => request("POST", "/api/onboarding/complete");
+export const completeOnboarding = (enabledConnectors: string[]) =>
+  request("POST", "/api/onboarding/complete", { enabled_connectors: enabledConnectors });
 export const checkNotificationsPermission = () =>
   request("GET", "/api/permissions/notifications") as Promise<{ granted: boolean }>;
 export const checkFilesystemPermission = () =>
