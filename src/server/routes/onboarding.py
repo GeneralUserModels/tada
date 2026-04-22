@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from fastapi import APIRouter, Request
+from server.services import start_services
 
 router = APIRouter(prefix="/api", tags=["onboarding"])
 
@@ -23,9 +24,8 @@ async def onboarding_status(request: Request):
 async def onboarding_complete(request: Request):
     state = request.app.state.server
     state.config.onboarding_complete = True
+    state.config.disabled_connectors.clear()
     state.config.save()
-    # Start heavy services in the background now that onboarding is done
-    from server.app import start_services
     asyncio.create_task(start_services(state))
     return {"ok": True}
 
