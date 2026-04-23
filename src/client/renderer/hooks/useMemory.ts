@@ -3,6 +3,7 @@ import {
   getMemoryPages,
   getMemoryPage,
   updateMemoryPage,
+  deleteMemoryPage,
   getMemoryStatus,
 } from "../api/client";
 
@@ -45,5 +46,9 @@ export function useMemory() {
     await updateMemoryPage(path, content);
   }, []);
 
-  return { pages, status, loading, load, getPage, savePage };
+  const deletePage = useCallback(async (path: string) => {
+    await deleteMemoryPage(path);
+  }, []);
+
+  return { pages, status, loading, load, getPage, savePage, deletePage };
 }

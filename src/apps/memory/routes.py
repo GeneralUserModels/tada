@@ -122,6 +122,31 @@ async def update_page(page_path: str, request: Request):
     return {"ok": True}
 
 
+@router.delete("/pages/{page_path:path}")
+async def delete_page(page_path: str, request: Request):
+    """Move a wiki page to _archive/ (invisible to the UI)."""
+    memory_dir = _get_memory_dir(request)
+    target = (memory_dir / page_path).resolve()
+
+    if not str(target).startswith(str(memory_dir)):
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    archive_dest = memory_dir / "_archive" / page_path
+    archive_dest.parent.mkdir(parents=True, exist_ok=True)
+    target.rename(archive_dest)
+
+    # Clean up empty parent dirs left behind
+    parent = target.parent
+    while parent != memory_dir and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
+
+    return {"ok": True}
+
+
 @router.get("/status")
 async def get_status(request: Request):
     """Return wiki status: last ingest/lint times and page count."""

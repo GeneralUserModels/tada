@@ -84,6 +84,9 @@ export const getMemoryPage = (path: string) =>
 export const updateMemoryPage = (path: string, content: string) =>
   request("PUT", `/api/memory/pages/${path}`, { content });
 
+export const deleteMemoryPage = (path: string) =>
+  request("DELETE", `/api/memory/pages/${path}`);
+
 export const getMemoryStatus = () =>
   request("GET", "/api/memory/status") as Promise<{ exists: boolean; last_ingest: string | null; last_lint: string | null; page_count: number }>;
 

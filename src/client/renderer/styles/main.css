@@ -2134,6 +2134,77 @@ button, input, select, textarea, canvas, a, label,
   background: rgba(255,255,255,0.85);
 }
 
+.memex-delete-btn {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.6);
+}
+
+.memex-delete-btn:hover {
+  background: rgba(220, 60, 60, 0.12);
+  color: #c53030;
+}
+
+/* ── Delete confirmation dialog ────────────────────────── */
+
+.memex-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.25);
+  backdrop-filter: blur(4px);
+  animation: memex-fade-in 0.15s ease;
+}
+
+.memex-confirm-dialog {
+  max-width: 360px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: center;
+}
+
+.memex-confirm-dialog p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.memex-confirm-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.memex-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.memex-confirm-delete-btn {
+  color: white;
+  background: #c53030;
+  border-color: #c53030;
+}
+
+.memex-confirm-delete-btn:hover {
+  background: #a12828;
+}
+
+.memex-confirm-delete-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@keyframes memex-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* ── Content area ───────────────────────────────────────── */
 
 .memex-content-wrap {
