@@ -75,8 +75,8 @@ export const getSeekerPastConversation = (filename: string) =>
   request("GET", `/api/seeker/history/${filename}`) as Promise<{ filename: string; messages: SeekerMessage[] }>;
 
 // ── Memory wiki ─────────────────────────────────────────────
-export const getMemoryPages = () =>
-  request("GET", "/api/memory/pages") as Promise<{ path: string; title: string; confidence: number | null; last_updated: string | null; category: string | null }[]>;
+export const getMemoryPages = (q?: string) =>
+  request("GET", q ? `/api/memory/pages?q=${encodeURIComponent(q)}` : "/api/memory/pages") as Promise<{ path: string; title: string; confidence: number | null; last_updated: string | null; category: string | null }[]>;
 
 export const getMemoryPage = (path: string) =>
   requestText("GET", `/api/memory/pages/${path}`);

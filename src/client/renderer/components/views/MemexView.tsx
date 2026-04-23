@@ -46,7 +46,7 @@ function groupByCategory(pages: WikiPage[]): Map<string, WikiPage[]> {
 export function MemexView() {
   const { state } = useAppContext();
   const memoryActivity = state.agentActivities["memory"];
-  const { pages, status, loading, load, getPage, savePage, deletePage } = useMemory();
+  const { pages, searchResults, status, loading, load, search: serverSearch, getPage, savePage, deletePage } = useMemory();
 
   // Navigation state
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -132,16 +132,8 @@ export function MemexView() {
     if (target) openPage(target.path);
   }, [pages, openPage]);
 
-  // Filtered pages
-  const filteredPages = useMemo(() => {
-    if (!search.trim()) return pages;
-    const q = search.toLowerCase();
-    return pages.filter(
-      (p) => p.title.toLowerCase().includes(q) || (p.category || "").toLowerCase().includes(q)
-    );
-  }, [pages, search]);
-
-  const grouped = useMemo(() => groupByCategory(filteredPages), [filteredPages]);
+  const displayPages = search.trim() ? (searchResults ?? pages) : pages;
+  const grouped = useMemo(() => groupByCategory(displayPages), [displayPages]);
 
   const selectedPage = pages.find((p) => p.path === selectedPath);
   const fm = pageContent ? parseFrontmatter(pageContent) : {};
@@ -284,7 +276,7 @@ export function MemexView() {
             type="text"
             placeholder="Search pages..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); serverSearch(e.target.value); }}
           />
         </div>
         {status && (
