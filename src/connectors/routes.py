@@ -67,7 +67,7 @@ async def get_connectors(request: Request):
             if not is_enabled(config, _AUDIO_FEATURE_FLAGS[vname]):
                 continue
             result[vname] = {
-                "enabled": vname not in config.disabled_connectors,
+                "enabled": vname in config.enabled_connectors,
                 "available": True,
                 "error": config.connector_errors.get(vname),
                 "requires_auth": None,
@@ -88,19 +88,19 @@ async def update_connector(name: str, update: ConnectorUpdate, request: Request)
             raise HTTPException(status_code=404, detail=f"Audio connector not available")
 
         if update.enabled:
-            if name in config.disabled_connectors:
-                config.disabled_connectors.remove(name)
+            if name not in config.enabled_connectors:
+                config.enabled_connectors.append(name)
             config.connector_errors.pop(name, None)
         else:
-            if name not in config.disabled_connectors:
-                config.disabled_connectors.append(name)
+            if name in config.enabled_connectors:
+                config.enabled_connectors.remove(name)
         config.save()
 
-        mic_on = "microphone" not in config.disabled_connectors
-        sys_on = "system_audio" not in config.disabled_connectors
+        mic_on = "microphone" in config.enabled_connectors
+        sys_on = "system_audio" in config.enabled_connectors
         # Was any source already on BEFORE this toggle?
         other = "system_audio" if name == "microphone" else "microphone"
-        was_any_on = other not in config.disabled_connectors
+        was_any_on = other in config.enabled_connectors
 
         # Update env vars
         audio_conn._server_params.env["TADA_MIC_ENABLED"] = "1" if mic_on else "0"
@@ -150,13 +150,13 @@ async def update_connector(name: str, update: ConnectorUpdate, request: Request)
         raise HTTPException(status_code=404, detail=f"Unknown connector: {name}")
     if update.enabled:
         connector.resume()  # also clears connector.error
-        if name in state.config.disabled_connectors:
-            state.config.disabled_connectors.remove(name)
+        if name not in state.config.enabled_connectors:
+            state.config.enabled_connectors.append(name)
         state.config.connector_errors.pop(name, None)
     else:
         connector.stop()
-        if name not in state.config.disabled_connectors:
-            state.config.disabled_connectors.append(name)
+        if name in state.config.enabled_connectors:
+            state.config.enabled_connectors.remove(name)
     state.config.save()
     return {"ok": True, "name": name, "enabled": update.enabled}
 

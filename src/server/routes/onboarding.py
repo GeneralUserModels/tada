@@ -5,8 +5,14 @@ import os
 from pathlib import Path
 
 from fastapi import APIRouter, Request
+from pydantic import BaseModel
+from server.services import start_services, _log_startup_failure
 
 router = APIRouter(prefix="/api", tags=["onboarding"])
+
+
+class OnboardingComplete(BaseModel):
+    enabled_connectors: list[str] = []
 
 _NOTIFICATIONS_DB = str(
     Path.home() / "Library" / "Group Containers"
@@ -20,12 +26,11 @@ async def onboarding_status(request: Request):
 
 
 @router.post("/onboarding/complete")
-async def onboarding_complete(request: Request):
+async def onboarding_complete(body: OnboardingComplete, request: Request):
     state = request.app.state.server
     state.config.onboarding_complete = True
+    state.config.enabled_connectors = body.enabled_connectors
     state.config.save()
-    # Start heavy services in the background now that onboarding is done
-    from server.app import start_services, _log_startup_failure
     task = asyncio.create_task(start_services(state))
     task.add_done_callback(_log_startup_failure)
     return {"ok": True}

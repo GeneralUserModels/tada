@@ -61,13 +61,47 @@ export function ConnectorsStep(props: Props) {
             </div>
           </div>
 
+          <div className="connector-row">
+            <div className="connector-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="5.5" r="1" fill="currentColor"/><path d="M5.5 7.5h5M8 7.5v4M6.5 11.5L8 9.5l1.5 2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <div className="connector-info">
+              <div className="connector-name">Accessibility <span className="required-tag">Required</span></div>
+              <div className="connector-desc">Tab autocomplete (Tabracadabra)</div>
+            </div>
+            <div className="connector-action">
+              {props.accessibilityGranted
+                ? <span className="perm-badge granted">Granted</span>
+                : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("accessibility", () => props.setAccessibilityGranted(true))}>Grant Access</button>
+              }
+            </div>
+          </div>
+
+          {props.flag("permission_browser_cookies") && (
+            <div className="connector-row">
+              <div className="connector-icon">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M2 8h12M8 2c-2 2-2 10 0 12M8 2c2 2 2 10 0 12" stroke="currentColor" strokeWidth="1.3"/></svg>
+              </div>
+              <div className="connector-info">
+                <div className="connector-name">Browser Cookies <span className="required-tag">Required</span></div>
+                <div className="connector-desc">Let the agent browse the internet</div>
+              </div>
+              <div className="connector-action">
+                {props.browserCookiesGranted
+                  ? <span className="perm-badge granted">Granted</span>
+                  : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("browser_cookies", () => props.setBrowserCookiesGranted(true))}>Grant Access</button>
+                }
+              </div>
+            </div>
+          )}
+
           {props.flag("permission_microphone") && (
             <div className="connector-row">
               <div className="connector-icon">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="6" y="1" width="4" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M4 7a4 4 0 008 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M8 11v3M6 14h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
               </div>
               <div className="connector-info">
-                <div className="connector-name">Microphone <span className="optional-tag">optional</span></div>
+                <div className="connector-name">Microphone</div>
                 <div className="connector-desc">Transcribe your voice in meetings</div>
               </div>
               <div className="connector-action">
@@ -85,7 +119,7 @@ export function ConnectorsStep(props: Props) {
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 5.5h2.5L8 2v12l-3.5-3.5H2a1 1 0 01-1-1v-3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M11 5.5a3.5 3.5 0 010 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M13 3.5a6.5 6.5 0 010 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
               </div>
               <div className="connector-info">
-                <div className="connector-name">System Audio <span className="optional-tag">optional</span></div>
+                <div className="connector-name">System Audio</div>
                 <div className="connector-desc">Transcribe other participants in meetings</div>
               </div>
               <div className="connector-action">
@@ -139,7 +173,7 @@ export function ConnectorsStep(props: Props) {
             </div>
           )}
 
-          {props.flag("permission_notifications") && (
+          {props.flag("permission_disk_access") && (
             <div className="connector-row">
               <div className="connector-icon">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
@@ -156,40 +190,6 @@ export function ConnectorsStep(props: Props) {
               </div>
             </div>
           )}
-
-          {props.flag("permission_browser_cookies") && (
-            <div className="connector-row">
-              <div className="connector-icon">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M2 8h12M8 2c-2 2-2 10 0 12M8 2c2 2 2 10 0 12" stroke="currentColor" strokeWidth="1.3"/></svg>
-              </div>
-              <div className="connector-info">
-                <div className="connector-name">Browser Cookies <span className="required-tag">Required</span></div>
-                <div className="connector-desc">Let the agent browse the internet</div>
-              </div>
-              <div className="connector-action">
-                {props.browserCookiesGranted
-                  ? <span className="perm-badge granted">Granted</span>
-                  : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("browser_cookies", () => props.setBrowserCookiesGranted(true))}>Grant Access</button>
-                }
-              </div>
-            </div>
-          )}
-
-          <div className="connector-row">
-            <div className="connector-icon">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="5.5" r="1" fill="currentColor"/><path d="M5.5 7.5h5M8 7.5v4M6.5 11.5L8 9.5l1.5 2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </div>
-            <div className="connector-info">
-              <div className="connector-name">Accessibility <span className="required-tag">Required</span></div>
-              <div className="connector-desc">Tab autocomplete (Tabracadabra)</div>
-            </div>
-            <div className="connector-action">
-              {props.accessibilityGranted
-                ? <span className="perm-badge granted">Granted</span>
-                : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("accessibility", () => props.setAccessibilityGranted(true))}>Grant Access</button>
-              }
-            </div>
-          </div>
         </div>
       </div>
       <div className="btn-row">

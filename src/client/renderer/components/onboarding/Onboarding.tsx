@@ -188,7 +188,16 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
 
   const handleSubmit = async () => {
     await saveSettings();
-    await completeOnboarding();
+    const enabled: string[] = [];
+    if (screenGranted) enabled.push("screen");
+    if (calendarConnected) enabled.push("calendar");
+    if (gmailConnected) enabled.push("gmail");
+    if (outlookConnected) { enabled.push("outlook_email"); enabled.push("outlook_calendar"); }
+    if (notifAvailable) enabled.push("notifications");
+    if (fsAvailable) enabled.push("filesystem");
+    if (micGranted) enabled.push("microphone");
+    if (sysAudioGranted) enabled.push("system_audio");
+    await completeOnboarding(enabled);
     window.tada.onboardingComplete();
   };
 
