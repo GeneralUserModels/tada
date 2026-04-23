@@ -1876,9 +1876,9 @@ button, input, select, textarea, canvas, a, label,
   background: rgba(255,255,255,0.85);
 }
 
-/* ── Pensieve View ─────────────────────────────────────────── */
+/* ── Memex View ─────────────────────────────────────────── */
 
-.pensieve-list-header {
+.memex-list-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1886,13 +1886,13 @@ button, input, select, textarea, canvas, a, label,
   gap: 16px;
 }
 
-.pensieve-search-wrap {
+.memex-search-wrap {
   position: relative;
   flex: 1;
   max-width: 340px;
 }
 
-.pensieve-search-icon {
+.memex-search-icon {
   position: absolute;
   left: 12px;
   top: 50%;
@@ -1901,7 +1901,7 @@ button, input, select, textarea, canvas, a, label,
   pointer-events: none;
 }
 
-.pensieve-search {
+.memex-search {
   width: 100%;
   padding: 8px 12px 8px 34px;
   font-size: 12.5px;
@@ -1914,17 +1914,17 @@ button, input, select, textarea, canvas, a, label,
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
-.pensieve-search:focus {
+.memex-search:focus {
   background: rgba(255,255,255,0.85);
   border-color: rgba(var(--sage-rgb), 0.35);
   box-shadow: 0 0 0 3px rgba(var(--sage-rgb), 0.08);
 }
 
-.pensieve-search::placeholder {
+.memex-search::placeholder {
   color: var(--text-tertiary);
 }
 
-.pensieve-status {
+.memex-status {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1933,18 +1933,18 @@ button, input, select, textarea, canvas, a, label,
   white-space: nowrap;
 }
 
-.pensieve-status-sep::before {
+.memex-status-sep::before {
   content: "\00b7";
   margin-right: 6px;
 }
 
 /* ── Category groups ────────────────────────────────────── */
 
-.pensieve-category-group {
+.memex-category-group {
   margin-bottom: 20px;
 }
 
-.pensieve-category-label {
+.memex-category-label {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1953,7 +1953,7 @@ button, input, select, textarea, canvas, a, label,
   padding: 0 4px 8px;
 }
 
-.pensieve-card-grid {
+.memex-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
@@ -1961,14 +1961,14 @@ button, input, select, textarea, canvas, a, label,
 
 /* ── Page card ──────────────────────────────────────────── */
 
-.pensieve-page-card {
+.memex-page-card {
   cursor: pointer;
   padding: 14px 16px;
   animation: fadeSlideIn 0.25s ease both;
   transition: box-shadow 0.2s, border-color 0.2s, transform 0.15s, background 0.15s;
 }
 
-.pensieve-page-card:hover {
+.memex-page-card:hover {
   box-shadow:
     0 2px 6px var(--glass-shadow),
     0 12px 32px rgba(var(--sage-rgb), 0.08),
@@ -1977,7 +1977,7 @@ button, input, select, textarea, canvas, a, label,
   transform: translateY(-1px);
 }
 
-.pensieve-card-header {
+.memex-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1985,7 +1985,7 @@ button, input, select, textarea, canvas, a, label,
   margin-bottom: 6px;
 }
 
-.pensieve-card-title {
+.memex-card-title {
   font-size: 13px;
   font-weight: 620;
   color: var(--text);
@@ -1995,20 +1995,20 @@ button, input, select, textarea, canvas, a, label,
   min-width: 0;
 }
 
-.pensieve-card-meta {
+.memex-card-meta {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.pensieve-card-date {
+.memex-card-date {
   font-size: 11px;
   color: var(--text-tertiary);
 }
 
 /* ── Confidence badge ───────────────────────────────────── */
 
-.pensieve-confidence {
+.memex-confidence {
   font-size: 10px;
   font-weight: 650;
   padding: 2px 8px;
@@ -2017,14 +2017,28 @@ button, input, select, textarea, canvas, a, label,
   flex-shrink: 0;
 }
 
-.pensieve-confidence--sm {
+.memex-confidence--sm {
   font-size: 9px;
   padding: 2px 6px;
 }
 
+.memex-inline-confidence {
+  display: inline;
+  font-size: 0.75em;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 8px;
+  border: 1px solid;
+  margin-left: 3px;
+  vertical-align: baseline;
+  letter-spacing: 0.01em;
+  cursor: default;
+  user-select: none;
+}
+
 /* ── Detail header ──────────────────────────────────────── */
 
-.pensieve-detail-header {
+.memex-detail-header {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -2032,7 +2046,7 @@ button, input, select, textarea, canvas, a, label,
   margin-bottom: 12px;
 }
 
-.pensieve-back-btn {
+.memex-back-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2048,15 +2062,15 @@ button, input, select, textarea, canvas, a, label,
   font-family: inherit;
 }
 
-.pensieve-back-btn:hover {
+.memex-back-btn:hover {
   background: rgba(255,255,255,0.85);
 }
 
-.pensieve-back-btn:active {
+.memex-back-btn:active {
   transform: scale(0.97);
 }
 
-.pensieve-detail-title {
+.memex-detail-title {
   font-size: 14px;
   font-weight: 650;
   color: var(--text);
@@ -2065,14 +2079,14 @@ button, input, select, textarea, canvas, a, label,
   min-width: 0;
 }
 
-.pensieve-detail-actions {
+.memex-detail-actions {
   display: flex;
   gap: 6px;
   margin-left: auto;
   flex-shrink: 0;
 }
 
-.pensieve-action-btn {
+.memex-action-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2086,43 +2100,43 @@ button, input, select, textarea, canvas, a, label,
   transition: background 0.15s, color 0.15s;
 }
 
-.pensieve-edit-btn {
+.memex-edit-btn {
   color: var(--text-secondary);
   background: rgba(255,255,255,0.6);
 }
 
-.pensieve-edit-btn:hover {
+.memex-edit-btn:hover {
   background: rgba(255,255,255,0.85);
   color: var(--text);
 }
 
-.pensieve-save-btn {
+.memex-save-btn {
   color: white;
   background: var(--active-green);
   border-color: var(--active-green);
 }
 
-.pensieve-save-btn:hover {
+.memex-save-btn:hover {
   background: #4E9340;
 }
 
-.pensieve-save-btn:disabled {
+.memex-save-btn:disabled {
   opacity: 0.6;
   cursor: default;
 }
 
-.pensieve-cancel-btn {
+.memex-cancel-btn {
   color: var(--text-secondary);
   background: rgba(255,255,255,0.6);
 }
 
-.pensieve-cancel-btn:hover {
+.memex-cancel-btn:hover {
   background: rgba(255,255,255,0.85);
 }
 
 /* ── Content area ───────────────────────────────────────── */
 
-.pensieve-content-wrap {
+.memex-content-wrap {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -2130,7 +2144,7 @@ button, input, select, textarea, canvas, a, label,
   overflow: hidden;
 }
 
-.pensieve-content {
+.memex-content {
   flex: 1;
   overflow-y: auto;
   padding: 4px 4px 16px;
@@ -2140,7 +2154,7 @@ button, input, select, textarea, canvas, a, label,
   cursor: auto;
 }
 
-.pensieve-content h1 {
+.memex-content h1 {
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -2148,11 +2162,11 @@ button, input, select, textarea, canvas, a, label,
   color: var(--text);
 }
 
-.pensieve-content h1:first-child {
+.memex-content h1:first-child {
   margin-top: 4px;
 }
 
-.pensieve-content h2 {
+.memex-content h2 {
   font-size: 17px;
   font-weight: 660;
   letter-spacing: -0.01em;
@@ -2162,44 +2176,44 @@ button, input, select, textarea, canvas, a, label,
   border-bottom: 1px solid rgba(var(--sage-rgb), 0.12);
 }
 
-.pensieve-content h3 {
+.memex-content h3 {
   font-size: 14px;
   font-weight: 640;
   margin: 16px 0 8px;
   color: var(--text);
 }
 
-.pensieve-content h4,
-.pensieve-content h5,
-.pensieve-content h6 {
+.memex-content h4,
+.memex-content h5,
+.memex-content h6 {
   font-size: 13px;
   font-weight: 620;
   margin: 14px 0 6px;
   color: var(--text-secondary);
 }
 
-.pensieve-content p {
+.memex-content p {
   margin: 0 0 12px;
   font-size: 13px;
 }
 
-.pensieve-content ul,
-.pensieve-content ol {
+.memex-content ul,
+.memex-content ol {
   margin: 0 0 12px;
   padding-left: 20px;
   font-size: 13px;
 }
 
-.pensieve-content li {
+.memex-content li {
   margin-bottom: 4px;
 }
 
-.pensieve-content li > ul,
-.pensieve-content li > ol {
+.memex-content li > ul,
+.memex-content li > ol {
   margin: 4px 0 0;
 }
 
-.pensieve-content blockquote {
+.memex-content blockquote {
   margin: 0 0 12px;
   padding: 10px 16px;
   border-left: 3px solid rgba(var(--sage-rgb), 0.35);
@@ -2209,11 +2223,11 @@ button, input, select, textarea, canvas, a, label,
   font-size: 12.5px;
 }
 
-.pensieve-content blockquote p:last-child {
+.memex-content blockquote p:last-child {
   margin-bottom: 0;
 }
 
-.pensieve-content code {
+.memex-content code {
   font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
   font-size: 11.5px;
   padding: 1px 5px;
@@ -2222,7 +2236,7 @@ button, input, select, textarea, canvas, a, label,
   color: var(--text);
 }
 
-.pensieve-content pre {
+.memex-content pre {
   margin: 0 0 12px;
   padding: 14px 16px;
   border-radius: var(--r-sm);
@@ -2231,28 +2245,28 @@ button, input, select, textarea, canvas, a, label,
   overflow-x: auto;
 }
 
-.pensieve-content pre code {
+.memex-content pre code {
   padding: 0;
   background: none;
   font-size: 11.5px;
   line-height: 1.55;
 }
 
-.pensieve-content table {
+.memex-content table {
   width: 100%;
   border-collapse: collapse;
   margin: 0 0 12px;
   font-size: 12.5px;
 }
 
-.pensieve-content th,
-.pensieve-content td {
+.memex-content th,
+.memex-content td {
   padding: 8px 12px;
   text-align: left;
   border-bottom: 1px solid rgba(var(--sage-rgb), 0.12);
 }
 
-.pensieve-content th {
+.memex-content th {
   font-weight: 650;
   font-size: 11px;
   text-transform: uppercase;
@@ -2261,33 +2275,33 @@ button, input, select, textarea, canvas, a, label,
   background: rgba(var(--sage-rgb), 0.04);
 }
 
-.pensieve-content hr {
+.memex-content hr {
   border: none;
   border-top: 1px solid rgba(var(--sage-rgb), 0.15);
   margin: 20px 0;
 }
 
-.pensieve-content a {
+.memex-content a {
   color: var(--active-green);
   text-decoration: none;
   font-weight: 500;
 }
 
-.pensieve-content a:hover {
+.memex-content a:hover {
   text-decoration: underline;
 }
 
-.pensieve-content img {
+.memex-content img {
   max-width: 100%;
   border-radius: var(--r-sm);
 }
 
-.pensieve-content input[type="checkbox"] {
+.memex-content input[type="checkbox"] {
   margin-right: 6px;
   accent-color: var(--sage);
 }
 
-.pensieve-content cite {
+.memex-content cite {
   font-style: italic;
   color: var(--text-secondary);
   font-size: 12px;
@@ -2295,7 +2309,7 @@ button, input, select, textarea, canvas, a, label,
 
 /* ── Wiki link chip ─────────────────────────────────────── */
 
-.pensieve-wiki-link {
+.memex-wiki-link {
   display: inline;
   color: var(--active-green) !important;
   font-weight: 550 !important;
@@ -2305,14 +2319,14 @@ button, input, select, textarea, canvas, a, label,
   transition: background 0.15s;
 }
 
-.pensieve-wiki-link:hover {
+.memex-wiki-link:hover {
   background: rgba(var(--sage-rgb), 0.1);
   text-decoration: none !important;
 }
 
 /* ── Editor ─────────────────────────────────────────────── */
 
-.pensieve-editor-wrap {
+.memex-editor-wrap {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -2321,7 +2335,7 @@ button, input, select, textarea, canvas, a, label,
   overflow: hidden;
 }
 
-.pensieve-editor {
+.memex-editor {
   flex: 1;
   width: 100%;
   min-height: 400px;
@@ -2337,13 +2351,13 @@ button, input, select, textarea, canvas, a, label,
   border-radius: var(--r-lg);
 }
 
-.pensieve-editor::placeholder {
+.memex-editor::placeholder {
   color: var(--text-tertiary);
 }
 
 /* ── Meta footer ────────────────────────────────────────── */
 
-.pensieve-meta {
+.memex-meta {
   padding: 10px 4px 0;
   border-top: 1px solid rgba(var(--sage-rgb), 0.1);
   margin-top: 8px;
@@ -2353,7 +2367,7 @@ button, input, select, textarea, canvas, a, label,
 
 /* ── Empty state ────────────────────────────────────────── */
 
-.pensieve-empty-state {
+.memex-empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2364,17 +2378,17 @@ button, input, select, textarea, canvas, a, label,
   font-size: 13px;
 }
 
-.pensieve-empty-icon {
+.memex-empty-icon {
   margin-bottom: 4px;
 }
 
-.pensieve-empty-hint {
+.memex-empty-hint {
   font-size: 12px;
   color: var(--text-tertiary);
   opacity: 0.7;
 }
 
-.pensieve-spinner {
+.memex-spinner {
   width: 20px;
   height: 20px;
   border: 2px solid rgba(var(--sage-rgb), 0.2);

@@ -6,7 +6,7 @@ export const ADVANCED_ROWS: { label: string; modelKey: string; apiKeyKey: string
   { label: "Labeling LM",      modelKey: "label_model",           apiKeyKey: "label_model_api_key",   group: "llm" },
   { label: "Filter LM",        modelKey: "filter_model",          apiKeyKey: "filter_model_api_key",  group: "llm" },
   { label: "Tada LM",          modelKey: "moments_agent_model",   apiKeyKey: "moments_agent_api_key", group: "agent", options: AGENT_MODELS },
-  { label: "Pensieve LM",      modelKey: "memory_agent_model",    apiKeyKey: "memory_agent_api_key",  group: "agent", options: AGENT_MODELS },
+  { label: "Memex LM",      modelKey: "memory_agent_model",    apiKeyKey: "memory_agent_api_key",  group: "agent", options: AGENT_MODELS },
   { label: "Seeker LM",        modelKey: "seeker_model",          apiKeyKey: "seeker_api_key",        group: "agent", options: AGENT_MODELS },
   { label: "Tabracadabra LM",  modelKey: "tabracadabra_model",    apiKeyKey: "tabracadabra_api_key",  group: "llm" },
 ];

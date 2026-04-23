@@ -4,7 +4,7 @@ import * as sse from "../api/sse";
 
 // ── Types ─────────────────────────────────────────────────────
 
-export type ActiveView = "connectors" | "tada" | "pensieve" | "seeker" | "usermodel" | "settings";
+export type ActiveView = "connectors" | "tada" | "memex" | "seeker" | "usermodel" | "settings";
 
 export interface HistoryItem {
   id: number;
@@ -44,7 +44,7 @@ export interface AppState {
   updateVersion: string | null;
   seekerHasQuestions: boolean;
   tadaHasNew: boolean;
-  pensieveHasNew: boolean;
+  memexHasNew: boolean;
   updateProgress: number | null;
   updateReady: boolean;
   updateInstalling: boolean;
@@ -70,7 +70,7 @@ type AppAction =
   | { type: "SEEKER_QUESTIONS_READY" }
   | { type: "SEEKER_QUESTIONS_CLEARED" }
   | { type: "TADA_NEW_MOMENT" }
-  | { type: "PENSIEVE_UPDATED" }
+  | { type: "MEMEX_UPDATED" }
   | { type: "UPDATE_PROGRESS"; percent: number }
   | { type: "UPDATE_DOWNLOADED" }
   | { type: "UPDATE_INSTALLING" }
@@ -106,7 +106,7 @@ const initialState: AppState = {
   updateVersion: null,
   seekerHasQuestions: false,
   tadaHasNew: false,
-  pensieveHasNew: false,
+  memexHasNew: false,
   updateProgress: null,
   updateReady: false,
   updateInstalling: false,
@@ -121,7 +121,7 @@ function reducer(state: AppState, action: AppAction): AppState {
         ...state,
         activeView: action.view,
         tadaHasNew: action.view === "tada" ? false : state.tadaHasNew,
-        pensieveHasNew: action.view === "pensieve" ? false : state.pensieveHasNew,
+        memexHasNew: action.view === "memex" ? false : state.memexHasNew,
       };
 
     case "SERVER_READY":
@@ -249,8 +249,8 @@ function reducer(state: AppState, action: AppAction): AppState {
     case "TADA_NEW_MOMENT":
       return { ...state, tadaHasNew: true };
 
-    case "PENSIEVE_UPDATED":
-      return { ...state, pensieveHasNew: true };
+    case "MEMEX_UPDATED":
+      return { ...state, memexHasNew: true };
 
     case "AGENT_ACTIVITY": {
       const { agent, message, slug, num_turns, max_turns } = action.data;
@@ -312,7 +312,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sse.on("label",         (data) => dispatch({ type: "LABEL", data: data as LabelData }));
     sse.on("seeker_questions_ready", () => dispatch({ type: "SEEKER_QUESTIONS_READY" }));
     sse.on("moment_completed", () => dispatch({ type: "TADA_NEW_MOMENT" }));
-    sse.on("memory_updated", () => dispatch({ type: "PENSIEVE_UPDATED" }));
+    sse.on("memory_updated", () => dispatch({ type: "MEMEX_UPDATED" }));
     sse.on("agent_activity", (data) => {
       console.log("[sse] agent_activity", data);
       dispatch({ type: "AGENT_ACTIVITY", data: data as { agent: string; message: string | null } });

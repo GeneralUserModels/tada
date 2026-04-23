@@ -34,6 +34,16 @@ export function processWikiLinks(md: string): string {
   });
 }
 
+/** Replace inline [c:0.X] confidence tags with styled HTML spans. */
+export function processInlineConfidence(md: string): string {
+  return md.replace(/\[c:((?:0\.\d+|1\.0?))\]/g, (_, val: string) => {
+    const c = parseFloat(val);
+    const color = confidenceColor(c);
+    const pct = (c * 100).toFixed(0);
+    return `<span class="memex-inline-confidence" style="color:${color};border-color:${color}33;background:${color}12" title="${pct}% — ${confidenceLabel(c)}">${pct}%</span>`;
+  });
+}
+
 /** Confidence badge color: red → yellow → green. */
 export function confidenceColor(c: number): string {
   if (c < 0.3) return "#C9594B";

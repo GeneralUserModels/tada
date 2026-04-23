@@ -183,7 +183,7 @@ export function SettingsView() {
           )}
           {memoryEnabled && (
           <div className="model-row" style={{ marginTop: 10 }}>
-            <span className="model-row-label">Pensieve</span>
+            <span className="model-row-label">Memex</span>
             <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, cursor: "pointer" }}>
               <input
                 type="checkbox"
