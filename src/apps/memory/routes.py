@@ -9,7 +9,7 @@ from pathlib import Path
 # Strip "Category — " prefixes from legacy titles
 _TITLE_PREFIX_RE = re.compile(r"^(?:Person|Project|Interest|Habit|Research|Topic)\s*[—–-]\s*", re.IGNORECASE)
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 
 router = APIRouter(prefix="/api/memory", tags=["memory"])
@@ -39,12 +39,13 @@ def _parse_frontmatter(text: str) -> dict:
 
 
 @router.get("/pages")
-async def list_pages(request: Request):
+async def list_pages(request: Request, q: str = Query(default="", description="Search within titles and page content")):
     """List all wiki pages with their frontmatter metadata."""
     memory_dir = _get_memory_dir(request)
     if not memory_dir.exists():
         return []
 
+    query = q.strip().lower()
     pages = []
     for md_file in sorted(memory_dir.rglob("*.md")):
         rel = md_file.relative_to(memory_dir)
@@ -57,13 +58,22 @@ async def list_pages(request: Request):
         if rel.parts[0] == "_archive" if rel.parts else False:
             continue
 
-        fm = _parse_frontmatter(md_file.read_text(errors="replace"))
+        text = md_file.read_text(errors="replace")
+        fm = _parse_frontmatter(text)
+        title = _TITLE_PREFIX_RE.sub("", fm.get("title", rel.stem.replace("-", " ").title()))
+        category = str(rel.parent) if str(rel.parent) != "." else None
+
+        if query:
+            haystack = f"{title}\n{category or ''}\n{text}".lower()
+            if query not in haystack:
+                continue
+
         pages.append({
             "path": str(rel),
-            "title": _TITLE_PREFIX_RE.sub("", fm.get("title", rel.stem.replace("-", " ").title())),
+            "title": title,
             "confidence": float(fm["confidence"]) if "confidence" in fm else None,
             "last_updated": fm.get("last_updated"),
-            "category": str(rel.parent) if str(rel.parent) != "." else None,
+            "category": category,
         })
 
     return pages
@@ -119,6 +129,31 @@ async def update_page(page_path: str, request: Request):
 
     body = await request.json()
     target.write_text(body["content"])
+    return {"ok": True}
+
+
+@router.delete("/pages/{page_path:path}")
+async def delete_page(page_path: str, request: Request):
+    """Move a wiki page to _archive/ (invisible to the UI)."""
+    memory_dir = _get_memory_dir(request)
+    target = (memory_dir / page_path).resolve()
+
+    if not str(target).startswith(str(memory_dir)):
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    archive_dest = memory_dir / "_archive" / page_path
+    archive_dest.parent.mkdir(parents=True, exist_ok=True)
+    target.rename(archive_dest)
+
+    # Clean up empty parent dirs left behind
+    parent = target.parent
+    while parent != memory_dir and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
+
     return {"ok": True}
 
 

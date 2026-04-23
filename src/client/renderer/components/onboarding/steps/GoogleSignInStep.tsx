@@ -23,7 +23,7 @@ export function GoogleSignInStep({
         <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 2.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM8 13c-1.7 0-3.2-.9-4-2.2.02-1.3 2.7-2 4-2s3.98.7 4 2c-.8 1.3-2.3 2.2-4 2.2Z" fill="currentColor"/></svg>
       </div>
       <div className="page-title">Sign In</div>
-      <p className="page-desc">Sign in with your Google account so we know who you are.</p>
+      <p className="page-desc">Sign in with your Google account.<br/><span style={{ fontSize: 12, color: "var(--text-secondary)", opacity: 0.8 }}>We don't use this to collect data — just to authenticate you.</span></p>
       <div className="glass-card" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
         {!googleUser && (
           <button

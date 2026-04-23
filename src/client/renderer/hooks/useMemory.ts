@@ -1,8 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   getMemoryPages,
   getMemoryPage,
   updateMemoryPage,
+  deleteMemoryPage,
   getMemoryStatus,
 } from "../api/client";
 
@@ -23,8 +24,10 @@ export interface WikiStatus {
 
 export function useMemory() {
   const [pages, setPages] = useState<WikiPage[]>([]);
+  const [searchResults, setSearchResults] = useState<WikiPage[] | null>(null);
   const [status, setStatus] = useState<WikiStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,6 +40,18 @@ export function useMemory() {
     setLoading(false);
   }, []);
 
+  const search = useCallback((query: string) => {
+    clearTimeout(searchTimer.current);
+    if (!query.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    searchTimer.current = setTimeout(async () => {
+      const results = await getMemoryPages(query);
+      setSearchResults(results as WikiPage[]);
+    }, 250);
+  }, []);
+
   const getPage = useCallback(async (path: string): Promise<string> => {
     return getMemoryPage(path);
   }, []);
@@ -45,5 +60,9 @@ export function useMemory() {
     await updateMemoryPage(path, content);
   }, []);
 
-  return { pages, status, loading, load, getPage, savePage };
+  const deletePage = useCallback(async (path: string) => {
+    await deleteMemoryPage(path);
+  }, []);
+
+  return { pages, searchResults, status, loading, load, search, getPage, savePage, deletePage };
 }

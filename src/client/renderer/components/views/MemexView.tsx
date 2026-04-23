@@ -46,7 +46,7 @@ function groupByCategory(pages: WikiPage[]): Map<string, WikiPage[]> {
 export function MemexView() {
   const { state } = useAppContext();
   const memoryActivity = state.agentActivities["memory"];
-  const { pages, status, loading, load, getPage, savePage } = useMemory();
+  const { pages, searchResults, status, loading, load, search: serverSearch, getPage, savePage, deletePage } = useMemory();
 
   // Navigation state
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -57,6 +57,10 @@ export function MemexView() {
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Delete state
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Search state
   const [search, setSearch] = useState("");
@@ -78,6 +82,7 @@ export function MemexView() {
     setSelectedPath(null);
     setPageContent("");
     setEditing(false);
+    setConfirmingDelete(false);
   }, []);
 
   const handleEdit = useCallback(() => {
@@ -99,6 +104,17 @@ export function MemexView() {
     load();
   }, [selectedPath, editContent, savePage, load]);
 
+  const handleDelete = useCallback(async () => {
+    if (!selectedPath) return;
+    setDeleting(true);
+    await deletePage(selectedPath);
+    setDeleting(false);
+    setConfirmingDelete(false);
+    setSelectedPath(null);
+    setPageContent("");
+    load();
+  }, [selectedPath, deletePage, load]);
+
   // Handle wiki-link clicks
   const handleLinkClick = useCallback((href: string) => {
     if (!href.startsWith("wiki:")) return;
@@ -116,16 +132,8 @@ export function MemexView() {
     if (target) openPage(target.path);
   }, [pages, openPage]);
 
-  // Filtered pages
-  const filteredPages = useMemo(() => {
-    if (!search.trim()) return pages;
-    const q = search.toLowerCase();
-    return pages.filter(
-      (p) => p.title.toLowerCase().includes(q) || (p.category || "").toLowerCase().includes(q)
-    );
-  }, [pages, search]);
-
-  const grouped = useMemo(() => groupByCategory(filteredPages), [filteredPages]);
+  const displayPages = search.trim() ? (searchResults ?? pages) : pages;
+  const grouped = useMemo(() => groupByCategory(displayPages), [displayPages]);
 
   const selectedPage = pages.find((p) => p.path === selectedPath);
   const fm = pageContent ? parseFrontmatter(pageContent) : {};
@@ -162,15 +170,42 @@ export function MemexView() {
                 </button>
               </>
             ) : (
-              <button className="memex-action-btn memex-edit-btn" onClick={handleEdit}>
-                <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-                  <path d="M10.5 1.5l2 2-8 8H2.5v-2l8-8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-                </svg>
-                Edit
-              </button>
+              <>
+                <button className="memex-action-btn memex-edit-btn" onClick={handleEdit}>
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                    <path d="M10.5 1.5l2 2-8 8H2.5v-2l8-8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                  </svg>
+                  Edit
+                </button>
+                <button className="memex-action-btn memex-delete-btn" onClick={() => setConfirmingDelete(true)}>
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                    <path d="M3 4h8l-.75 8.5a1 1 0 01-1 .9H4.75a1 1 0 01-1-.9L3 4z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                    <path d="M5.5 6.5v4M8.5 6.5v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                    <path d="M2 4h10M5.5 4V2.5a.5.5 0 01.5-.5h2a.5.5 0 01.5.5V4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Delete
+                </button>
+              </>
             )}
           </div>
         </div>
+
+        {confirmingDelete && (
+          <div className="memex-confirm-overlay">
+            <div className="memex-confirm-dialog glass-card">
+              <p>Delete <strong>{selectedPage?.title || selectedPath}</strong>?</p>
+              <span className="memex-confirm-hint">This will permanently remove the page.</span>
+              <div className="memex-confirm-actions">
+                <button className="memex-action-btn memex-cancel-btn" onClick={() => setConfirmingDelete(false)}>
+                  Cancel
+                </button>
+                <button className="memex-action-btn memex-confirm-delete-btn" onClick={handleDelete} disabled={deleting}>
+                  {deleting ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {pageLoading ? (
           <div className="memex-empty-state">
@@ -241,7 +276,7 @@ export function MemexView() {
             type="text"
             placeholder="Search pages..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); serverSearch(e.target.value); }}
           />
         </div>
         {status && (
