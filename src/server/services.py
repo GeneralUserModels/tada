@@ -17,6 +17,15 @@ from user_models.data_manager import DataManager
 logger = logging.getLogger(__name__)
 
 
+def _log_startup_failure(task: asyncio.Task) -> None:
+    """Surface exceptions from start_services so dead schedulers don't go unnoticed."""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error("start_services failed — background services are not running", exc_info=exc)
+
+
 async def start_services(state: ServerState) -> None:
     """Start all heavy background services. Called once after onboarding completes."""
     if state.services_started or state._services_starting:

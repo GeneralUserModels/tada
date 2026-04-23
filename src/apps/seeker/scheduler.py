@@ -80,7 +80,13 @@ async def run_seeker_scheduler(state) -> None:
             seeker_state["last_seek_run"] = datetime.now().isoformat()
             _save_seeker_state(state, seeker_state)
 
-            await asyncio.to_thread(_run_seek, log_dir, model, api_key)
+            try:
+                seek_msg = "Generating questions…"
+                await state.broadcast_activity("seeker", seek_msg)
+                on_round = state.make_round_callback("seeker", seek_msg)
+                await asyncio.to_thread(_run_seek, log_dir, model, api_key, on_round=on_round)
+            finally:
+                await state.broadcast_activity(None)
 
             logger.info("Seeker scheduler: seek.py completed, broadcasting")
             await state.broadcast("seeker_questions_ready", {})
@@ -93,7 +99,7 @@ async def run_seeker_scheduler(state) -> None:
             await asyncio.sleep(300)
 
 
-def _run_seek(logs_dir: str, model: str, api_key: str | None):
+def _run_seek(logs_dir: str, model: str, api_key: str | None, on_round=None):
     """Wrapper to import and run seek in a thread."""
     from apps.seeker.seek import run as seek_run
-    return seek_run(logs_dir, model, api_key=api_key)
+    return seek_run(logs_dir, model, api_key=api_key, on_round=on_round)

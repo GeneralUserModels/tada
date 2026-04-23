@@ -85,6 +85,7 @@ def run(
     schedule_override: str | None = None,
     api_key: str | None = None,
     last_run_at: float | None = None,
+    on_round=None,
 ) -> bool:
     """Execute a moment task. Returns True if index.html was produced."""
     task_content = Path(task_path).read_text()
@@ -151,6 +152,7 @@ def run(
 
     agent, _ = build_agent(model, logs_dir, extra_write_dirs=[output_dir], api_key=api_key)
     agent.max_rounds = 100
+    agent.on_round = on_round
     agent.run([{"role": "user", "content": instruction}])
 
     # Write meta.json as fallback if agent didn't

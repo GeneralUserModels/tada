@@ -253,12 +253,25 @@ async def rerun_moment(slug: str, request: Request):
             await state.broadcast("moment_rerun_started", {"slug": slug})
             started_at = _time.time()
             logger.info(f"Re-executing moment: {slug}")
-            success = await asyncio.to_thread(
-                execute_moment, str(task_path), output_dir, logs_dir, model,
-                frequency_override=freq_override, schedule_override=sched_override,
-                api_key=api_key,
-                last_run_at=run_history.get(slug),
-            )
+
+            # Signal handlers require main thread — pre-init before to_thread.
+            from agent.builder import _ensure_sandbox_async
+            await _ensure_sandbox_async([logs_dir, str(tada_dir.resolve())])
+
+            moment_title = fm.get("title", slug)
+            run_msg = f"Running: {moment_title}"
+            await state.broadcast_activity("moment_run", run_msg)
+            on_round = state.make_round_callback("moment_run", run_msg)
+            try:
+                success = await asyncio.to_thread(
+                    execute_moment, str(task_path), output_dir, logs_dir, model,
+                    frequency_override=freq_override, schedule_override=sched_override,
+                    api_key=api_key,
+                    last_run_at=run_history.get(slug),
+                    on_round=on_round,
+                )
+            finally:
+                await state.broadcast_activity(None)
             completed_at = _time.time()
             save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")
 

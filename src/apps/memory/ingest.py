@@ -54,7 +54,7 @@ def _new_seeker_conversations(logs_dir: str, since: datetime | None) -> list[str
     ]
 
 
-def run(logs_dir: str, model: str, api_key: str | None = None) -> str:
+def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) -> str:
     logs_path = Path(logs_dir).resolve()
     logs_dir = str(logs_path)
     memory_dir = logs_path / "memory"
@@ -93,6 +93,7 @@ def run(logs_dir: str, model: str, api_key: str | None = None) -> str:
 
     agent, _ = build_agent(model, logs_dir, api_key=api_key)
     agent.max_rounds = 200
+    agent.on_round = on_round
     result = agent.run([{"role": "user", "content": instruction}])
 
     write_checkpoint(checkpoint_path)

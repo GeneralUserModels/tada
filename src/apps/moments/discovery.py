@@ -11,6 +11,8 @@ from server.feature_flags import is_enabled
 
 logger = logging.getLogger(__name__)
 
+SCAN_INTERVAL = 60  # seconds between schedule checks
+
 
 class MomentsDiscovery:
     """Discovers recurring automation tasks from activity logs."""
@@ -20,10 +22,10 @@ class MomentsDiscovery:
         self.model = model
         self.api_key = api_key
 
-    def run(self) -> str:
+    def run(self, on_round=None) -> str:
         """Analyze logs and write task files. Blocking."""
         from apps.moments.discover import run as moments_run
-        return moments_run(self.logs_dir, model=self.model, api_key=self.api_key)
+        return moments_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
 
 
 class OneoffsDiscovery:
@@ -34,10 +36,10 @@ class OneoffsDiscovery:
         self.model = model
         self.api_key = api_key
 
-    def run(self) -> str:
+    def run(self, on_round=None) -> str:
         """Analyze logs and write one-off task files. Blocking."""
         from apps.moments.oneoffs import run as oneoffs_run
-        return oneoffs_run(self.logs_dir, model=self.model, api_key=self.api_key)
+        return oneoffs_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
 
 
 class TaskFilter:
@@ -48,10 +50,10 @@ class TaskFilter:
         self.model = model
         self.api_key = api_key
 
-    def run(self) -> str:
+    def run(self, on_round=None) -> str:
         """Filter tasks through tada. Blocking."""
         from apps.moments.filter import run as filter_run
-        return filter_run(self.logs_dir, model=self.model, api_key=self.api_key)
+        return filter_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
 
 
 def _read_last_run(p: Path) -> datetime | None:
@@ -65,62 +67,62 @@ def _read_last_run(p: Path) -> datetime | None:
 
 
 async def run_moments_discovery(state) -> None:
-    """Background task: run the full discovery pipeline at a fixed daily time.
+    """Background task: poll every SCAN_INTERVAL and run the discovery pipeline
+    whenever the most recent scheduled occurrence hasn't completed yet.
 
-    If the scheduled time has already passed today but we haven't run yet
-    (e.g. the computer was off at 2am), run immediately on wake.
+    Polling (instead of one long sleep to the next target) catches up after
+    laptop sleep/wake and avoids drift if the schedule is edited at runtime.
     """
-    from apps.moments.scheduler import _next_run_time, _parse_time
+    from apps.moments.scheduler import is_due
 
     logger.info("Moments discovery service started")
 
+    # Signal handlers require main thread — pre-init before to_thread.
+    from agent.builder import _ensure_sandbox_async
+    logs_dir = str(Path(state.config.log_dir).resolve())
+    tada_dir = str(Path(state.config.tada_dir).resolve())
+    await _ensure_sandbox_async([logs_dir, tada_dir])
+
+    last_run_file = Path(state.config.log_dir).resolve() / ".discovery_last_run"
+
     while True:
         try:
-            schedule = getattr(state.config, "moments_discovery_schedule", "daily at 2am")
-            next_run = _next_run_time(schedule, "daily")
-            if next_run is None:
-                logger.warning("Cannot parse discovery schedule %r, retrying in 1h", schedule)
-                await asyncio.sleep(3600)
-                continue
-
-            # Check if we missed today's run (e.g. computer was off at scheduled time)
-            now = datetime.now()
-            scheduled_time = _parse_time(schedule)
-            today_target = datetime.combine(now.date(), scheduled_time) if scheduled_time else None
-            last_run_file = Path(state.config.log_dir).resolve() / ".discovery_last_run"
-            last_run = _read_last_run(last_run_file)
-            missed = (
-                today_target is not None
-                and now > today_target
-                and (last_run is None or last_run < today_target)
-            )
-
-            if missed:
-                logger.info("Missed scheduled discovery at %s, running now", today_target)
-            else:
-                delay = (next_run - now).total_seconds()
-                logger.info("Next discovery run at %s (in %.0fs)", next_run, delay)
-                await asyncio.sleep(delay)
+            await asyncio.sleep(SCAN_INTERVAL)
 
             if not (is_enabled(state.config, "moments") and state.config.moments_enabled):
                 continue
 
+            schedule = getattr(state.config, "moments_discovery_schedule", "daily at 2am")
+            if not is_due(schedule, "daily", _read_last_run(last_run_file)):
+                continue
+
             cfg = state.config
-            logs_dir = str(Path(cfg.log_dir).resolve())
             model = cfg.moments_agent_model
             api_key = cfg.resolve_api_key("moments_agent_api_key")
 
-            logger.info("Discovery: finding recurring moments")
-            await asyncio.to_thread(MomentsDiscovery(logs_dir, model, api_key).run)
+            try:
+                discover_msg = "Discovering recurring Tadas…"
+                await state.broadcast_activity("moments_discovery", discover_msg)
+                discover_cb = state.make_round_callback("moments_discovery", discover_msg)
+                logger.info("Discovery: finding recurring moments")
+                await asyncio.to_thread(MomentsDiscovery(logs_dir, model, api_key).run, on_round=discover_cb)
 
-            logger.info("Discovery: finding one-off moments")
-            await asyncio.to_thread(OneoffsDiscovery(logs_dir, model, api_key).run)
+                oneoffs_msg = "Discovering one-off Tadas…"
+                await state.broadcast_activity("moments_discovery", oneoffs_msg)
+                oneoffs_cb = state.make_round_callback("moments_discovery", oneoffs_msg)
+                logger.info("Discovery: finding one-off moments")
+                await asyncio.to_thread(OneoffsDiscovery(logs_dir, model, api_key).run, on_round=oneoffs_cb)
 
-            logger.info("Discovery: filtering tasks")
-            await asyncio.to_thread(TaskFilter(logs_dir, model, api_key).run)
+                filter_msg = "Filtering Tadas…"
+                await state.broadcast_activity("moments_discovery", filter_msg)
+                filter_cb = state.make_round_callback("moments_discovery", filter_msg)
+                logger.info("Discovery: filtering tasks")
+                await asyncio.to_thread(TaskFilter(logs_dir, model, api_key).run, on_round=filter_cb)
 
-            last_run_file.write_text(datetime.now().isoformat())
-            logger.info("Discovery pipeline complete")
+                last_run_file.write_text(datetime.now().isoformat())
+                logger.info("Discovery pipeline complete")
+            finally:
+                await state.broadcast_activity(None)
 
         except asyncio.CancelledError:
             logger.info("Moments discovery service stopped")

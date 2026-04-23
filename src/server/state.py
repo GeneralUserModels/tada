@@ -2,6 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass, field
+from typing import Callable
 
 from server.config import ServerConfig
 from user_models.model_state import ModelState
@@ -48,8 +49,53 @@ class ServerState:
     # SSE client queues
     sse_queues: set = field(default_factory=set)
 
+    # Current background-agent activity (None when idle)
+    current_activity: dict | None = None
+
     async def broadcast(self, event: str, data: dict):
         """Push an event to all connected SSE clients."""
         message = {"event": event, **data}
         for q in list(self.sse_queues):
             await q.put(message)
+
+    async def broadcast_activity(
+        self,
+        agent: str | None,
+        message: str | None = None,
+        *,
+        num_turns: int | None = None,
+        max_turns: int | None = None,
+    ):
+        """Set and broadcast the current agent activity. Pass agent=None to clear."""
+        if agent:
+            self.current_activity = {
+                "agent": agent,
+                "message": message,
+                "num_turns": num_turns,
+                "max_turns": max_turns,
+            }
+        else:
+            self.current_activity = None
+        await self.broadcast("agent_activity", {
+            "agent": agent,
+            "message": message,
+            "num_turns": num_turns,
+            "max_turns": max_turns,
+        })
+
+    def make_round_callback(self, agent: str, message: str) -> Callable[[int, int], None]:
+        """Build a thread-safe callback that broadcasts round progress for (agent, message).
+
+        The agent runs in a worker thread (via asyncio.to_thread), but broadcast_activity
+        is a coroutine on the event loop — so we capture the loop here and schedule the
+        broadcast via run_coroutine_threadsafe from within the worker.
+        """
+        loop = asyncio.get_running_loop()
+
+        def on_round(num_turns: int, max_turns: int) -> None:
+            asyncio.run_coroutine_threadsafe(
+                self.broadcast_activity(agent, message, num_turns=num_turns, max_turns=max_turns),
+                loop,
+            )
+
+        return on_round

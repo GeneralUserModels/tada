@@ -102,6 +102,22 @@ def save_run(results_dir: Path, slug: str, started_at: float, completed_at: floa
 _FREQUENCY_PERIOD = {"daily": timedelta(days=1), "weekly": timedelta(weeks=1)}
 
 
+def is_due(schedule: str, frequency: str, last_run: datetime | None) -> bool:
+    """True if the most recent scheduled occurrence hasn't been completed yet.
+
+    Used by pollers that wake every ~minute and need to catch up after the app
+    was closed or the machine was asleep at the scheduled time.
+    """
+    next_run = _next_run_time(schedule, frequency)
+    period = _FREQUENCY_PERIOD.get(frequency)
+    if next_run is None or period is None:
+        return False
+    most_recent_target = next_run - period
+    if last_run is None:
+        return True
+    return last_run < most_recent_target
+
+
 def should_run(slug: str, frequency: str, schedule: str, run_history: dict[str, float]) -> bool:
     """Determine if a task should run now based on its schedule and run history."""
     last_run = run_history.get(slug)
@@ -190,12 +206,20 @@ async def run_moments_scheduler(state) -> None:
                     logger.info(f"Executing moment: {slug}")
                     freq_override = slug_state.get("frequency_override") or None
                     sched_override = slug_state.get("schedule_override") or None
-                    success = await asyncio.to_thread(
-                        execute_moment, str(md_file), output_dir, logs_dir, model,
-                        frequency_override=freq_override, schedule_override=sched_override,
-                        api_key=api_key,
-                        last_run_at=run_history.get(slug),
-                    )
+                    moment_title = fm.get("title", slug)
+                    run_msg = f"Running: {moment_title}"
+                    await state.broadcast_activity("moment_run", run_msg)
+                    on_round = state.make_round_callback("moment_run", run_msg)
+                    try:
+                        success = await asyncio.to_thread(
+                            execute_moment, str(md_file), output_dir, logs_dir, model,
+                            frequency_override=freq_override, schedule_override=sched_override,
+                            api_key=api_key,
+                            last_run_at=run_history.get(slug),
+                            on_round=on_round,
+                        )
+                    finally:
+                        await state.broadcast_activity(None)
                     completed_at = _time.time()
                     save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")
                     run_history[slug] = completed_at

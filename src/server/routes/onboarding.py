@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
-from server.services import start_services
+from server.services import start_services, _log_startup_failure
 
 router = APIRouter(prefix="/api", tags=["onboarding"])
 
@@ -31,7 +31,8 @@ async def onboarding_complete(body: OnboardingComplete, request: Request):
     state.config.onboarding_complete = True
     state.config.enabled_connectors = body.enabled_connectors
     state.config.save()
-    asyncio.create_task(start_services(state))
+    task = asyncio.create_task(start_services(state))
+    task.add_done_callback(_log_startup_failure)
     return {"ok": True}
 
 

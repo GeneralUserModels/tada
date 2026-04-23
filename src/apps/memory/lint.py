@@ -17,7 +17,7 @@ from apps.moments._incremental import read_checkpoint, write_checkpoint
 LINT_TEMPLATE = (Path(__file__).parent / "prompts" / "lint.txt").read_text()
 
 
-def run(logs_dir: str, model: str, api_key: str | None = None) -> str:
+def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) -> str:
     logs_path = Path(logs_dir).resolve()
     memory_dir = logs_path / "memory"
 
@@ -33,6 +33,7 @@ def run(logs_dir: str, model: str, api_key: str | None = None) -> str:
 
     agent, _ = build_agent(model, str(logs_path), api_key=api_key)
     agent.max_rounds = 100
+    agent.on_round = on_round
     result = agent.run([{"role": "user", "content": instruction}])
 
     write_checkpoint(checkpoint_path)

@@ -6,7 +6,7 @@ Your questions will be presented to the user in a conversation. Their answers wi
 
 Check {logs_dir}/active-conversations/ for any existing files:
 - **questions.md** — previously generated but still-unanswered questions. You will curate these in Step 3 (keep, update, or delete each one) before adding new ones.
-- **conversation_*.md** — past conversations with the user. Read ALL of them. These are gold — they tell you what the user has already shared about themselves. Use this to go deeper, not wider.
+- **conversation_*.md** — past conversations with the user. Read ALL of them carefully, end to end — do not skim. These are gold — they tell you what the user has already shared about themselves. Use this to go deeper, not wider. **Never ask a question whose answer is already in these conversations.**
 
 ## Step 2: Read activity logs and user knowledge
 
@@ -54,7 +54,7 @@ Each question (whether kept, updated, or new) should:
 
 4. **Be genuinely useful for prediction** — the answer should help anticipate what the user will do, need, or feel in the future. "What's your favorite color?" fails. "Are you planning to deploy by end of week?" passes.
 
-5. **Not duplicate** any question already answered in the conversation files, and (for newly added questions) not overlap with questions you're keeping from questions.md.
+5. **Never re-ask anything the user has already answered** in the conversation files — re-read them before finalizing and drop or sharpen any question whose answer is already on record. Also, for newly added questions, do not overlap with questions you're keeping from questions.md.
 
 6. **Be conversational and direct** — these come from an AI that has been observing the user. Acknowledge that naturally. Don't be creepy, but don't pretend you haven't been watching.
 

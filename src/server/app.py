@@ -14,7 +14,7 @@ from server.routes.onboarding import router as onboarding_router
 from server.routes.completions import router as completions_router
 from connectors.routes import router as connectors_router
 from user_models.routes import router as user_models_router
-from server.services import start_services
+from server.services import start_services, _log_startup_failure
 
 from apps.memory.routes import router as memory_router
 from apps.moments.routes import router as moments_router
@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
     # HTTP server begins accepting requests (e.g. /api/status) immediately.
     if state.config.onboarding_complete:
         state._startup_task = asyncio.create_task(start_services(state))
+        state._startup_task.add_done_callback(_log_startup_failure)
 
     yield
 
