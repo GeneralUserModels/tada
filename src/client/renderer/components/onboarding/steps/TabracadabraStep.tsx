@@ -16,7 +16,7 @@ const TUTORIALS: TutorialConfig[] = [
   {
     title: "Autocomplete",
     description: "Press Option + Tab to complete text from context.",
-    prefill: "Day two of my apprenticeship with the sorcerer, and I've already ",
+    prefill: "Day two on the yellow brick road, and I've already ",
     placeholder: "Type some context, then press Option + Tab.",
     hintIdle: "Press Option + Tab to autocomplete.",
     hintDone: "Option + Tab continues from where you left off.",
@@ -25,7 +25,7 @@ const TUTORIALS: TutorialConfig[] = [
     title: "You can also prompt it",
     description: "Type a question or instruction, then press Option + Tab.",
     prefill:
-      "Official notice from the Headmaster: dueling practice in the courtyard is denied. Get a permit from your Head of House by Friday, or the charms wing stays locked.\n\nrewrite this like Hagrid would say it\n\n",
+      "Official decree from the Great Wizard of Oz: flying monkey patrol over the poppy fields is suspended. Get a permit from Glinda by Friday, or the Emerald gates stay locked.\n\nrewrite this like Gollum would say it\n\n",
     placeholder: "Write a prompt, then press Option + Tab.",
     hintIdle: "Press Option + Tab to get a response.",
     hintDone: "Tabracadabra responds to instructions too, not just autocomplete.",

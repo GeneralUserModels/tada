@@ -276,42 +276,42 @@ export const SAMPLE_MEMEX_HTML = `<!doctype html>
     <div class="grid">
       <div class="cat-group">
         <div class="cat-label">People</div>
-        <div class="card" data-link="hermione">
+        <div class="card" data-link="gandalf">
           <div class="card-head">
-            <div class="card-title">Hermione Granger</div>
+            <div class="card-title">Gandalf</div>
             <span class="conf high">94%</span>
           </div>
-          <div class="card-date">Oct 19, 1997</div>
+          <div class="card-date">Sep 22, 1937</div>
         </div>
       </div>
       <div class="cat-group">
         <div class="cat-label">Projects</div>
-        <div class="card" data-link="horcrux">
+        <div class="card" data-link="emerald">
           <div class="card-head">
-            <div class="card-title">Horcrux Hunt</div>
+            <div class="card-title">Journey to Emerald City</div>
             <span class="conf mid">72%</span>
           </div>
-          <div class="card-date">Nov 2, 1997</div>
+          <div class="card-date">May 17, 1900</div>
         </div>
       </div>
       <div class="cat-group">
         <div class="cat-label">Interests</div>
-        <div class="card" data-link="dada">
+        <div class="card" data-link="enchantments">
           <div class="card-head">
-            <div class="card-title">Defense Against the Dark Arts</div>
+            <div class="card-title">Enchantments & Illusions</div>
             <span class="conf mid">58%</span>
           </div>
-          <div class="card-date">Sep 28, 1997</div>
+          <div class="card-date">Apr 3, 1937</div>
         </div>
       </div>
       <div class="cat-group">
         <div class="cat-label">Notes</div>
-        <div class="card" data-link="snape">
+        <div class="card" data-link="curtain">
           <div class="card-head">
-            <div class="card-title">Suspicions about Snape</div>
+            <div class="card-title">The Man Behind the Curtain</div>
             <span class="conf low">28%</span>
           </div>
-          <div class="card-date">Oct 11, 1997</div>
+          <div class="card-date">Jun 8, 1900</div>
         </div>
       </div>
     </div>
@@ -340,72 +340,72 @@ export const SAMPLE_MEMEX_HTML = `<!doctype html>
 <script>
 (function(){
   var PAGES = {
-    hermione: {
-      title: 'Hermione Granger',
+    gandalf: {
+      title: 'Gandalf',
       category: 'People',
       conf: 94, confClass: 'high', label: 'certain',
-      updated: 'Oct 19, 1997',
-      intro: "Closest friend since first year. Muggle-born, top of the class in every subject, and the person most likely to have already read the book before it\u2019s brought up.",
+      updated: 'Sep 22, 1937',
+      intro: "Fellow traveler since the unexpected party. Shows up precisely when he means to, vanishes without explanation, and somehow always knows more than he lets on.",
       sections: [
-        { t: "What she's working on", b: [
-          'Planning the route through the <a class="wl" data-link="horcrux">Horcrux Hunt</a> \u2014 she keeps the itinerary.',
-          'Quiet research into house-elf rights (not speaking much about it this year).'
+        { t: "What he's up to", b: [
+          'Scouting ahead for the <a class="wl" data-link="emerald">Journey to Emerald City</a> \u2014 claims to know a shortcut.',
+          'Consulting with eagles again (won\u2019t say why).'
         ]},
         { t: 'Recent shape', b: [
-          'Carrying a beaded bag full of supplies, books, and the tent.',
-          'Short-tempered whenever <a class="wl" data-link="dada">Defense Against the Dark Arts</a> comes up.'
+          'Arrived with new fireworks and a longer staff.',
+          'Gets quiet whenever <a class="wl" data-link="enchantments">Enchantments & Illusions</a> comes up.'
         ]}
       ]
     },
-    horcrux: {
-      title: 'Horcrux Hunt',
+    emerald: {
+      title: 'Journey to Emerald City',
       category: 'Projects',
       conf: 72, confClass: 'mid', label: 'confident',
-      updated: 'Nov 2, 1997',
-      intro: 'The open undertaking after Dumbledore\u2019s funeral. Seven fragments of Voldemort\u2019s soul hidden in objects; destroy them all before the final confrontation. <a class="wl" data-link="hermione">Hermione Granger</a> keeps the plan.',
+      updated: 'May 17, 1900',
+      intro: 'The open road after the cyclone. Follow the yellow brick road to the Emerald City, find the Wizard, and ask for passage home. <a class="wl" data-link="gandalf">Gandalf</a> keeps the map.',
       sections: [
         { t: 'Confirmed', b: [
-          'Tom Riddle\u2019s diary \u2014 destroyed, second year.',
-          'Marvolo\u2019s ring \u2014 destroyed by Dumbledore; the curse is what killed him.',
-          'Slytherin\u2019s locket \u2014 recovered from Grimmauld Place, not yet destroyed.'
+          'The Munchkins pointed us toward the yellow brick road.',
+          'The Scarecrow joined at the first fork \u2014 needs a brain.',
+          'The Tin Woodman joined at the forest\u2019s edge \u2014 needs a heart.'
         ]},
         { t: 'Still open', b: [
-          'The count is a working assumption, not a certainty.',
-          'Hogwarts itself may hide one (Ravenclaw\u2019s diadem is the best guess).'
+          'The Wizard\u2019s actual powers are unverified.',
+          'The Wicked Witch of the West is tracking our progress.'
         ]}
       ]
     },
-    dada: {
-      title: 'Defense Against the Dark Arts',
+    enchantments: {
+      title: 'Enchantments & Illusions',
       category: 'Interests',
       conf: 58, confClass: 'mid', label: 'probable',
-      updated: 'Sep 28, 1997',
-      intro: 'Strongest subject, and the one worth returning to. Started with Lupin in third year; a new teacher each year has meant piecing most of it together alone.',
+      updated: 'Apr 3, 1937',
+      intro: 'The craft worth mastering. Started with simple light spells; each new land teaches a different tradition.',
       sections: [
         { t: 'Recurring threads', b: [
-          'Patronus charm \u2014 the piece that holds up when things go wrong.',
-          'Non-verbal spellwork \u2014 came up again planning the <a class="wl" data-link="horcrux">Horcrux Hunt</a> with <a class="wl" data-link="hermione">Hermione</a>.',
-          'Spotting dark objects before touching them (the locket was a lesson).'
+          'Ruby slippers \u2014 the piece that holds up when everything else fails.',
+          'Smoke and mirrors \u2014 came up again planning the <a class="wl" data-link="emerald">Journey to Emerald City</a> with <a class="wl" data-link="gandalf">Gandalf</a>.',
+          'Reading riddles before crossing thresholds (the cave entrance was a lesson).'
         ]},
         { t: 'Open questions', b: [
-          'How much of the Elder Wand folklore is real?'
+          'How much of the Wizard\u2019s power is real, and how much is theater?'
         ]}
       ]
     },
-    snape: {
-      title: 'Suspicions about Snape',
+    curtain: {
+      title: 'The Man Behind the Curtain',
       category: 'Notes',
       conf: 28, confClass: 'low', label: 'speculative',
-      updated: 'Oct 11, 1997',
+      updated: 'Jun 8, 1900',
       intro: 'A thread that won\u2019t sit still. Every piece of evidence cuts both ways.',
       sections: [
         { t: 'For trust', b: [
-          'Dumbledore\u2019s repeated, unexplained confidence in him.',
-          'The Unbreakable Vow arguably protected Draco, not Voldemort.'
+          'The Emerald City thrives under his rule \u2014 someone is doing something right.',
+          'The good witches seem to tolerate him, which counts for something.'
         ]},
         { t: 'Against', b: [
-          'Killed Dumbledore, in front of witnesses.',
-          '<a class="wl" data-link="hermione">Hermione</a> agrees on the facts, not the conclusion.'
+          'No one has actually seen him perform real magic.',
+          '<a class="wl" data-link="gandalf">Gandalf</a> agrees on the facts, not the conclusion.'
         ]}
       ]
     }
