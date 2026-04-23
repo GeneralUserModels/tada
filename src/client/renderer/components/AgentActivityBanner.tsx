@@ -31,7 +31,7 @@ export function AgentActivityBanner({ agent, message, numTurns, maxTurns }: Prop
         <span className="agent-activity-label">{prettyAgent(agent)}</span>
         <span className="agent-activity-text">{message}</span>
         {showProgress && numTurns != null && (
-          <span className="agent-activity-count">{numTurns} / {maxTurns}</span>
+          <span className="agent-activity-count">{Math.round(pct)}%</span>
         )}
       </div>
       {showProgress && (
