@@ -346,8 +346,8 @@ async def google_start(request: Request):
     # Re-enable google connectors that were disabled due to errors
     for name, auth in getattr(state, "connector_auth", {}).items():
         if auth == "google":
-            if name in state.config.disabled_connectors:
-                state.config.disabled_connectors.remove(name)
+            if name not in state.config.enabled_connectors:
+                state.config.enabled_connectors.append(name)
             state.config.connector_errors.pop(name, None)
             conn = state.connectors.get(name)
             if conn:
@@ -427,8 +427,8 @@ async def outlook_start(request: Request):
     # Re-enable outlook connectors that were disabled due to errors
     for name, auth in getattr(state, "connector_auth", {}).items():
         if auth == "outlook":
-            if name in state.config.disabled_connectors:
-                state.config.disabled_connectors.remove(name)
+            if name not in state.config.enabled_connectors:
+                state.config.enabled_connectors.append(name)
             state.config.connector_errors.pop(name, None)
             conn = state.connectors.get(name)
             if conn:
