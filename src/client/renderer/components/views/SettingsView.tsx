@@ -43,6 +43,7 @@ export function SettingsView() {
   const tabracadabraEnabled = useFeatureFlag("tabracadabra");
   const tinkerEnabled = useFeatureFlag("tinker");
   const [values, setValues] = useState<Record<string, string>>({});
+  const [showSaved, setShowSaved] = useState(false);
 
   useEffect(() => {
     const populated: Record<string, string> = {};
@@ -70,6 +71,8 @@ export function SettingsView() {
       await updateSettings(data);
       const fresh = await getSettings();
       dispatch({ type: "LOAD_SETTINGS", settings: fresh as Record<string, unknown> });
+      setShowSaved(true);
+      setTimeout(() => setShowSaved(false), 2000);
     }
   };
 
@@ -349,6 +352,22 @@ export function SettingsView() {
           <button className="pill-btn pill-start" onClick={handleSave}>
             Save Changes
           </button>
+        </div>
+      )}
+
+      {showSaved && !hasUnsavedChanges && (
+        <div style={{
+          position: "fixed", bottom: 16, left: 216, right: 16,
+          background: "#fff", border: "1px solid rgba(132,177,121,0.35)",
+          borderRadius: 12,
+          boxShadow: "0 4px 24px rgba(44,58,40,0.12), 0 1px 4px rgba(0,0,0,0.06)",
+          padding: "12px 20px", display: "flex", alignItems: "center",
+          justifyContent: "center", zIndex: 100,
+          animation: "fadeIn 0.2s ease",
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 500, color: "#84B179" }}>
+            Settings updated!
+          </span>
         </div>
       )}
     </div>

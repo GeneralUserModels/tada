@@ -20,6 +20,14 @@ export interface RewardPoint {
   combined: number;
 }
 
+export interface AgentActivityInfo {
+  agent: string;
+  message: string;
+  slug?: string;
+  numTurns: number | null;
+  maxTurns: number | null;
+}
+
 export interface AppState {
   connected: boolean;
   servicesReady: boolean;
@@ -41,7 +49,7 @@ export interface AppState {
   updateReady: boolean;
   updateInstalling: boolean;
   updateError: string | null;
-  agentActivity: { agent: string; message: string; numTurns: number | null; maxTurns: number | null } | null;
+  agentActivities: Record<string, AgentActivityInfo>;
 }
 
 type AppAction =
@@ -68,7 +76,7 @@ type AppAction =
   | { type: "UPDATE_INSTALLING" }
   | { type: "UPDATE_ERROR"; message: string }
   | { type: "UPDATE_DISMISSED" }
-  | { type: "AGENT_ACTIVITY"; data: { agent: string | null; message: string | null; num_turns?: number | null; max_turns?: number | null } };
+  | { type: "AGENT_ACTIVITY"; data: { agent: string; message: string | null; slug?: string | null; num_turns?: number | null; max_turns?: number | null } };
 
 let historyCounter = 0;
 
@@ -103,7 +111,7 @@ const initialState: AppState = {
   updateReady: false,
   updateInstalling: false,
   updateError: null,
-  agentActivity: null,
+  agentActivities: {},
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -245,15 +253,22 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, pensieveHasNew: true };
 
     case "AGENT_ACTIVITY": {
-      const { agent, message, num_turns, max_turns } = action.data;
-      if (!agent || !message) return { ...state, agentActivity: null };
+      const { agent, message, slug, num_turns, max_turns } = action.data;
+      if (!message) {
+        const { [agent]: _, ...rest } = state.agentActivities;
+        return { ...state, agentActivities: rest };
+      }
       return {
         ...state,
-        agentActivity: {
-          agent,
-          message,
-          numTurns: num_turns ?? null,
-          maxTurns: max_turns ?? null,
+        agentActivities: {
+          ...state.agentActivities,
+          [agent]: {
+            agent,
+            message,
+            slug: slug ?? undefined,
+            numTurns: num_turns ?? null,
+            maxTurns: max_turns ?? null,
+          },
         },
       };
     }
@@ -298,7 +313,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sse.on("seeker_questions_ready", () => dispatch({ type: "SEEKER_QUESTIONS_READY" }));
     sse.on("moment_completed", () => dispatch({ type: "TADA_NEW_MOMENT" }));
     sse.on("memory_updated", () => dispatch({ type: "PENSIEVE_UPDATED" }));
-    sse.on("agent_activity", (data) => dispatch({ type: "AGENT_ACTIVITY", data: data as { agent: string | null; message: string | null } }));
+    sse.on("agent_activity", (data) => {
+      console.log("[sse] agent_activity", data);
+      dispatch({ type: "AGENT_ACTIVITY", data: data as { agent: string; message: string | null } });
+    });
 
     // server:ready — main sends URL once server is up; we initialize api + sse then seed state
     window.tada.onServerReady(async ({ url }: { url: string }) => {
@@ -308,9 +326,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const status = await api.getStatus();
         dispatch({ type: "SERVER_READY", status: status as StatusData });
-        if ((status as StatusData).current_activity) {
-          const act = (status as StatusData).current_activity!;
-          dispatch({ type: "AGENT_ACTIVITY", data: { agent: act.agent, message: act.message, num_turns: act.num_turns, max_turns: act.max_turns } });
+        const activeAgents = (status as StatusData).active_agents;
+        if (activeAgents) {
+          for (const act of Object.values(activeAgents)) {
+            dispatch({ type: "AGENT_ACTIVITY", data: act });
+          }
         }
         console.log("[app] server ready, url:", url);
 

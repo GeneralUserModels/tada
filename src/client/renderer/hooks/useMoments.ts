@@ -110,7 +110,7 @@ export function useMoments() {
       )
     );
     const current = results.find((r) => r.slug === slug);
-    const newValue = current?.thumbs === value ? "clear" : value;
+    const newValue = current?.thumbs === value ? null : value;
     await updateMomentState(slug, { thumbs: newValue });
   }, [results]);
 
@@ -125,6 +125,11 @@ export function useMoments() {
 
   const startView = useCallback((slug: string) => {
     viewStartRef.current = { slug, ts: Date.now() };
+    setResults((prev) =>
+      prev.map((r) =>
+        r.slug === slug ? { ...r, last_viewed: new Date().toISOString() } : r
+      )
+    );
     recordMomentView(slug);
   }, []);
 

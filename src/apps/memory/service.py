@@ -111,7 +111,7 @@ async def run_memory_service(state) -> None:
                 last_run_file.parent.mkdir(parents=True, exist_ok=True)
                 last_run_file.write_text(datetime.now().isoformat())
             finally:
-                await state.broadcast_activity(None)
+                await state.broadcast_activity("memory")
 
         except asyncio.CancelledError:
             logger.info("Memory wiki service stopped")

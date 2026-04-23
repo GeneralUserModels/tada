@@ -26,6 +26,7 @@ export function TrainingTile({ state, onStart, onStop }: TrainingTileProps) {
         <span className="tile-label">Training</span>
       </div>
       <div className={`tile-status${state === "running" ? " active" : ""}${state === "starting" || state === "stopping" ? " transitioning" : ""}`}>
+        {(state === "starting" || state === "stopping") && <div className="feature-activity-spinner" style={{ width: 10, height: 10, marginRight: 6 }} />}
         {stateLabels[state]}
       </div>
       <div className="tile-actions">
@@ -66,6 +67,7 @@ export function InferenceTile({ generating, onGenerate }: InferenceTileProps) {
         <span className="tile-label">Inference</span>
       </div>
       <div className={`tile-status${generating ? " transitioning" : ""}`}>
+        {generating && <div className="feature-activity-spinner" style={{ width: 10, height: 10, marginRight: 6 }} />}
         {generating ? "Generating\u2026" : "Idle"}
       </div>
       <div className="tile-actions">
