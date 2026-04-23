@@ -9,8 +9,8 @@ interface Props {
 
 const AGENT_LABELS: Record<string, string> = {
   memory: "Memory",
-  moments_discovery: "Moments · Discovery",
-  moment_run: "Moments · Run",
+  moments_discovery: "Tadas · Discovery",
+  moment_run: "Tadas · Run",
   seeker: "Seeker",
 };
 
