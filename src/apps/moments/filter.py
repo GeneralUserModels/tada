@@ -38,7 +38,7 @@ def _classify_candidates(dirs: list[str], since: datetime | None) -> tuple[list[
     return new, old
 
 
-def run(logs_dir: str, n: int = 10, model: str | None = None, api_key: str | None = None) -> str:
+def run(logs_dir: str, n: int = 10, model: str | None = None, api_key: str | None = None, on_round=None) -> str:
     logs_path = Path(logs_dir).resolve()
     tasks_dir = str(logs_path / "tasks")
     oneoffs_dir = str(logs_path / "oneoffs")
@@ -48,6 +48,7 @@ def run(logs_dir: str, n: int = 10, model: str | None = None, api_key: str | Non
     model = model or resolve_moments_model()
     agent, _ = build_agent(model, logs_dir, api_key=api_key)
     agent.max_rounds = 50
+    agent.on_round = on_round
 
     last_filter = read_checkpoint(checkpoint_path)
     new_candidates, old_candidates = _classify_candidates([tasks_dir, oneoffs_dir], last_filter)

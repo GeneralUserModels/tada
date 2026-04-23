@@ -26,10 +26,10 @@ class MemoryIngest:
         self.model = model
         self.api_key = api_key
 
-    def run(self) -> str:
+    def run(self, on_round=None) -> str:
         """Read new logs and update wiki pages. Blocking."""
         from apps.memory.ingest import run as ingest_run
-        return ingest_run(self.logs_dir, model=self.model, api_key=self.api_key)
+        return ingest_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
 
 
 class MemoryLint:
@@ -40,10 +40,10 @@ class MemoryLint:
         self.model = model
         self.api_key = api_key
 
-    def run(self) -> str:
+    def run(self, on_round=None) -> str:
         """Lint the wiki. Blocking."""
         from apps.memory.lint import run as lint_run
-        return lint_run(self.logs_dir, model=self.model, api_key=self.api_key)
+        return lint_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
 
 
 def _read_last_run(p: Path) -> datetime | None:
@@ -88,18 +88,22 @@ async def run_memory_service(state) -> None:
             api_key = cfg.memory_agent_api_key or cfg.resolve_api_key("agent_api_key")
 
             try:
-                await state.broadcast_activity("memory", "Ingesting memories…")
+                ingest_msg = "Ingesting memories…"
+                await state.broadcast_activity("memory", ingest_msg)
+                on_round = state.make_round_callback("memory", ingest_msg)
                 logger.info("Memory: running ingest")
-                await asyncio.to_thread(MemoryIngest(logs_dir, model, api_key).run)
+                await asyncio.to_thread(MemoryIngest(logs_dir, model, api_key).run, on_round=on_round)
                 logger.info("Memory: ingest complete")
                 await state.broadcast("memory_updated", {})
 
                 lint_last_run = _read_last_run(lint_last_run_file)
                 should_lint = lint_last_run is None or (datetime.now() - lint_last_run) >= timedelta(days=6)
                 if should_lint:
-                    await state.broadcast_activity("memory", "Auditing memories…")
+                    lint_msg = "Auditing memories…"
+                    await state.broadcast_activity("memory", lint_msg)
+                    lint_on_round = state.make_round_callback("memory", lint_msg)
                     logger.info("Memory: running lint (weekly)")
-                    await asyncio.to_thread(MemoryLint(logs_dir, model, api_key).run)
+                    await asyncio.to_thread(MemoryLint(logs_dir, model, api_key).run, on_round=lint_on_round)
                     lint_last_run_file.parent.mkdir(parents=True, exist_ok=True)
                     lint_last_run_file.write_text(datetime.now().isoformat())
                     logger.info("Memory: lint complete")

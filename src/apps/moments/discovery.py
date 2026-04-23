@@ -22,10 +22,10 @@ class MomentsDiscovery:
         self.model = model
         self.api_key = api_key
 
-    def run(self) -> str:
+    def run(self, on_round=None) -> str:
         """Analyze logs and write task files. Blocking."""
         from apps.moments.discover import run as moments_run
-        return moments_run(self.logs_dir, model=self.model, api_key=self.api_key)
+        return moments_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
 
 
 class OneoffsDiscovery:
@@ -36,10 +36,10 @@ class OneoffsDiscovery:
         self.model = model
         self.api_key = api_key
 
-    def run(self) -> str:
+    def run(self, on_round=None) -> str:
         """Analyze logs and write one-off task files. Blocking."""
         from apps.moments.oneoffs import run as oneoffs_run
-        return oneoffs_run(self.logs_dir, model=self.model, api_key=self.api_key)
+        return oneoffs_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
 
 
 class TaskFilter:
@@ -50,10 +50,10 @@ class TaskFilter:
         self.model = model
         self.api_key = api_key
 
-    def run(self) -> str:
+    def run(self, on_round=None) -> str:
         """Filter tasks through tada. Blocking."""
         from apps.moments.filter import run as filter_run
-        return filter_run(self.logs_dir, model=self.model, api_key=self.api_key)
+        return filter_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
 
 
 def _read_last_run(p: Path) -> datetime | None:
@@ -101,17 +101,23 @@ async def run_moments_discovery(state) -> None:
             api_key = cfg.resolve_api_key("moments_agent_api_key")
 
             try:
-                await state.broadcast_activity("moments_discovery", "Discovering recurring moments…")
+                discover_msg = "Discovering recurring moments…"
+                await state.broadcast_activity("moments_discovery", discover_msg)
+                discover_cb = state.make_round_callback("moments_discovery", discover_msg)
                 logger.info("Discovery: finding recurring moments")
-                await asyncio.to_thread(MomentsDiscovery(logs_dir, model, api_key).run)
+                await asyncio.to_thread(MomentsDiscovery(logs_dir, model, api_key).run, on_round=discover_cb)
 
-                await state.broadcast_activity("moments_discovery", "Discovering one-off moments…")
+                oneoffs_msg = "Discovering one-off moments…"
+                await state.broadcast_activity("moments_discovery", oneoffs_msg)
+                oneoffs_cb = state.make_round_callback("moments_discovery", oneoffs_msg)
                 logger.info("Discovery: finding one-off moments")
-                await asyncio.to_thread(OneoffsDiscovery(logs_dir, model, api_key).run)
+                await asyncio.to_thread(OneoffsDiscovery(logs_dir, model, api_key).run, on_round=oneoffs_cb)
 
-                await state.broadcast_activity("moments_discovery", "Filtering tasks…")
+                filter_msg = "Filtering tasks…"
+                await state.broadcast_activity("moments_discovery", filter_msg)
+                filter_cb = state.make_round_callback("moments_discovery", filter_msg)
                 logger.info("Discovery: filtering tasks")
-                await asyncio.to_thread(TaskFilter(logs_dir, model, api_key).run)
+                await asyncio.to_thread(TaskFilter(logs_dir, model, api_key).run, on_round=filter_cb)
 
                 last_run_file.write_text(datetime.now().isoformat())
                 logger.info("Discovery pipeline complete")

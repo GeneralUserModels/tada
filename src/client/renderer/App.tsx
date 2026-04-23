@@ -46,7 +46,12 @@ export function App() {
           />
         )}
         {state.agentActivity && (
-          <AgentActivityBanner message={state.agentActivity.message} />
+          <AgentActivityBanner
+            agent={state.agentActivity.agent}
+            message={state.agentActivity.message}
+            numTurns={state.agentActivity.numTurns}
+            maxTurns={state.agentActivity.maxTurns}
+          />
         )}
         {state.activeView === "connectors" && <ConnectorsView />}
         {state.activeView === "tada" && momentsEnabled && <TadaView />}

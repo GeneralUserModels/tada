@@ -31,6 +31,15 @@ from apps.seeker.routes import router as seeker_router
 logger = logging.getLogger(__name__)
 
 
+def _log_startup_failure(task: asyncio.Task) -> None:
+    """Surface exceptions from start_services so dead schedulers don't go unnoticed."""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error("start_services failed — background services are not running", exc_info=exc)
+
+
 async def start_services(state: ServerState) -> None:
     """Start all heavy background services. Called once after onboarding completes."""
     if state.services_started or state._services_starting:
@@ -58,9 +67,6 @@ async def start_services(state: ServerState) -> None:
     # Remaining services (model, tabracadabra, etc.) continue in the background.
     await state.connectors_ready.wait()
     state.services_started = True
-
-    # Background OAuth token refresh
-    state.token_refresh_task = asyncio.create_task(run_token_refresh(state))
 
     # Memory wiki service
     if is_enabled(state.config, "memory") and state.config.memory_enabled:
@@ -116,6 +122,7 @@ async def lifespan(app: FastAPI):
     # HTTP server begins accepting requests (e.g. /api/status) immediately.
     if state.config.onboarding_complete:
         state._startup_task = asyncio.create_task(start_services(state))
+        state._startup_task.add_done_callback(_log_startup_failure)
 
     yield
 

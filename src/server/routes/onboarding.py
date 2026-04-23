@@ -25,8 +25,9 @@ async def onboarding_complete(request: Request):
     state.config.onboarding_complete = True
     state.config.save()
     # Start heavy services in the background now that onboarding is done
-    from server.app import start_services
-    asyncio.create_task(start_services(state))
+    from server.app import start_services, _log_startup_failure
+    task = asyncio.create_task(start_services(state))
+    task.add_done_callback(_log_startup_failure)
     return {"ok": True}
 
 

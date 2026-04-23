@@ -41,7 +41,7 @@ export interface AppState {
   updateReady: boolean;
   updateInstalling: boolean;
   updateError: string | null;
-  agentActivity: { agent: string; message: string } | null;
+  agentActivity: { agent: string; message: string; numTurns: number | null; maxTurns: number | null } | null;
 }
 
 type AppAction =
@@ -68,7 +68,7 @@ type AppAction =
   | { type: "UPDATE_INSTALLING" }
   | { type: "UPDATE_ERROR"; message: string }
   | { type: "UPDATE_DISMISSED" }
-  | { type: "AGENT_ACTIVITY"; data: { agent: string | null; message: string | null } };
+  | { type: "AGENT_ACTIVITY"; data: { agent: string | null; message: string | null; num_turns?: number | null; max_turns?: number | null } };
 
 let historyCounter = 0;
 
@@ -245,9 +245,17 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, pensieveHasNew: true };
 
     case "AGENT_ACTIVITY": {
-      const { agent, message } = action.data;
+      const { agent, message, num_turns, max_turns } = action.data;
       if (!agent || !message) return { ...state, agentActivity: null };
-      return { ...state, agentActivity: { agent, message } };
+      return {
+        ...state,
+        agentActivity: {
+          agent,
+          message,
+          numTurns: num_turns ?? null,
+          maxTurns: max_turns ?? null,
+        },
+      };
     }
 
     default:
@@ -302,7 +310,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "SERVER_READY", status: status as StatusData });
         if ((status as StatusData).current_activity) {
           const act = (status as StatusData).current_activity!;
-          dispatch({ type: "AGENT_ACTIVITY", data: { agent: act.agent, message: act.message } });
+          dispatch({ type: "AGENT_ACTIVITY", data: { agent: act.agent, message: act.message, num_turns: act.num_turns, max_turns: act.max_turns } });
         }
         console.log("[app] server ready, url:", url);
 

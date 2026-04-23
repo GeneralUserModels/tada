@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Callable
 
 import httpx
 import litellm
@@ -27,11 +28,13 @@ class Agent:
         max_rounds: int = 30,
         web_search: bool | dict = False,
         api_key: str | None = None,
+        on_round: Callable[[int, int], None] | None = None,
     ):
         self.model = model
         self.api_key = api_key or None
         self.system_prompt = system_prompt
         self.max_rounds = max_rounds
+        self.on_round = on_round
         self._compact = compact_tool
         self._bg = bg_manager
         if web_search is True:
@@ -54,6 +57,12 @@ class Agent:
         rounds_without_plan = 0
 
         for round_num in range(self.max_rounds):
+            if self.on_round:
+                try:
+                    self.on_round(round_num + 1, self.max_rounds)
+                except Exception as e:
+                    print(f"  [on_round callback error] {e}")
+
             # compression
             if self._compact:
                 self._compact.microcompact(messages)

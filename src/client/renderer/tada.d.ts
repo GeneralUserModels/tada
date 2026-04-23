@@ -5,6 +5,8 @@ declare global {
 interface AgentActivity {
   agent: string | null;
   message: string | null;
+  num_turns?: number | null;
+  max_turns?: number | null;
 }
 
 interface StatusData {

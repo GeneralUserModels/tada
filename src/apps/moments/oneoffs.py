@@ -20,7 +20,7 @@ INSTRUCTION_TEMPLATE = (_PROMPTS / "oneoffs.txt").read_text()
 INCREMENTAL_SECTION = (_PROMPTS / "oneoffs_incremental.txt").read_text()
 
 
-def run(logs_dir: str, model: str, api_key: str | None = None) -> str:
+def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) -> str:
     logs_dir = str(Path(logs_dir).resolve())
     Path(logs_dir, "oneoffs").mkdir(parents=True, exist_ok=True)
     checkpoint_path = Path(logs_dir) / "oneoffs" / ".last_discovery"
@@ -48,6 +48,7 @@ def run(logs_dir: str, model: str, api_key: str | None = None) -> str:
 
     agent, _ = build_agent(model, logs_dir, api_key=api_key)
     agent.max_rounds = 200
+    agent.on_round = on_round
     messages = [{"role": "user", "content": instruction}]
     result = agent.run(messages)
 
