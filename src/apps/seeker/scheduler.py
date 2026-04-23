@@ -86,7 +86,7 @@ async def run_seeker_scheduler(state) -> None:
                 on_round = state.make_round_callback("seeker", seek_msg)
                 await asyncio.to_thread(_run_seek, log_dir, model, api_key, on_round=on_round)
             finally:
-                await state.broadcast_activity(None)
+                await state.broadcast_activity("seeker")
 
             logger.info("Seeker scheduler: seek.py completed, broadcasting")
             await state.broadcast("seeker_questions_ready", {})

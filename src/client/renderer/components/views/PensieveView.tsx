@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { useAppContext } from "../../context/AppContext";
 import { useMemory, WikiPage } from "../../hooks/useMemory";
+import { FeatureActivityBanner } from "../FeatureActivityBanner";
 import {
   stripFrontmatter,
   parseFrontmatter,
@@ -43,6 +44,7 @@ function groupByCategory(pages: WikiPage[]): Map<string, WikiPage[]> {
 
 export function PensieveView() {
   const { state } = useAppContext();
+  const memoryActivity = state.agentActivities["memory"];
   const { pages, status, loading, load, getPage, savePage } = useMemory();
 
   // Navigation state
@@ -224,6 +226,9 @@ export function PensieveView() {
 
   return (
     <div id="pensieve-view" className="view active">
+      {memoryActivity && (
+        <FeatureActivityBanner activity={memoryActivity} label="Memory" />
+      )}
       <div className="pensieve-list-header">
         <div className="pensieve-search-wrap">
           <svg className="pensieve-search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none">

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { useSeeker } from "../../hooks/useSeeker";
 import { ChatView } from "../ChatView";
+import { FeatureActivityBanner } from "../FeatureActivityBanner";
 
 function formatDate(date: string): string {
   // date is YYYYMMDD_HHMMSS or YYYYMMDD
@@ -14,6 +15,7 @@ function formatDate(date: string): string {
 
 export function SeekerView() {
   const { state } = useAppContext();
+  const seekerActivity = state.agentActivities["seeker"];
   const {
     status,
     messages,
@@ -108,6 +110,9 @@ export function SeekerView() {
   // Not in a conversation — show status + history list
   return (
     <div id="seeker-view" className="view active">
+      {seekerActivity && (
+        <FeatureActivityBanner activity={seekerActivity} label="Seeker" />
+      )}
       {/* Status card */}
       {status.has_questions && !status.questions_answered ? (
         <section className="glass-card seeker-status">

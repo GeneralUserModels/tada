@@ -3,8 +3,9 @@
 declare global {
 
 interface AgentActivity {
-  agent: string | null;
+  agent: string;
   message: string | null;
+  slug?: string | null;
   num_turns?: number | null;
   max_turns?: number | null;
 }
@@ -15,6 +16,7 @@ interface StatusData {
   labels_processed: number;
   step_count: number;
   current_activity?: AgentActivity | null;
+  active_agents?: Record<string, AgentActivity>;
 }
 
 interface PredictionData {

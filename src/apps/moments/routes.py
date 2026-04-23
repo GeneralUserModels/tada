@@ -201,7 +201,7 @@ async def record_view(slug: str, request: Request):
     all_state = load_state(tada_dir)
     entry = {**DEFAULT_SLUG_STATE, **all_state.get(slug, {})}
     entry["view_count"] = entry.get("view_count", 0) + 1
-    entry["last_viewed"] = datetime.now().isoformat()
+    entry["last_viewed"] = datetime.now(tz=timezone.utc).isoformat()
     all_state[slug] = entry
     save_state(tada_dir, all_state)
     return {"view_count": entry["view_count"]}
@@ -260,8 +260,8 @@ async def rerun_moment(slug: str, request: Request):
 
             moment_title = fm.get("title", slug)
             run_msg = f"Running: {moment_title}"
-            await state.broadcast_activity("moment_run", run_msg)
-            on_round = state.make_round_callback("moment_run", run_msg)
+            await state.broadcast_activity("moment_run", run_msg, slug=slug)
+            on_round = state.make_round_callback("moment_run", run_msg, slug=slug)
             try:
                 success = await asyncio.to_thread(
                     execute_moment, str(task_path), output_dir, logs_dir, model,
@@ -271,7 +271,7 @@ async def rerun_moment(slug: str, request: Request):
                     on_round=on_round,
                 )
             finally:
-                await state.broadcast_activity(None)
+                await state.broadcast_activity("moment_run")
             completed_at = _time.time()
             save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")
 

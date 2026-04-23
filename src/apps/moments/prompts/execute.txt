@@ -108,7 +108,7 @@ Before diving in, plan your approach using PlanWrite to outline your steps and t
 Use subagents to parallelize and divide your work.
 
 Use your tools as needed:
-- **bash**: run shell commands to execute the task.
+- **bash**: run shell commands to execute the task. **The shell has NO network access** (no curl, wget, pip install, git clone, etc.) — all network operations must go through browser or web_search tools.
 - **read_file**: read log files, task definitions, any file on the system.
 - **write_file**: write your final index.html and meta.json to `{output_dir}/`.
 - **subagent**: spawn subagents to research different aspects in parallel — e.g. one reads emails while another browses the web. Each subagent can focus on a piece and report back.

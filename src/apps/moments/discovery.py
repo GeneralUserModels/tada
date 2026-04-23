@@ -122,7 +122,7 @@ async def run_moments_discovery(state) -> None:
                 last_run_file.write_text(datetime.now().isoformat())
                 logger.info("Discovery pipeline complete")
             finally:
-                await state.broadcast_activity(None)
+                await state.broadcast_activity("moments_discovery")
 
         except asyncio.CancelledError:
             logger.info("Moments discovery service stopped")

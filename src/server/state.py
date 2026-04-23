@@ -49,8 +49,15 @@ class ServerState:
     # SSE client queues
     sse_queues: set = field(default_factory=set)
 
-    # Current background-agent activity (None when idle)
-    current_activity: dict | None = None
+    # Active background-agent activities keyed by agent name (empty when idle)
+    active_agents: dict[str, dict] = field(default_factory=dict)
+
+    @property
+    def current_activity(self) -> dict | None:
+        """Legacy accessor — returns the first active agent or None."""
+        if not self.active_agents:
+            return None
+        return next(iter(self.active_agents.values()))
 
     async def broadcast(self, event: str, data: dict):
         """Push an event to all connected SSE clients."""
@@ -60,30 +67,37 @@ class ServerState:
 
     async def broadcast_activity(
         self,
-        agent: str | None,
+        agent: str,
         message: str | None = None,
         *,
+        slug: str | None = None,
         num_turns: int | None = None,
         max_turns: int | None = None,
     ):
-        """Set and broadcast the current agent activity. Pass agent=None to clear."""
-        if agent:
-            self.current_activity = {
+        """Set or clear a single agent's activity. Pass message=None to clear."""
+        if message:
+            info: dict = {
                 "agent": agent,
                 "message": message,
                 "num_turns": num_turns,
                 "max_turns": max_turns,
             }
+            if slug is not None:
+                info["slug"] = slug
+            self.active_agents[agent] = info
         else:
-            self.current_activity = None
+            self.active_agents.pop(agent, None)
         await self.broadcast("agent_activity", {
             "agent": agent,
             "message": message,
+            "slug": slug,
             "num_turns": num_turns,
             "max_turns": max_turns,
         })
 
-    def make_round_callback(self, agent: str, message: str) -> Callable[[int, int], None]:
+    def make_round_callback(
+        self, agent: str, message: str, *, slug: str | None = None,
+    ) -> Callable[[int, int], None]:
         """Build a thread-safe callback that broadcasts round progress for (agent, message).
 
         The agent runs in a worker thread (via asyncio.to_thread), but broadcast_activity
@@ -94,7 +108,10 @@ class ServerState:
 
         def on_round(num_turns: int, max_turns: int) -> None:
             asyncio.run_coroutine_threadsafe(
-                self.broadcast_activity(agent, message, num_turns=num_turns, max_turns=max_turns),
+                self.broadcast_activity(
+                    agent, message, slug=slug,
+                    num_turns=num_turns, max_turns=max_turns,
+                ),
                 loop,
             )
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { ActiveView } from "../context/AppContext";
+import { ActiveView, AgentActivityInfo } from "../context/AppContext";
 import { useFeatureFlags, getFlag } from "../featureFlags";
 
 interface Props {
@@ -8,8 +8,15 @@ interface Props {
   seekerHasQuestions: boolean;
   tadaHasNew: boolean;
   pensieveHasNew: boolean;
+  agentActivities: Record<string, AgentActivityInfo>;
   onNavigate: (view: ActiveView) => void;
 }
+
+const AGENTS_FOR_VIEW: Partial<Record<ActiveView, string[]>> = {
+  tada: ["moments_discovery", "moment_run"],
+  pensieve: ["memory"],
+  seeker: ["seeker"],
+};
 
 const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
   {
@@ -80,7 +87,7 @@ const FLAG_FOR_VIEW: Partial<Record<ActiveView, string>> = {
   seeker: "seeker",
 };
 
-export function Sidebar({ activeView, connected, seekerHasQuestions, tadaHasNew, pensieveHasNew, onNavigate }: Props) {
+export function Sidebar({ activeView, connected, seekerHasQuestions, tadaHasNew, pensieveHasNew, agentActivities, onNavigate }: Props) {
   const featureFlags = useFeatureFlags();
 
   const visibleItems = navItems.filter(({ view }) => {
@@ -88,6 +95,11 @@ export function Sidebar({ activeView, connected, seekerHasQuestions, tadaHasNew,
     if (flag && !getFlag(featureFlags, flag)) return false;
     return true;
   });
+
+  const isViewActive = (view: ActiveView) => {
+    const agents = AGENTS_FOR_VIEW[view];
+    return agents?.some((a) => agentActivities[a]) ?? false;
+  };
 
   return (
     <nav id="sidebar">
@@ -108,6 +120,7 @@ export function Sidebar({ activeView, connected, seekerHasQuestions, tadaHasNew,
           >
             {icon}
             {label}
+            {isViewActive(view) && <span className="nav-activity-spinner" />}
             {view === "tada" && tadaHasNew && <span className="nav-notify-dot" />}
             {view === "pensieve" && pensieveHasNew && <span className="nav-notify-dot" />}
             {view === "seeker" && seekerHasQuestions && <span className="nav-notify-dot" />}

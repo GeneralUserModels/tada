@@ -1,9 +1,12 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useAppContext } from "../../context/AppContext";
 import { useMoments } from "../../hooks/useMoments";
 import { useMomentFeedback } from "../../hooks/useMomentFeedback";
 import { ChatView } from "../ChatView";
+import { FeatureActivityBanner } from "../FeatureActivityBanner";
 import { getServerUrl } from "../../api/client";
+
+type TadaTab = "one-off" | "recurring";
 
 const FREQUENCY_OPTIONS = ["daily", "weekly", "once"] as const;
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
@@ -148,6 +151,8 @@ function buildSchedule(frequency: string, time24: string, day: string): string {
 
 export function TadaView() {
   const { state } = useAppContext();
+  const discoveryActivity = state.agentActivities["moments_discovery"];
+  const runActivity = state.agentActivities["moment_run"];
   const {
     results, loading, load, showDismissed, toggleShowDismissed,
     dismiss, restore, pin, unpin, thumbs, editSchedule, startView, endView, rerun,
@@ -160,8 +165,19 @@ export function TadaView() {
   const [editFreq, setEditFreq] = useState("");
   const [editTime, setEditTime] = useState("");
   const [editDay, setEditDay] = useState("Monday");
+  const [tab, setTab] = useState<TadaTab>("one-off");
   const prevSlugRef = useRef<string | null>(null);
   const feedback = useMomentFeedback(selectedSlug ?? "");
+
+  const isOneOff = (r: MomentResult) => (r.frequency_override || r.frequency) === "once";
+  const isUnread = (r: MomentResult) =>
+    !r.dismissed && (!r.last_viewed || new Date(r.completed_at) > new Date(r.last_viewed));
+
+  const oneOffResults = useMemo(() => results.filter(isOneOff), [results]);
+  const recurringResults = useMemo(() => results.filter((r) => !isOneOff(r)), [results]);
+  const oneOffUnread = useMemo(() => oneOffResults.filter(isUnread).length, [oneOffResults]);
+  const recurringUnread = useMemo(() => recurringResults.filter(isUnread).length, [recurringResults]);
+  const tabResults = tab === "one-off" ? oneOffResults : recurringResults;
 
   useEffect(() => {
     if (state.connected) load();
@@ -356,33 +372,86 @@ export function TadaView() {
   // List view
   return (
     <div id="tada-view" className="view active">
-      <div className="tada-list-header">
+      {discoveryActivity && (
+        <FeatureActivityBanner activity={discoveryActivity} label="Discovery" />
+      )}
+      <div className="tada-tab-bar">
+        <div className="tada-tab-pills">
+          <button
+            className={`tada-tab${tab === "one-off" ? " active" : ""}`}
+            onClick={() => setTab("one-off")}
+          >
+            One-off{oneOffUnread > 0 && <span className="tada-tab-badge">{oneOffUnread}</span>}
+          </button>
+          <button
+            className={`tada-tab${tab === "recurring" ? " active" : ""}`}
+            onClick={() => setTab("recurring")}
+          >
+            Recurring{recurringUnread > 0 && <span className="tada-tab-badge">{recurringUnread}</span>}
+          </button>
+        </div>
         <button className="tada-show-dismissed" onClick={toggleShowDismissed}>
           {showDismissed ? "Hide dismissed" : "Show dismissed"}
         </button>
       </div>
+
+      {/* Placeholder card for a moment that's running but has no completed result yet */}
+      {runActivity?.slug && !loading && !results.some((r) => r.slug === runActivity.slug) && (() => {
+        const pct = runActivity.maxTurns && runActivity.maxTurns > 0 && runActivity.numTurns != null
+          ? Math.min(100, Math.max(0, (runActivity.numTurns / runActivity.maxTurns) * 100)) : 0;
+        return (
+          <section className="glass-card tada-card tada-card--running">
+            <div className="tada-card-header">
+              <h3 className="tada-card-title">{runActivity.message.replace(/^Running:\s*/, "")}</h3>
+            </div>
+            <div className="tada-card-running">
+              <div className="tada-card-running-row">
+                <div className="feature-activity-spinner" />
+                <span className="tada-card-running-text">Running…</span>
+                {pct > 0 && <span className="tada-card-running-pct">{Math.round(pct)}%</span>}
+              </div>
+              {pct > 0 && (
+                <div className="feature-activity-progress-track">
+                  <div className="feature-activity-progress-fill" style={{ width: `${pct}%` }} />
+                </div>
+              )}
+            </div>
+          </section>
+        );
+      })()}
 
       {loading ? (
         <div className="tada-empty-state">
           <div className="tada-spinner" />
           <span>Loading moments...</span>
         </div>
-      ) : results.length === 0 ? (
+      ) : tabResults.length === 0 && !runActivity ? (
         <div className="tada-empty-state">
           <svg className="tada-empty-icon" width="32" height="32" viewBox="0 0 32 32" fill="none">
             <path d="M16 4l3.09 6.26L26 11.27l-5 4.87 1.18 6.88L16 19.77l-6.18 3.25L11 16.14l-5-4.87 6.91-1.01L16 4z"
               stroke="var(--sage)" strokeWidth="1.5" strokeLinejoin="round" fill="rgba(var(--sage-rgb), 0.08)"/>
           </svg>
-          <span>No moments yet</span>
+          <span>No {tab === "one-off" ? "one-off" : "recurring"} moments yet</span>
           <span className="tada-empty-hint">Completed moments will appear here as they run on schedule.</span>
         </div>
       ) : (
-        results.filter((r) => showDismissed ? r.dismissed : !r.dismissed).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)).map((r, i) => (
+        tabResults.filter((r) => showDismissed ? r.dismissed : !r.dismissed).sort((a, b) => {
+          const aRunning = runActivity?.slug === a.slug ? 1 : 0;
+          const bRunning = runActivity?.slug === b.slug ? 1 : 0;
+          if (aRunning !== bRunning) return bRunning - aRunning;
+          return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+        }).map((r, i) => {
+          const isRunning = runActivity?.slug === r.slug;
+          const cardUnread = isUnread(r);
+          const runPct = isRunning && runActivity.maxTurns && runActivity.maxTurns > 0 && runActivity.numTurns != null
+            ? Math.min(100, Math.max(0, (runActivity.numTurns / runActivity.maxTurns) * 100))
+            : 0;
+          return (
           <section
             key={r.slug}
-            className={`glass-card tada-card${r.pinned ? " tada-card--pinned" : ""}${r.dismissed ? " tada-card--dismissed" : ""}${rerunning.has(r.slug) ? " tada-card--rerunning" : ""}`}
+            className={`glass-card tada-card${r.pinned ? " tada-card--pinned" : ""}${r.dismissed ? " tada-card--dismissed" : ""}${rerunning.has(r.slug) ? " tada-card--rerunning" : ""}${isRunning ? " tada-card--running" : ""}${cardUnread ? " tada-card--unread" : ""}`}
             style={{ animationDelay: `${i * 0.04}s` }}
-            onClick={() => handleCardClick(r.slug)}
+            onClick={isRunning ? undefined : () => handleCardClick(r.slug)}
           >
             <div className="tada-card-header">
               <h3 className="tada-card-title">
@@ -393,6 +462,7 @@ export function TadaView() {
                   </svg>
                 )}
                 {r.title}
+                {cardUnread && <span className="tada-unread-dot" />}
                 {r.dismissed && <span className="tada-dismissed-badge">Dismissed</span>}
                 {rerunFailed.has(r.slug) && <span className="tada-rerun-failed-badge">Rerun failed</span>}
               </h3>
@@ -514,8 +584,24 @@ export function TadaView() {
                 </div>
               </div>
             )}
+
+            {isRunning && (
+              <div className="tada-card-running">
+                <div className="tada-card-running-row">
+                  <div className="feature-activity-spinner" />
+                  <span className="tada-card-running-text">Running…</span>
+                  {runPct > 0 && <span className="tada-card-running-pct">{Math.round(runPct)}%</span>}
+                </div>
+                {runPct > 0 && (
+                  <div className="feature-activity-progress-track">
+                    <div className="feature-activity-progress-fill" style={{ width: `${runPct}%` }} />
+                  </div>
+                )}
+              </div>
+            )}
           </section>
-        ))
+          );
+        })
       )}
       <div style={{ minHeight: 24, flexShrink: 0 }} />
     </div>

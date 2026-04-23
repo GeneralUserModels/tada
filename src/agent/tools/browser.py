@@ -34,6 +34,8 @@ class BrowserManager:
 
     def _run_loop(self):
         """Dedicated thread: process browser commands sequentially."""
+        import asyncio
+        asyncio.set_event_loop(None)
         while True:
             fn, args, result_q = self._queue.get()
             if fn is None:  # shutdown sentinel
