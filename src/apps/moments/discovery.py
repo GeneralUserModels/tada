@@ -101,19 +101,19 @@ async def run_moments_discovery(state) -> None:
             api_key = cfg.resolve_api_key("moments_agent_api_key")
 
             try:
-                discover_msg = "Discovering recurring moments…"
+                discover_msg = "Discovering recurring Tadas…"
                 await state.broadcast_activity("moments_discovery", discover_msg)
                 discover_cb = state.make_round_callback("moments_discovery", discover_msg)
                 logger.info("Discovery: finding recurring moments")
                 await asyncio.to_thread(MomentsDiscovery(logs_dir, model, api_key).run, on_round=discover_cb)
 
-                oneoffs_msg = "Discovering one-off moments…"
+                oneoffs_msg = "Discovering one-off Tadas…"
                 await state.broadcast_activity("moments_discovery", oneoffs_msg)
                 oneoffs_cb = state.make_round_callback("moments_discovery", oneoffs_msg)
                 logger.info("Discovery: finding one-off moments")
                 await asyncio.to_thread(OneoffsDiscovery(logs_dir, model, api_key).run, on_round=oneoffs_cb)
 
-                filter_msg = "Filtering tasks…"
+                filter_msg = "Filtering Tadas…"
                 await state.broadcast_activity("moments_discovery", filter_msg)
                 filter_cb = state.make_round_callback("moments_discovery", filter_msg)
                 logger.info("Discovery: filtering tasks")
