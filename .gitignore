@@ -1,4 +1,5 @@
 python-sdk
+.claude*
 
 all_labels.jsonl
 node_modules/
@@ -243,3 +244,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Claude Code local state (worktrees, hooks, settings)
+.claude/
