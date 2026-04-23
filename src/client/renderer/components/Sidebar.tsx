@@ -7,14 +7,14 @@ interface Props {
   connected: boolean;
   seekerHasQuestions: boolean;
   tadaHasNew: boolean;
-  pensieveHasNew: boolean;
+  memexHasNew: boolean;
   agentActivities: Record<string, AgentActivityInfo>;
   onNavigate: (view: ActiveView) => void;
 }
 
 const AGENTS_FOR_VIEW: Partial<Record<ActiveView, string[]>> = {
   tada: ["moments_discovery", "moment_run"],
-  pensieve: ["memory"],
+  memex: ["memory"],
   seeker: ["seeker"],
 };
 
@@ -39,13 +39,16 @@ const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
     ),
   },
   {
-    view: "pensieve",
-    label: "Pensieve",
+    view: "memex",
+    label: "Memex",
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M8 2C5.2 2 3 4.2 3 7c0 1.5.7 2.9 1.7 3.8.3.3.5.7.5 1.2v.5c0 .8.7 1.5 1.5 1.5h2.6c.8 0 1.5-.7 1.5-1.5V12c0-.5.2-.9.5-1.2C12.3 9.9 13 8.5 13 7c0-2.8-2.2-5-5-5z"
-          stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-        <path d="M6 14.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <circle cx="8" cy="3.5" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+        <circle cx="3.5" cy="8" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+        <circle cx="12.5" cy="8" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+        <circle cx="5.5" cy="13" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+        <circle cx="10.5" cy="13" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+        <path d="M6.5 4.5L5 6.5M9.5 4.5L11 6.5M3.5 9.5L5 11.5M12.5 9.5L11 11.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
       </svg>
     ),
   },
@@ -83,11 +86,11 @@ const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
 
 const FLAG_FOR_VIEW: Partial<Record<ActiveView, string>> = {
   tada: "moments",
-  pensieve: "memory",
+  memex: "memory",
   seeker: "seeker",
 };
 
-export function Sidebar({ activeView, connected, seekerHasQuestions, tadaHasNew, pensieveHasNew, agentActivities, onNavigate }: Props) {
+export function Sidebar({ activeView, connected, seekerHasQuestions, tadaHasNew, memexHasNew, agentActivities, onNavigate }: Props) {
   const featureFlags = useFeatureFlags();
 
   const visibleItems = navItems.filter(({ view }) => {
@@ -122,7 +125,7 @@ export function Sidebar({ activeView, connected, seekerHasQuestions, tadaHasNew,
             {label}
             {isViewActive(view) && <span className="nav-activity-spinner" />}
             {view === "tada" && tadaHasNew && <span className="nav-notify-dot" />}
-            {view === "pensieve" && pensieveHasNew && <span className="nav-notify-dot" />}
+            {view === "memex" && memexHasNew && <span className="nav-notify-dot" />}
             {view === "seeker" && seekerHasQuestions && <span className="nav-notify-dot" />}
           </button>
         ))}

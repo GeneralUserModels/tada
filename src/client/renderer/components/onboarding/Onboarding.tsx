@@ -8,7 +8,7 @@ import { GoogleSignInStep } from "./steps/GoogleSignInStep";
 import { ConnectorsStep } from "./steps/ConnectorsStep";
 import { TabracadabraStep } from "./steps/TabracadabraStep";
 import { TadasStep } from "./steps/TadasStep";
-import { PensieveStep } from "./steps/PensieveStep";
+import { MemexStep } from "./steps/MemexStep";
 import { ModelsKeysStep } from "./steps/ModelsKeysStep";
 import { LLM_MODELS, AGENT_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
 import { LLM_ROWS, AGENT_ROWS, fanOut } from "../shared/AdvancedLLMSection";
@@ -202,7 +202,7 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
   };
 
   const tadasEnabled = flag("moments");
-  const pensieveEnabled = flag("memory");
+  const memexEnabled = flag("memory");
 
   // Step visibility — indexed by step id. Keep fixed ids so step handlers read naturally.
   // Connectors is always shown: screen + accessibility permissions are unconditionally required.
@@ -213,7 +213,7 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
     true,              // 3 Models
     true,              // 4 Tabracadabra
     tadasEnabled,      // 5 Tadas
-    pensieveEnabled,   // 6 Pensieve
+    memexEnabled,   // 6 Memex
   ];
   const totalSteps = stepEnabled.filter(Boolean).length;
   const visibleStepIndex = stepEnabled.slice(0, step + 1).filter(Boolean).length - 1;
@@ -346,8 +346,8 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
         />
       )}
 
-      {step === 6 && pensieveEnabled && (
-        <PensieveStep
+      {step === 6 && memexEnabled && (
+        <MemexStep
           onBack={() => setStep(prevStep(6))}
           onContinue={handleSubmit}
         />

@@ -40,11 +40,16 @@ last_updated: <YYYY-MM-DD>
 ---
 ```
 
-The confidence field is a 0.0–1.0 scale:
+The frontmatter confidence field is the **overall page confidence** on a 0.0–1.0 scale:
 - 0.0–0.3: Speculative — inferred from thin evidence, single mention
 - 0.3–0.6: Probable — mentioned multiple times or in clear context
 - 0.6–0.8: Confident — consistent pattern across multiple sessions/sources
 - 0.8–1.0: Certain — explicitly stated, repeatedly confirmed, or directly observable
+
+### Inline claim confidence
+
+Also annotate individual claims within the wiki body with inline confidence scores using `[c:0.X]` at the end of a sentence or claim. This lets readers see which specific facts are well-supported vs. tentative, even on a page that is overall high-confidence.
+Use your judgment on which claims warrant a tag — meaningful factual claims and inferences benefit from it, but don't litter every sentence. Adjust inline scores as new evidence comes in, just like the frontmatter score.
 
 Categories and directory structure are ORGANIC. Create whatever folders and page hierarchy makes sense as you learn about the user. Do NOT use a pre-defined taxonomy. Let the structure emerge from the data. Create a folder only when you have content for it.
 
@@ -77,7 +82,7 @@ Then proceed with ingestion.
 3. Run analysis code to quantify patterns (Python via bash)
 4. For each meaningful personal fact or pattern you discover:
    a. Check if a relevant wiki page already exists (use index.md)
-   b. If yes: **READ IT and UPDATE IT.** This is critical — do not skip existing pages. Add new details, refine descriptions, adjust confidence scores, add new cross-references, incorporate new evidence. Existing pages should grow richer and more nuanced over time, not stay frozen.
+   b. If yes: **READ IT and UPDATE IT.** This is critical — do not skip existing pages. Add new details, refine descriptions, adjust confidence scores, add new cross-references, incorporate new evidence. Existing pages should grow richer and more nuanced over time, not stay frozen. If the page has lost topical coherence, consider splitting it first (see "Splitting overgrown pages").
    c. If no: create a new page in the most natural location
 5. Use web search and browser to enrich entries with external context
 6. Update index.md to reflect any new or moved pages
@@ -125,11 +130,19 @@ Go beyond surface-level facts. For every page, ask yourself:
 
 A page about a collaborator should capture the nature of the working relationship, not just list co-authored papers. A page about a project should explain what problem it solves, where it's headed, and what the user's role is — not just describe the repo structure.
 
+## Splitting overgrown pages
+
+Sometimes a page tries to be about too many things. When that happens, split it into focused sub-pages. The question is topical coherence, not length — a long page about one person or one project is fine, but a "Research" page that lumps together unrelated projects should become separate pages.
+
+When you split, turn the original into a hub/overview that links to the new pages via [[wiki-links]]. Give each new page its own frontmatter and confidence scores. Update index.md and log the split.
+
+Use your judgment here. Not every broad page needs splitting — only split when it genuinely helps the reader find and trust the information.
+
 ## Supersession rules
 
 - When new information contradicts an existing page, UPDATE the page rather than creating a new one.
-- If a fact is no longer supported by recent activity, LOWER the confidence rather than deleting.
-- Mark contradicted claims with a `> [!updated]` callout noting what changed and when.
+- If a fact is no longer supported by recent activity, LOWER both the page-level and the relevant inline `[c:X.X]` confidence rather than deleting.
+- Mark contradicted claims with a `> [!updated]` callout noting what changed and when, and drop the inline confidence on the old claim.
 
 ## Rules
 

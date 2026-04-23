@@ -1,4 +1,4 @@
-export const SAMPLE_PENSIEVE_HTML = `<!doctype html>
+export const SAMPLE_MEMEX_HTML = `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
