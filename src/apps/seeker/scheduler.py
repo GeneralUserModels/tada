@@ -80,7 +80,11 @@ async def run_seeker_scheduler(state) -> None:
             seeker_state["last_seek_run"] = datetime.now().isoformat()
             _save_seeker_state(state, seeker_state)
 
-            await asyncio.to_thread(_run_seek, log_dir, model, api_key)
+            try:
+                await state.broadcast_activity("seeker", "Generating questions…")
+                await asyncio.to_thread(_run_seek, log_dir, model, api_key)
+            finally:
+                await state.broadcast_activity(None)
 
             logger.info("Seeker scheduler: seek.py completed, broadcasting")
             await state.broadcast("seeker_questions_ready", {})

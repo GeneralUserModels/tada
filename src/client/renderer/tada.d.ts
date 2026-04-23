@@ -2,11 +2,17 @@
 
 declare global {
 
+interface AgentActivity {
+  agent: string | null;
+  message: string | null;
+}
+
 interface StatusData {
   services_started?: boolean;
   training_active: boolean;
   labels_processed: number;
   step_count: number;
+  current_activity?: AgentActivity | null;
 }
 
 interface PredictionData {

@@ -41,6 +41,7 @@ export interface AppState {
   updateReady: boolean;
   updateInstalling: boolean;
   updateError: string | null;
+  agentActivity: { agent: string; message: string } | null;
 }
 
 type AppAction =
@@ -66,7 +67,8 @@ type AppAction =
   | { type: "UPDATE_DOWNLOADED" }
   | { type: "UPDATE_INSTALLING" }
   | { type: "UPDATE_ERROR"; message: string }
-  | { type: "UPDATE_DISMISSED" };
+  | { type: "UPDATE_DISMISSED" }
+  | { type: "AGENT_ACTIVITY"; data: { agent: string | null; message: string | null } };
 
 let historyCounter = 0;
 
@@ -101,6 +103,7 @@ const initialState: AppState = {
   updateReady: false,
   updateInstalling: false,
   updateError: null,
+  agentActivity: null,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -241,6 +244,12 @@ function reducer(state: AppState, action: AppAction): AppState {
     case "PENSIEVE_UPDATED":
       return { ...state, pensieveHasNew: true };
 
+    case "AGENT_ACTIVITY": {
+      const { agent, message } = action.data;
+      if (!agent || !message) return { ...state, agentActivity: null };
+      return { ...state, agentActivity: { agent, message } };
+    }
+
     default:
       return state;
   }
@@ -281,6 +290,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sse.on("seeker_questions_ready", () => dispatch({ type: "SEEKER_QUESTIONS_READY" }));
     sse.on("moment_completed", () => dispatch({ type: "TADA_NEW_MOMENT" }));
     sse.on("memory_updated", () => dispatch({ type: "PENSIEVE_UPDATED" }));
+    sse.on("agent_activity", (data) => dispatch({ type: "AGENT_ACTIVITY", data: data as { agent: string | null; message: string | null } }));
 
     // server:ready — main sends URL once server is up; we initialize api + sse then seed state
     window.tada.onServerReady(async ({ url }: { url: string }) => {
@@ -290,6 +300,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const status = await api.getStatus();
         dispatch({ type: "SERVER_READY", status: status as StatusData });
+        if ((status as StatusData).current_activity) {
+          const act = (status as StatusData).current_activity!;
+          dispatch({ type: "AGENT_ACTIVITY", data: { agent: act.agent, message: act.message } });
+        }
         console.log("[app] server ready, url:", url);
 
         try {

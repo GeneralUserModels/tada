@@ -6,16 +6,17 @@ import argparse
 import os
 import asyncio
 import logging
-import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from server.feature_flags import is_enabled
 from agent.builder import _ensure_sandbox_async
-from apps.moments.scheduler import _next_run_time, _parse_time
+from apps.moments.scheduler import is_due
 from server.cost_tracker import init_cost_tracking
 
 logger = logging.getLogger(__name__)
+
+SCAN_INTERVAL = 60  # seconds between schedule checks
 
 class MemoryIngest:
     """Ingests new activity logs into the personal knowledge wiki."""
@@ -56,75 +57,57 @@ def _read_last_run(p: Path) -> datetime | None:
 
 
 async def run_memory_service(state) -> None:
-    """Background task: run ingest daily and lint weekly.
-
-    If the scheduled time has already passed today but we haven't run yet
-    (e.g. the computer was off at 3am), run immediately on wake.
+    """Background task: poll every SCAN_INTERVAL and run ingest whenever the
+    most recent scheduled occurrence hasn't completed yet. Lint runs alongside
+    ingest if its own 6-day cooldown has elapsed.
     """
 
     logger.info("Memory wiki service started")
 
+    logs_dir = str(Path(state.config.log_dir).resolve())
+    last_run_file = Path(logs_dir) / "memory" / ".memory_last_run"
+    lint_last_run_file = Path(logs_dir) / "memory" / ".memory_lint_last_run"
+
+    # Pre-initialize sandbox on the event-loop thread (signal handlers
+    # can only be registered here, not inside the worker thread).
+    await _ensure_sandbox_async([logs_dir])
+
     while True:
         try:
-            schedule = getattr(state.config, "memory_schedule", "daily at 3am")
-            next_run = _next_run_time(schedule, "daily")
-            if next_run is None:
-                logger.warning("Cannot parse memory schedule %r, retrying in 1h", schedule)
-                await asyncio.sleep(3600)
-                continue
-
-            # Check if we missed today's run
-            now = datetime.now()
-            time_match = re.search(r"(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)", schedule.lower())
-            scheduled_time = _parse_time(time_match.group(1)) if time_match else None
-            today_target = datetime.combine(now.date(), scheduled_time) if scheduled_time else None
-            last_run_file = Path(state.config.log_dir).resolve() / "memory" / ".memory_last_run"
-            last_run = _read_last_run(last_run_file)
-            missed = (
-                today_target is not None
-                and now > today_target
-                and (last_run is None or last_run < today_target)
-            )
-
-            if missed:
-                logger.info("Missed scheduled memory ingest at %s, running now", today_target)
-            else:
-                delay = (next_run - now).total_seconds()
-                logger.info("Next memory ingest at %s (in %.0fs)", next_run, delay)
-                await asyncio.sleep(delay)
+            await asyncio.sleep(SCAN_INTERVAL)
 
             if not (is_enabled(state.config, "memory") and state.config.memory_enabled):
                 continue
 
+            schedule = getattr(state.config, "memory_schedule", "daily at 3am")
+            if not is_due(schedule, "daily", _read_last_run(last_run_file)):
+                continue
+
             cfg = state.config
-            logs_dir = str(Path(cfg.log_dir).resolve())
             model = cfg.memory_agent_model
             api_key = cfg.memory_agent_api_key or cfg.resolve_api_key("agent_api_key")
 
-            # Pre-initialize sandbox on the event-loop thread (signal handlers
-            # can only be registered here, not inside the worker thread).
-            await _ensure_sandbox_async([logs_dir])
+            try:
+                await state.broadcast_activity("memory", "Ingesting memories…")
+                logger.info("Memory: running ingest")
+                await asyncio.to_thread(MemoryIngest(logs_dir, model, api_key).run)
+                logger.info("Memory: ingest complete")
+                await state.broadcast("memory_updated", {})
 
-            # Always run ingest
-            logger.info("Memory: running ingest")
-            await asyncio.to_thread(MemoryIngest(logs_dir, model, api_key).run)
-            logger.info("Memory: ingest complete")
-            await state.broadcast("memory_updated", {})
+                lint_last_run = _read_last_run(lint_last_run_file)
+                should_lint = lint_last_run is None or (datetime.now() - lint_last_run) >= timedelta(days=6)
+                if should_lint:
+                    await state.broadcast_activity("memory", "Auditing memories…")
+                    logger.info("Memory: running lint (weekly)")
+                    await asyncio.to_thread(MemoryLint(logs_dir, model, api_key).run)
+                    lint_last_run_file.parent.mkdir(parents=True, exist_ok=True)
+                    lint_last_run_file.write_text(datetime.now().isoformat())
+                    logger.info("Memory: lint complete")
 
-            # Run lint if last lint was >6 days ago
-            lint_last_run_file = Path(logs_dir) / "memory" / ".memory_lint_last_run"
-            lint_last_run = _read_last_run(lint_last_run_file)
-            should_lint = lint_last_run is None or (now - lint_last_run) >= timedelta(days=6)
-
-            if should_lint:
-                logger.info("Memory: running lint (weekly)")
-                await asyncio.to_thread(MemoryLint(logs_dir, model, api_key).run)
-                lint_last_run_file.parent.mkdir(parents=True, exist_ok=True)
-                lint_last_run_file.write_text(datetime.now().isoformat())
-                logger.info("Memory: lint complete")
-
-            last_run_file.parent.mkdir(parents=True, exist_ok=True)
-            last_run_file.write_text(datetime.now().isoformat())
+                last_run_file.parent.mkdir(parents=True, exist_ok=True)
+                last_run_file.write_text(datetime.now().isoformat())
+            finally:
+                await state.broadcast_activity(None)
 
         except asyncio.CancelledError:
             logger.info("Memory wiki service stopped")

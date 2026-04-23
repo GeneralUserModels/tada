@@ -9,6 +9,7 @@ import { TadaView } from "./components/views/TadaView";
 import { PensieveView } from "./components/views/PensieveView";
 import { SeekerView } from "./components/views/SeekerView";
 import { UpdateBanner } from "./components/UpdateBanner";
+import { AgentActivityBanner } from "./components/AgentActivityBanner";
 
 export function App() {
   const { state, dispatch } = useAppContext();
@@ -43,6 +44,9 @@ export function App() {
             onInstall={() => dispatch({ type: "UPDATE_INSTALLING" })}
             onDismiss={() => dispatch({ type: "UPDATE_DISMISSED" })}
           />
+        )}
+        {state.agentActivity && (
+          <AgentActivityBanner message={state.agentActivity.message} />
         )}
         {state.activeView === "connectors" && <ConnectorsView />}
         {state.activeView === "tada" && momentsEnabled && <TadaView />}

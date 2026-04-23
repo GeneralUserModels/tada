@@ -48,8 +48,16 @@ class ServerState:
     # SSE client queues
     sse_queues: set = field(default_factory=set)
 
+    # Current background-agent activity (None when idle)
+    current_activity: dict | None = None
+
     async def broadcast(self, event: str, data: dict):
         """Push an event to all connected SSE clients."""
         message = {"event": event, **data}
         for q in list(self.sse_queues):
             await q.put(message)
+
+    async def broadcast_activity(self, agent: str | None, message: str | None = None):
+        """Set and broadcast the current agent activity. Pass agent=None to clear."""
+        self.current_activity = {"agent": agent, "message": message} if agent else None
+        await self.broadcast("agent_activity", {"agent": agent, "message": message})
