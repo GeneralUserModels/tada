@@ -276,12 +276,12 @@ export const SAMPLE_MEMEX_HTML = `<!doctype html>
     <div class="grid">
       <div class="cat-group">
         <div class="cat-label">People</div>
-        <div class="card" data-link="gandalf">
+        <div class="card" data-link="glinda">
           <div class="card-head">
-            <div class="card-title">Gandalf</div>
+            <div class="card-title">Glinda</div>
             <span class="conf high">94%</span>
           </div>
-          <div class="card-date">Sep 22, 1937</div>
+          <div class="card-date">Jul 10, 1920</div>
         </div>
       </div>
       <div class="cat-group">
@@ -340,19 +340,19 @@ export const SAMPLE_MEMEX_HTML = `<!doctype html>
 <script>
 (function(){
   var PAGES = {
-    gandalf: {
-      title: 'Gandalf',
+    glinda: {
+      title: 'Glinda',
       category: 'People',
       conf: 94, confClass: 'high', label: 'certain',
-      updated: 'Sep 22, 1937',
-      intro: "Fellow traveler since the unexpected party. Shows up precisely when he means to, vanishes without explanation, and somehow always knows more than he lets on.",
+      updated: 'Jul 10, 1920',
+      intro: "Fellow traveler since the cyclone set down. Arrives in a bubble precisely when she means to, leaves the same way, and somehow always knows more than she lets on.",
       sections: [
-        { t: "What he's up to", b: [
-          'Scouting ahead for the <a class="wl" data-link="emerald">Journey to Emerald City</a> \u2014 claims to know a shortcut.',
-          'Consulting with eagles again (won\u2019t say why).'
+        { t: "What she's up to", b: [
+          'Scouting ahead for the <a class="wl" data-link="emerald">Journey to Emerald City</a> \u2014 claims the shoes already know the way.',
+          'Consulting with the good witches again (won\u2019t say about what).'
         ]},
         { t: 'Recent shape', b: [
-          'Arrived with new fireworks and a longer staff.',
+          'Arrived in a fresh bubble, wand polished to a shine.',
           'Gets quiet whenever <a class="wl" data-link="enchantments">Enchantments & Illusions</a> comes up.'
         ]}
       ]
@@ -362,7 +362,7 @@ export const SAMPLE_MEMEX_HTML = `<!doctype html>
       category: 'Projects',
       conf: 72, confClass: 'mid', label: 'confident',
       updated: 'May 17, 1900',
-      intro: 'The open road after the cyclone. Follow the yellow brick road to the Emerald City, find the Wizard, and ask for passage home. <a class="wl" data-link="gandalf">Gandalf</a> keeps the map.',
+      intro: 'The open road after the cyclone. Follow the yellow brick road to the Emerald City, find the Wizard, and ask for passage home. <a class="wl" data-link="glinda">Glinda</a> keeps the map.',
       sections: [
         { t: 'Confirmed', b: [
           'The Munchkins pointed us toward the yellow brick road.',
@@ -384,7 +384,7 @@ export const SAMPLE_MEMEX_HTML = `<!doctype html>
       sections: [
         { t: 'Recurring threads', b: [
           'Ruby slippers \u2014 the piece that holds up when everything else fails.',
-          'Smoke and mirrors \u2014 came up again planning the <a class="wl" data-link="emerald">Journey to Emerald City</a> with <a class="wl" data-link="gandalf">Gandalf</a>.',
+          'Smoke and mirrors \u2014 came up again planning the <a class="wl" data-link="emerald">Journey to Emerald City</a> with <a class="wl" data-link="glinda">Glinda</a>.',
           'Reading riddles before crossing thresholds (the cave entrance was a lesson).'
         ]},
         { t: 'Open questions', b: [
@@ -405,7 +405,7 @@ export const SAMPLE_MEMEX_HTML = `<!doctype html>
         ]},
         { t: 'Against', b: [
           'No one has actually seen him perform real magic.',
-          '<a class="wl" data-link="gandalf">Gandalf</a> agrees on the facts, not the conclusion.'
+          '<a class="wl" data-link="glinda">Glinda</a> agrees on the facts, not the conclusion.'
         ]}
       ]
     }

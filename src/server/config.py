@@ -40,7 +40,7 @@ SETTINGS_API_FIELDS: frozenset[str] = frozenset({
 _PERSISTED_FIELDS = SETTINGS_API_FIELDS | {
     "model_type",
     "enabled_connectors", "connector_errors", "mcp_connectors",
-    "onboarding_complete",
+    "onboarding_complete", "onboarding_steps_seen",
     "memory_enabled", "memory_agent_model", "memory_agent_api_key", "memory_schedule",
     "tada_dir", "moments_agent_model", "moments_agent_api_key", "moments_discovery_schedule", "moments_enabled",
     "seeker_enabled", "seeker_model", "seeker_api_key",
@@ -192,6 +192,11 @@ class ServerConfig(BaseModel):
 
     # Onboarding completion flag (set by POST /api/onboarding/complete)
     onboarding_complete: bool = False
+
+    # Step IDs the user has finished in any onboarding run. Used to detect
+    # when a newer app version has added steps the user has not yet seen,
+    # so we can open onboarding directly on just those steps.
+    onboarding_steps_seen: list[str] = Field(default_factory=list)
 
     # Feature flags (deployment-level gates for entire features/connectors/permissions)
     feature_flags: dict[str, bool] = Field(default_factory=dict)

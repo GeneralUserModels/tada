@@ -18,7 +18,10 @@ export function getOnboardingWindow(): BrowserWindow | null {
   return onboardingWindow;
 }
 
-export function runOnboarding(serverReady?: Promise<void>): Promise<void> {
+export function runOnboarding(
+  serverReady?: Promise<void>,
+  mode: "first" | "returning" = "first",
+): Promise<void> {
   return new Promise<void>((resolve) => {
     const win = new BrowserWindow({
       width: 580,
@@ -36,10 +39,15 @@ export function runOnboarding(serverReady?: Promise<void>): Promise<void> {
 
     onboardingWindow = win;
 
+    // Pass mode so the renderer can pick the right boot-shell (Welcome for
+    // first-timers, What's New for returning users) and avoid the flash of
+    // the wrong first step while the API handshake completes.
     if (isDev()) {
-      win.loadURL("http://localhost:5173/onboarding.html");
+      win.loadURL(`http://localhost:5173/onboarding.html?mode=${mode}`);
     } else {
-      win.loadFile(path.join(__dirname, "..", "..", "renderer", "onboarding.html"));
+      win.loadFile(path.join(__dirname, "..", "..", "renderer", "onboarding.html"), {
+        search: `mode=${mode}`,
+      });
     }
 
     // Send server URL once both the page and the server are ready.

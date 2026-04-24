@@ -94,10 +94,21 @@ export const getMemoryLog = () =>
   requestText("GET", "/api/memory/log");
 
 // ── Onboarding ───────────────────────────────────────────────
+export const getGoogleConnectorStatus = () =>
+  request("GET", "/api/auth/google/status") as Promise<{ connected: boolean }>;
+export const getOutlookConnectorStatus = () =>
+  request("GET", "/api/auth/outlook/status") as Promise<{ connected: boolean }>;
 export const getOnboardingStatus = () =>
-  request("GET", "/api/onboarding/status") as Promise<{ complete: boolean }>;
-export const completeOnboarding = (enabledConnectors: string[]) =>
-  request("POST", "/api/onboarding/complete", { enabled_connectors: enabledConnectors });
+  request("GET", "/api/onboarding/status") as Promise<{
+    complete: boolean;
+    seen_steps: string[];
+    enabled_connectors: string[];
+  }>;
+export const completeOnboarding = (enabledConnectors: string[], seenSteps: string[]) =>
+  request("POST", "/api/onboarding/complete", {
+    enabled_connectors: enabledConnectors,
+    seen_steps: seenSteps,
+  });
 export const checkNotificationsPermission = () =>
   request("GET", "/api/permissions/notifications") as Promise<{ granted: boolean }>;
 export const checkFilesystemPermission = () =>

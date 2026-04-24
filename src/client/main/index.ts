@@ -19,6 +19,7 @@ import * as bootstrap from "./features/bootstrap";
 import { runOnboarding, getOnboardingWindow } from "./features/onboarding";
 import { setupConnectorIpc } from "./connectors/manager";
 import { initUpdateChecker, checkForUpdates, installUpdate } from "./features/updater";
+import { pendingSteps, type OnboardingState } from "../shared/onboardingSteps";
 
 let serverProc: ChildProcess | null = null;
 
@@ -46,14 +47,26 @@ function ensureConfigDefaults(): void {
   }
 }
 
-function isOnboardingComplete(): boolean {
+function readOnboardingState(): { needed: boolean; mode: "first" | "returning" } {
+  let cfg: Record<string, unknown> = {};
   try {
     const configPath = path.join(getDataDir(), "tada-config.json");
-    const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    return cfg.onboarding_complete === true;
+    cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
   } catch {
-    return false;
+    return { needed: true, mode: "first" };
   }
+  const state: OnboardingState = {
+    seenSteps: Array.isArray(cfg.onboarding_steps_seen) ? cfg.onboarding_steps_seen as string[] : [],
+    featureFlags: (cfg.feature_flags as Record<string, boolean> | undefined),
+    googleConnected: fs.existsSync(getGoogleTokenPath()),
+    enabledConnectors: Array.isArray(cfg.enabled_connectors) ? cfg.enabled_connectors as string[] : [],
+    hasLlmApiKey: typeof cfg.default_llm_api_key === "string" && cfg.default_llm_api_key.length > 0,
+    onboardingComplete: cfg.onboarding_complete === true,
+  };
+  return {
+    needed: pendingSteps(state).length > 0,
+    mode: state.onboardingComplete ? "returning" : "first",
+  };
 }
 
 // ── Server management ─────────────────────────────────────────
@@ -334,21 +347,21 @@ app.whenReady().then(async () => {
     startServer(port);
   }
 
-  const needsOnboarding = !isOnboardingComplete();
+  const { needed: showOnboarding, mode: onboardingMode } = readOnboardingState();
 
   // Show the dashboard immediately for returning users so they see a
   // loading state while the server starts. For first-launch, keep it
   // hidden until onboarding finishes.
-  createDashboard({ show: !needsOnboarding });
+  createDashboard({ show: !showOnboarding });
   setupSseForwarding();
 
   const serverReady = waitForServer(`${api.getServerUrl()}/api/status`);
 
-  if (needsOnboarding) {
+  if (showOnboarding) {
     // Open onboarding immediately so there's no windowless gap after
     // setup closes. The server boots in parallel; onboarding defers
     // its SERVER_READY IPC until the promise resolves.
-    await runOnboarding(serverReady);
+    await runOnboarding(serverReady, onboardingMode);
     dashboardWindow?.show();
   } else {
     await serverReady;

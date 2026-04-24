@@ -4,6 +4,7 @@ import { PermissionModal } from "../modals/PermissionModal";
 import { getFlag } from "../../featureFlags";
 import { StepIndicator } from "./StepIndicator";
 import { WelcomeStep } from "./steps/WelcomeStep";
+import { WhatsNewStep } from "./steps/WhatsNewStep";
 import { GoogleSignInStep } from "./steps/GoogleSignInStep";
 import { ConnectorsStep } from "./steps/ConnectorsStep";
 import { TabracadabraStep } from "./steps/TabracadabraStep";
@@ -23,11 +24,72 @@ import {
   getSettings,
   updateSettings,
   completeOnboarding,
+  getOnboardingStatus,
+  getGoogleConnectorStatus,
+  getOutlookConnectorStatus,
 } from "../../api/client";
+import {
+  pendingSteps,
+  type OnboardingStep,
+  type OnboardingState,
+} from "../../../shared/onboardingSteps";
+
+// Short titles + the icon each feature step renders at its top, so the
+// What's New list previews the same glyph the user is about to see.
+// Keyed by step id from ONBOARDING_STEPS.
+const STEP_TITLES: Record<string, string> = {
+  welcome: "Welcome to Tada",
+  tabracadabra: "Tabracadabra",
+  tadas: "Moments",
+  memex: "Memex",
+};
+
+const STEP_DESCRIPTIONS: Record<string, string> = {
+  tabracadabra: "Press Option + Tab to autocomplete or prompt from anywhere.",
+  tadas: "Proactive mini-apps that run on their own schedule — answers waiting before you need to ask.",
+  memex: "A personal wiki of your life — pages for the people, projects, and threads that keep coming up.",
+};
+
+const STEP_ICONS: Record<string, React.ReactNode> = {
+  tabracadabra: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M3 4.5h10M3 8h10M3 11.5h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <path d="M11.2 10.7 13.5 8.4l-2.3-2.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  tadas: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M8 1.5l1.6 3.4 3.7.5-2.7 2.6.7 3.7L8 9.9 4.7 11.7l.7-3.7L2.7 5.4l3.7-.5L8 1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+    </svg>
+  ),
+  memex: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="3.5" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <circle cx="3.5" cy="8" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <circle cx="12.5" cy="8" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <circle cx="5.5" cy="13" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <circle cx="10.5" cy="13" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M6.5 4.5L5 6.5M9.5 4.5L11 6.5M3.5 9.5L5 11.5M12.5 9.5L11 11.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+    </svg>
+  ),
+};
+
+const FALLBACK_ICON = (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+    <path d="M4 8l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+// Synthetic "What's new" step prepended for returning users.
+const WHATS_NEW_STEP: OnboardingStep = { id: "whats_new", type: "intro" };
 
 // ── Main Onboarding component ─────────────────────────────────
 
 export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
+  // Snapshot of which steps to walk the user through. Computed once after
+  // initial API data lands, then held stable for the rest of the session so
+  // the step list does not mutate under the user as they grant permissions.
+  const [visibleSteps, setVisibleSteps] = useState<OnboardingStep[] | null>(null);
   const [step, setStep] = useState(0);
   const [permModal, setPermModal] = useState<{ name: string; onGranted: () => void } | null>(null);
 
@@ -59,23 +121,63 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
   const [connectingGoogle, setConnectingGoogle] = useState<string | null>(null);
   const [connectingOutlook, setConnectingOutlook] = useState(false);
 
-  // Load feature flags + restore saved Google user once the server is reachable.
-  // On first launch the onboarding window opens before the server is up, so we
-  // wait for serverReady rather than firing on mount and failing silently.
+  // Load settings + onboarding status + saved Google user once the server is
+  // reachable, then compute the visible step list. On first launch the window
+  // opens before the server is up, so we wait for serverReady.
   useEffect(() => {
     if (!serverReady) return;
+    if (visibleSteps !== null) return;
 
-    getSettings()
-      .then((s) => setFf((s as Record<string, unknown>).feature_flags as Record<string, boolean> | undefined))
-      .catch(() => {});
+    let cancelled = false;
+    (async () => {
+      const [settings, status, user] = await Promise.all([
+        getSettings().catch(() => ({} as Record<string, unknown>)),
+        getOnboardingStatus().catch(() => ({
+          complete: false,
+          seen_steps: [] as string[],
+          enabled_connectors: [] as string[],
+        })),
+        getGoogleUser().catch(() => null),
+      ]);
+      if (cancelled) return;
 
-    getGoogleUser().then(user => {
-      if (user) {
-        setGoogleUser(user);
-        setStep(2);
+      const flags = (settings as Record<string, unknown>).feature_flags as
+        | Record<string, boolean>
+        | undefined;
+      setFf(flags);
+      if (user) setGoogleUser(user);
+
+      const state: OnboardingState = {
+        seenSteps: status.seen_steps ?? [],
+        featureFlags: flags,
+        googleConnected: user != null,
+        enabledConnectors: status.enabled_connectors ?? [],
+        hasLlmApiKey:
+          typeof (settings as Record<string, unknown>).default_llm_api_key === "string" &&
+          ((settings as Record<string, unknown>).default_llm_api_key as string).length > 0,
+        onboardingComplete: status.complete,
+      };
+      const pending = pendingSteps(state);
+
+      // Nothing pending — shouldn't happen (main process already decided to
+      // open the window) but close gracefully if it does.
+      if (pending.length === 0) {
+        window.tada.onboardingComplete();
+        return;
       }
-    }).catch(() => {});
-  }, [serverReady]);
+
+      // Returning user with new intro content gets a short framing page.
+      const hasNewIntro = pending.some((s) => s.type === "intro");
+      const nextSteps = status.complete && hasNewIntro
+        ? [WHATS_NEW_STEP, ...pending]
+        : pending;
+
+      setVisibleSteps(nextSteps);
+      setStep(0);
+    })();
+
+    return () => { cancelled = true; };
+  }, [serverReady, visibleSteps]);
 
   // Model + API key state — defaults sourced from the shared model lists
   const [model, setModel] = useState(LLM_MODELS[0].value);
@@ -88,9 +190,12 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
   const [tinkerError, setTinkerError] = useState("");
   const [advancedValues, setAdvancedValues] = useState<Record<string, string>>({});
 
-  // Check screen permission when entering step 2
+  const currentStep = visibleSteps ? visibleSteps[step] : null;
+  const currentId = currentStep?.id;
+
+  // Check screen + connector permissions whenever the user enters Connectors.
   useEffect(() => {
-    if (step !== 2) return;
+    if (currentId !== "connectors") return;
     async function checkScreen() {
       const status = await window.tada.checkScreenPermission();
       setScreenGranted(status === "granted");
@@ -120,9 +225,18 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
       setMicGranted(micOk);
       const sysAudioOk = await window.tada.checkConnectorPermission("system_audio");
       setSysAudioGranted(sysAudioOk);
+      // Rehydrate Google/Outlook connection state from persisted tokens so
+      // restarting mid-onboarding doesn't lose progress.
+      const g = await getGoogleConnectorStatus().catch(() => ({ connected: false }));
+      if (g.connected) {
+        setCalendarConnected(true);
+        setGmailConnected(true);
+      }
+      const o = await getOutlookConnectorStatus().catch(() => ({ connected: false }));
+      if (o.connected) setOutlookConnected(true);
     }
     checkAvailability();
-  }, [step]);
+  }, [currentId]);
 
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
@@ -196,60 +310,65 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
   const saveSettings = () => updateSettings(buildSettings());
 
   const handleSubmit = async () => {
-    await saveSettings();
+    // Settings are saved in ModelsKeysStep.onFinish when that step is visited.
+    // Saving here would wipe persisted keys when models_keys was skipped,
+    // since the local state variables are never populated with existing values.
     const enabled: string[] = [];
     if (screenGranted) enabled.push("screen");
     if (calendarConnected) enabled.push("calendar");
     if (gmailConnected) enabled.push("gmail");
     if (outlookConnected) { enabled.push("outlook_email"); enabled.push("outlook_calendar"); }
     if (notifAvailable) enabled.push("notifications");
-    // Filesystem watcher needs access to at least one of Desktop / Documents
-    // / Downloads. FDA covers all three (fsAvailable) but users can also grant
-    // folders individually now.
     if (fsAvailable || desktopGranted || documentsGranted || downloadsGranted) {
       enabled.push("filesystem");
     }
+    if (accessibilityGranted) enabled.push("accessibility");
     if (micGranted) enabled.push("microphone");
     if (sysAudioGranted) enabled.push("system_audio");
-    await completeOnboarding(enabled);
+
+    const seenIntros = (visibleSteps ?? [])
+      .filter((s) => s.type === "intro" && s.id !== WHATS_NEW_STEP.id)
+      .map((s) => s.id);
+
+    await completeOnboarding(enabled, seenIntros);
     window.tada.onboardingComplete();
   };
 
-  const tadasEnabled = flag("moments");
-  const memexEnabled = flag("memory");
-
-  // Step visibility — indexed by step id. Keep fixed ids so step handlers read naturally.
-  // Connectors is always shown: screen + accessibility permissions are unconditionally required.
-  const stepEnabled = [
-    true,              // 0 Welcome
-    true,              // 1 Google
-    true,              // 2 Connectors
-    true,              // 3 Models
-    true,              // 4 Tabracadabra
-    tadasEnabled,      // 5 Tadas
-    memexEnabled,   // 6 Memex
-  ];
-  const totalSteps = stepEnabled.filter(Boolean).length;
-  const visibleStepIndex = stepEnabled.slice(0, step + 1).filter(Boolean).length - 1;
-
-  const nextStep = (from: number): number | null => {
-    for (let i = from + 1; i < stepEnabled.length; i++) if (stepEnabled[i]) return i;
-    return null;
-  };
-  const prevStep = (from: number): number => {
-    for (let i = from - 1; i >= 0; i--) if (stepEnabled[i]) return i;
-    return 0;
-  };
   const advance = (from: number) => {
-    const n = nextStep(from);
-    if (n === null) handleSubmit();
-    else setStep(n);
+    if (!visibleSteps) return;
+    if (from >= visibleSteps.length - 1) {
+      handleSubmit();
+    } else {
+      setStep(from + 1);
+    }
   };
-  const isFinal = (from: number) => nextStep(from) === null;
+  const goBack = (from: number) => setStep(Math.max(0, from - 1));
+  const isFinal = (from: number) =>
+    visibleSteps != null && from >= visibleSteps.length - 1;
 
   const openPermissionModal = (name: string, onGranted: () => void) => {
     setPermModal({ name, onGranted });
   };
+
+  // Before the step snapshot is ready, render the shell that matches whatever
+  // the first real step is going to be — Welcome for first-timers, What's New
+  // for returning users — so the handshake doesn't flash the wrong screen.
+  // Main process passes the hint via URL query param.
+  if (!visibleSteps) {
+    const mode = new URLSearchParams(window.location.search).get("mode");
+    return (
+      <>
+        <div className="drag-topbar" />
+        <div className="wrapper">
+          {mode === "returning" ? (
+            <WhatsNewStep newFeatures={[]} onContinue={() => {}} loading />
+          ) : (
+            <WelcomeStep onStart={() => {}} serverReady={false} />
+          )}
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -272,22 +391,38 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
         />
       )}
 
-      <StepIndicator current={visibleStepIndex} total={totalSteps} />
+      <StepIndicator current={step} total={visibleSteps.length} />
 
-      {step === 0 && <WelcomeStep onStart={() => setStep(1)} serverReady={serverReady} />}
+      {currentId === "welcome" && (
+        <WelcomeStep onStart={() => advance(step)} serverReady={serverReady} />
+      )}
 
-      {step === 1 && (
+      {currentId === "whats_new" && (
+        <WhatsNewStep
+          newFeatures={visibleSteps
+            .filter((s) => s.type === "intro" && s.id !== WHATS_NEW_STEP.id)
+            .map((s) => ({
+              id: s.id,
+              title: STEP_TITLES[s.id] ?? s.id,
+              description: STEP_DESCRIPTIONS[s.id] ?? "",
+              icon: STEP_ICONS[s.id] ?? FALLBACK_ICON,
+            }))}
+          onContinue={() => advance(step)}
+        />
+      )}
+
+      {currentId === "google_signin" && (
         <GoogleSignInStep
           googleUser={googleUser}
           googleLoading={googleLoading}
           googleError={googleError}
-          onBack={() => setStep(prevStep(1))}
-          onContinue={() => advance(1)}
+          onBack={() => goBack(step)}
+          onContinue={() => advance(step)}
           onGoogleLogin={handleGoogleLogin}
         />
       )}
 
-      {step === 2 && (
+      {currentId === "connectors" && (
         <ConnectorsStep
           flag={flag}
           screenGranted={screenGranted}
@@ -299,8 +434,8 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           browserCookiesGranted={browserCookiesGranted}
           connectingGoogle={connectingGoogle}
           connectingOutlook={connectingOutlook}
-          onBack={() => setStep(prevStep(2))}
-          onContinue={() => advance(2)}
+          onBack={() => goBack(step)}
+          onContinue={() => advance(step)}
           onOpenPermissionModal={openPermissionModal}
           onConnectGoogle={handleConnectGoogle}
           onConnectOutlook={handleConnectOutlook}
@@ -324,7 +459,7 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
         />
       )}
 
-      {step === 3 && (
+      {currentId === "models_keys" && (
         <ModelsKeysStep
           flag={flag}
           model={model}
@@ -345,31 +480,31 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           setWandbKey={setWandbKey}
           setAdvancedValues={setAdvancedValues}
           validateTinker={validateTinker}
-          onBack={() => setStep(prevStep(3))}
-          onFinish={() => { saveSettings(); advance(3); }}
+          onBack={() => goBack(step)}
+          onFinish={() => { saveSettings(); advance(step); }}
         />
       )}
 
-      {step === 4 && (
+      {currentId === "tabracadabra" && (
         <TabracadabraStep
-          onBack={() => setStep(prevStep(4))}
-          onContinue={() => advance(4)}
-          isFinal={isFinal(4)}
+          onBack={() => goBack(step)}
+          onContinue={() => advance(step)}
+          isFinal={isFinal(step)}
         />
       )}
 
-      {step === 5 && tadasEnabled && (
+      {currentId === "tadas" && (
         <TadasStep
-          onBack={() => setStep(prevStep(5))}
-          onContinue={() => advance(5)}
-          isFinal={isFinal(5)}
+          onBack={() => goBack(step)}
+          onContinue={() => advance(step)}
+          isFinal={isFinal(step)}
         />
       )}
 
-      {step === 6 && memexEnabled && (
+      {currentId === "memex" && (
         <MemexStep
-          onBack={() => setStep(prevStep(6))}
-          onContinue={handleSubmit}
+          onBack={() => goBack(step)}
+          onContinue={() => advance(step)}
         />
       )}
     </div>
