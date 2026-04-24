@@ -123,7 +123,10 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     confidenceEnd: 0.95,
     lastUpdated: "2026-04-24",
     lede: "Dorothy's dog. Small, dark, long-term companion. Frequent subject of photographs and journal references.",
-    body: [],
+    body: [
+      { kind: "p", text: "Present in Dorothy's photo library going back to at least August 2024, with new photos added roughly monthly. Appears by name in about a third of her journal entries — more often than any person other than [[people/aunt-em]]." },
+      { kind: "p", text: "Not currently in Oz with her. [[people/aunt-em]] confirmed via email on 2026-04-22 that he's physically safe on the farm (\"the dog is fine, come home when you can\"). This is the first direct evidence of his status since the tornado." },
+    ],
   },
   "people/aunt-em": {
     slug: "people/aunt-em",
@@ -133,7 +136,11 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     confidenceEnd: 0.90,
     lastUpdated: "2026-04-24",
     lede: "Dorothy's guardian on the Kansas farm. Birthday Nov 30 (annual). Primary emotional tether to home.",
-    body: [],
+    body: [
+      { kind: "p", text: "Lives with [[people/uncle-henry]]. Runs the household while he runs the land. Corresponds with Dorothy by email — subject lines are brief and the tone is always practical. First on Dorothy's calendar every November 30." },
+      { kind: "p", text: "Central figure in Dorothy's outbound thoughts. When she searches her journal for \"home\", matches cluster around Aunt Em roughly three-to-one over any other person. She is the person Dorothy most consistently wants to get back to." },
+      { kind: "updated", date: "2026-04-22", text: "Confirmed Aunt Em and [[people/toto]] are both physically safe after the tornado. Prior working assumption (recorded 2026-04-19) that the farmhouse was destroyed was wrong; only the upper structure is gone. Confidence raised from 0.62 → 0.90." },
+    ],
   },
   "people/uncle-henry": {
     slug: "people/uncle-henry",
@@ -143,7 +150,9 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     confidenceEnd: 0.78,
     lastUpdated: "2026-04-24",
     lede: "Co-guardian. Runs the farm with [[people/aunt-em]]. Writes rarely; when he does, it's serious.",
-    body: [],
+    body: [
+      { kind: "p", text: "Manages livestock, crops, and the cellar. Keeps weather counsel with [[people/zeke]]. Writes maybe once a year — his email on 2026-04-24 (\"em is worried. so am i.\") is the first direct message Dorothy has received from him in over six months, which is itself the signal." },
+    ],
   },
   "people/tin-man": {
     slug: "people/tin-man",
@@ -153,7 +162,10 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     confidenceEnd: 0.74,
     lastUpdated: "2026-04-24",
     lede: "Former woodcutter, now an articulated tin figure. Requires regular oiling. Traveling with [[people/scarecrow]] and Dorothy.",
-    body: [],
+    body: [
+      { kind: "p", text: "Met at Mile 4 of the Yellow Brick Road. Was rust-locked standing beside a fallen tree; moved freely within ten minutes of being oiled. Now travels with the party. Self-describes as lacking a heart — the claim is structurally similar to [[people/scarecrow]]'s \"I have no brain\" and may reflect the same self-assessment pattern." },
+      { kind: "p", text: "The most tactically useful companion so far — the oil can, and his working knowledge of the woodcutter's trade, translate directly into practical help on the road. Plans to petition [[people/wizard-of-oz]] for a heart." },
+    ],
   },
   "people/cowardly-lion": {
     slug: "people/cowardly-lion",
@@ -163,7 +175,9 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     confidenceEnd: 0.68,
     lastUpdated: "2026-04-24",
     lede: "Large feline, reportedly afraid of essentially everything. Has joined the party en route to Emerald City.",
-    body: [],
+    body: [
+      { kind: "p", text: "Joined the group at the forest's edge after initially charging at them and then immediately apologizing. Confidence in his stated cowardice is moderate at best — behavior under actual threat (the poppy field, most notably) contradicts the self-description more often than it confirms it. Intends to petition [[people/wizard-of-oz]] for courage." },
+    ],
   },
   "people/glinda": {
     slug: "people/glinda",
@@ -173,7 +187,11 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     confidenceEnd: 0.80,
     lastUpdated: "2026-04-24",
     lede: "Good Witch of the South. Provided the ruby slippers. Confident, direct, never fully explains what she knows.",
-    body: [],
+    body: [
+      { kind: "p", text: "First contact was in Munchkinland, immediately after the tornado landed. Confirmed Dorothy's slippers via email on 2026-04-18 (\"slippers confirmed, ruby\"). Has jurisdictional overlap with [[people/wicked-witch-of-the-west]]; the dynamic between the two is effectively the central politics of the region." },
+      { kind: "p", text: "Appears to know more than she volunteers. Multiple interactions have her providing exactly the information needed, no more, framed as \"you'll figure it out.\" Reads as stylistic rather than obstructionist." },
+      { kind: "updated", date: "2026-04-23", text: "Confidence raised from 0.45 → 0.80 after cross-reference with the [[projects/get-home-to-kansas]] plan. Her early interventions line up with what the slippers can actually do — she is operating in good faith." },
+    ],
   },
   "people/wizard-of-oz": {
     slug: "people/wizard-of-oz",
@@ -182,8 +200,16 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     confidenceStart: 0.15,
     confidenceEnd: 0.40,
     lastUpdated: "2026-04-24",
-    lede: "Ruler of the Emerald City. Identity unclear. Power level unverified. Possibly a man behind a curtain — see log 2026-04-22.",
-    body: [],
+    lede: "Ruler of the Emerald City. Identity unclear. Power level unverified.",
+    body: [
+      { kind: "p", text: "Access is gated — audience is scheduled for Thursday 2pm per calendar. Claims about his power vary sharply by source: the green-uniformed soldiers describe him as essentially unlimited; [[people/glinda]] has never directly confirmed that claim, and in fact has been careful never to comment on it." },
+      { kind: "p", text: "A journal entry dated 2026-04-22 has Dorothy searching \"the man behind the curtain\" — an early sign she's developing a hypothesis that the Wizard's power is performed rather than literal. Currently unresolved; the Thursday audience should be dispositive." },
+      { kind: "unknown", items: [
+        "Whether he actually possesses magical power or merely performs it.",
+        "What he will ask for in exchange for helping Dorothy and her party.",
+        "His origin — no source has produced one, and he has never directly answered the question.",
+      ]},
+    ],
   },
   "people/wicked-witch-of-the-west": {
     slug: "people/wicked-witch-of-the-west",
@@ -195,6 +221,7 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     lede: "Hostile. Operates from Kiamo Ko in the western quadrant. Reported weaknesses: water, sunlight.",
     body: [
       { kind: "p", text: "First identified as a hostile actor on 2026-04-19 after the flying-monkey incident near the Yellow Brick Road. Appears to have jurisdictional overlap with [[people/glinda]] (South) over Oz airspace." },
+      { kind: "p", text: "Assets include a winged-primate guard, a pack of wolves, and an active surveillance capability (the crystal ball). Personal motivation is specifically Dorothy's ruby slippers — the hostility appears to be instrumental, not ideological." },
       { kind: "updated", date: "2026-04-22", text: "Reclassified from 'probable nuisance' to 'active threat' after direct encounter at Kiamo Ko. The 'allergic to water' report is not a rumor — confirmed in vivo. Confidence 0.35 → 0.88." },
     ],
   },
@@ -206,7 +233,9 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     confidenceEnd: 0.55,
     lastUpdated: "2026-04-24",
     lede: "Neighbor on the Kansas prairie. Storm-watcher. Writes short, urgent emails.",
-    body: [],
+    body: [
+      { kind: "p", text: "Domain is weather and livestock. Emails are always terse (\"storm coming in tomorrow, batten the cellar\"). A practical tether between [[people/uncle-henry]]'s farm and the surrounding county. His last email (2026-04-18, 6 hours pre-tornado) is load-bearing evidence that the storm was forecastable, and that the warning was received." },
+    ],
   },
   "projects/get-home-to-kansas": {
     slug: "projects/get-home-to-kansas",
@@ -229,7 +258,10 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     confidenceEnd: 0.85,
     lastUpdated: "2026-04-24",
     lede: "Dominant background signal. Chores, weather, animals. Heavily present in journal entries pre-twister.",
-    body: [],
+    body: [
+      { kind: "p", text: "Twelve years of journal entries, almost all dated in Kansas. Recurring themes: the cellar, the hired hands, the livestock, the weather. Not explicitly romanticized — farm life appears matter-of-factly, which is part of why it reads as missed now that Dorothy is away from it." },
+      { kind: "p", text: "Strongly co-occurs with [[people/aunt-em]], [[people/uncle-henry]], and [[people/toto]] in entries. The interest isn't \"farming\" in the abstract; it's the specific texture of this particular farm." },
+    ],
   },
   "interests/journaling": {
     slug: "interests/journaling",
@@ -239,7 +271,10 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     confidenceEnd: 0.92,
     lastUpdated: "2026-04-24",
     lede: "Daily practice. Often first and last activity of the day. 'Home' is the recurring motif.",
-    body: [],
+    body: [
+      { kind: "p", text: "Handwritten until mid-2024, digital since. Current file: `~/journal/2026-04-23.md` — 412 words in the morning, another 188 appended after the Yellow Brick Road detour. The [[projects/get-home-to-kansas]] plan shows up in almost every entry since 2026-04-18." },
+      { kind: "p", text: "Searches within the journal cluster around \"home\" (73 hits in the last two weeks), [[people/aunt-em]] (38), and [[people/toto]] (27). Only a handful of entries in that window do not reference Kansas at all." },
+    ],
   },
   "people/dorothy-gale": {
     slug: "people/dorothy-gale",
@@ -249,7 +284,9 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     confidenceEnd: 1.0,
     lastUpdated: "2026-04-24",
     lede: "You.",
-    body: [],
+    body: [
+      { kind: "p", text: "This page is the anchor. Every other entry here either describes someone you've encountered, something you're working on, or something that matters to you. The memex is whatever portion of your life is recoverable from what the system has seen; the rest is only what you've told it." },
+    ],
   },
 };
 
