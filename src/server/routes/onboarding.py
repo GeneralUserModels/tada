@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api", tags=["onboarding"])
 
 class OnboardingComplete(BaseModel):
     enabled_connectors: list[str] = []
+    seen_steps: list[str] = []
 
 _NOTIFICATIONS_DB = str(
     Path.home() / "Library" / "Group Containers"
@@ -22,7 +23,12 @@ _NOTIFICATIONS_DB = str(
 
 @router.get("/onboarding/status")
 async def onboarding_status(request: Request):
-    return {"complete": request.app.state.server.config.onboarding_complete}
+    config = request.app.state.server.config
+    return {
+        "complete": config.onboarding_complete,
+        "seen_steps": list(config.onboarding_steps_seen),
+        "enabled_connectors": list(config.enabled_connectors),
+    }
 
 
 @router.post("/onboarding/complete")
@@ -30,6 +36,12 @@ async def onboarding_complete(body: OnboardingComplete, request: Request):
     state = request.app.state.server
     state.config.onboarding_complete = True
     state.config.enabled_connectors = body.enabled_connectors
+    # Union-merge seen step IDs while preserving first-seen order.
+    merged = list(state.config.onboarding_steps_seen)
+    for step_id in body.seen_steps:
+        if step_id not in merged:
+            merged.append(step_id)
+    state.config.onboarding_steps_seen = merged
     state.config.save()
     task = asyncio.create_task(start_services(state))
     task.add_done_callback(_log_startup_failure)
