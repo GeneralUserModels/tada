@@ -1,3 +1,4 @@
+/// <reference path="../../../tada.d.ts" />
 import React from "react";
 import { AdvancedLLMSection } from "../../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, AGENT_MODELS, TINKER_MODELS } from "../../shared/ModelDropdown";
