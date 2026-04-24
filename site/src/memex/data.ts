@@ -126,6 +126,13 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     body: [
       { kind: "p", text: "Present in Dorothy's photo library going back to at least August 2024, with new photos added roughly monthly. Appears by name in about a third of her journal entries — more often than any person other than [[people/aunt-em]]." },
       { kind: "p", text: "Not currently in Oz with her. [[people/aunt-em]] confirmed via email on 2026-04-22 that he's physically safe on the farm (\"the dog is fine, come home when you can\"). This is the first direct evidence of his status since the tornado." },
+      { kind: "p", text: "Stylistically, the journal mentions him by name (almost never as 'the dog') and never with last-known-location anxiety until the days after the tornado. The sudden tracking of his whereabouts in entries dated 2026-04-19 onward is a cleaner signal of the displacement than any explicit reflection on it." },
+      { kind: "updated", date: "2026-04-22", text: "[[people/aunt-em]]'s email is the first independent ground-truth on Toto since the storm. Confidence raised from 0.80 → 0.95. The prior working hypothesis (recorded 2026-04-19) that he had crossed into Oz with Dorothy is wrong; he was on the farm the entire time." },
+      { kind: "unknown", items: [
+        "When [[people/aunt-em]] last laid eyes on him — her email confirms he's fine but doesn't say at what hour.",
+        "Whether he's been kept inside since the storm or allowed back to the porch.",
+        "Whether the dog Dorothy occasionally references aloud in Oz is in fact Toto or a memory of him.",
+      ]},
     ],
   },
   "people/aunt-em": {
@@ -139,7 +146,13 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     body: [
       { kind: "p", text: "Lives with [[people/uncle-henry]]. Runs the household while he runs the land. Corresponds with Dorothy by email — subject lines are brief and the tone is always practical. First on Dorothy's calendar every November 30." },
       { kind: "p", text: "Central figure in Dorothy's outbound thoughts. When she searches her journal for \"home\", matches cluster around Aunt Em roughly three-to-one over any other person. She is the person Dorothy most consistently wants to get back to." },
+      { kind: "p", text: "Writes in the same register through every weather: a warning about a storm and a note about a birthday come out of the inbox in roughly the same shape. The 2026-04-22 message confirming she and [[people/toto]] survived the tornado was four sentences long, the longest she has sent in two years; the affect was still indistinguishable from a Tuesday." },
       { kind: "updated", date: "2026-04-22", text: "Confirmed Aunt Em and [[people/toto]] are both physically safe after the tornado. Prior working assumption (recorded 2026-04-19) that the farmhouse was destroyed was wrong; only the upper structure is gone. Confidence raised from 0.62 → 0.90." },
+      { kind: "unknown", items: [
+        "How much of Dorothy's account from Oz she has actually relayed to [[people/uncle-henry]] — her emails reference him constantly but never quote him on the subject.",
+        "Whether the matter-of-fact register reflects her real state or is the deliberate tone she uses with Dorothy specifically.",
+        "What the household runs on now that the upper structure of the farmhouse is gone.",
+      ]},
     ],
   },
   "people/uncle-henry": {
@@ -152,6 +165,14 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     lede: "Co-guardian. Runs the farm with [[people/aunt-em]]. Writes rarely; when he does, it's serious.",
     body: [
       { kind: "p", text: "Manages livestock, crops, and the cellar. Keeps weather counsel with [[people/zeke]]. Writes maybe once a year — his email on 2026-04-24 (\"em is worried. so am i.\") is the first direct message Dorothy has received from him in over six months, which is itself the signal." },
+      { kind: "p", text: "Almost entirely visible through [[people/aunt-em]]'s correspondence — her emails reference him constantly (the cellar, the tractor, the wheat) but his own writing is essentially never. The model on this page is necessarily second-hand for everything except the rare direct message." },
+      { kind: "p", text: "Default mode in writing is one line, lowercase, no closing. The 2026-04-24 email is structurally indistinguishable from his other captured outbound messages — same shape, same weight — but the shape itself is the signal: he has now spent half a year's writing budget on the Dorothy situation in a single sentence." },
+      { kind: "updated", date: "2026-04-24", text: "Confidence raised from 0.55 → 0.78 after his direct email arrived. The page was almost entirely inferential before this; it is now anchored on at least one primary-source line written in his own hand." },
+      { kind: "unknown", items: [
+        "The structural state of the farm post-tornado — neither he nor [[people/aunt-em]] has described damage in writing.",
+        "Whether he has read Dorothy's recent journal entries. [[people/aunt-em]] occasionally prints them out; his email gives no sign of having seen them.",
+        "What he thinks Dorothy ought to do — his email reports worry, not advice.",
+      ]},
     ],
   },
   "people/tin-man": {
@@ -165,6 +186,13 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     body: [
       { kind: "p", text: "Met at Mile 4 of the Yellow Brick Road. Was rust-locked standing beside a fallen tree; moved freely within ten minutes of being oiled. Now travels with the party. Self-describes as lacking a heart — the claim is structurally similar to [[people/scarecrow]]'s \"I have no brain\" and may reflect the same self-assessment pattern." },
       { kind: "p", text: "The most tactically useful companion so far — the oil can, and his working knowledge of the woodcutter's trade, translate directly into practical help on the road. Plans to petition [[people/wizard-of-oz]] for a heart." },
+      { kind: "p", text: "Currently carrying about three days of oil at his typical seizure rate. Resupply is one of the named open dependencies in [[projects/get-home-to-kansas]]; he has not asked for help on it. The pattern of waiting until a joint is fully locked before mentioning it is consistent enough to read as a habit, not an accident." },
+      { kind: "updated", date: "2026-04-23", text: "Reclassified from 'curiosity' to 'load-bearing party member' after the river-bridge incident at Mile 7. Confidence raised from 0.52 → 0.74. His 'no heart' self-description is structurally identical to [[people/scarecrow]]'s 'no brain' — and like the Scarecrow's, is contradicted directly by his own behavior under stress." },
+      { kind: "unknown", items: [
+        "Whether he was ever a man, or has always been articulated tin in human shape. His own account of his origin drifts each time he tells it.",
+        "Whether the oiling cadence is mechanical need or learned habit — he claims the former; the data is closer to the latter.",
+        "Whether his account of his missing heart is metaphor, diagnostic self-assessment, or factual report about his interior.",
+      ]},
     ],
   },
   "people/cowardly-lion": {
@@ -177,6 +205,14 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     lede: "Large feline, reportedly afraid of essentially everything. Has joined the party en route to Emerald City.",
     body: [
       { kind: "p", text: "Joined the group at the forest's edge after initially charging at them and then immediately apologizing. Confidence in his stated cowardice is moderate at best — behavior under actual threat (the poppy field, most notably) contradicts the self-description more often than it confirms it. Intends to petition [[people/wizard-of-oz]] for courage." },
+      { kind: "p", text: "Largest body mass in the party by a factor of about four. Treats this as embarrassing rather than useful — has refused twice to lead a march that would have been easier with him in front. Travels with [[people/scarecrow]] and [[people/tin-man]]; describes them as \"the brave ones\" without irony." },
+      { kind: "p", text: "Of the three companions, his stated lack matches the field evidence the least. [[people/scarecrow]] occasionally produces clumsy reasoning consistent with \"no brain\"; [[people/tin-man]] has at least the texture of being mechanically constrained on emotion. The Lion has never once been observed acting cowardly — he has only described himself that way." },
+      { kind: "updated", date: "2026-04-23", text: "Confidence raised from 0.20 → 0.68 after the poppy-field crossing. He carried Dorothy across the affected zone after [[people/scarecrow]] could not stay upright. The page now leans 'situationally brave, consistently anxious' rather than the literal cowardice he describes." },
+      { kind: "unknown", items: [
+        "Where he comes from — no den, pride, or prior territory has been mentioned in any captured exchange.",
+        "Whether he is capable of updating his self-model. The behavioral trend is now clear; his stated identity has not moved at all.",
+        "Whether \"courage\" in the form he is asking [[people/wizard-of-oz]] for is a thing the Wizard can grant, or a category error.",
+      ]},
     ],
   },
   "people/glinda": {
@@ -190,7 +226,13 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     body: [
       { kind: "p", text: "First contact was in Munchkinland, immediately after the tornado landed. Confirmed Dorothy's slippers via email on 2026-04-18 (\"slippers confirmed, ruby\"). Has jurisdictional overlap with [[people/wicked-witch-of-the-west]]; the dynamic between the two is effectively the central politics of the region." },
       { kind: "p", text: "Appears to know more than she volunteers. Multiple interactions have her providing exactly the information needed, no more, framed as \"you'll figure it out.\" Reads as stylistic rather than obstructionist." },
+      { kind: "p", text: "Her interventions are timed, not constant. There is no record of her appearing during the Mile-4 [[people/tin-man]] encounter, the Mile-7 bridge incident, or any of the witch's strikes against the party — only at decision points (Munchkinland arrival, slipper confirmation, and an as-yet-undetermined re-entry expected near the Emerald City). The pattern reads as deliberate restraint, not absence." },
       { kind: "updated", date: "2026-04-23", text: "Confidence raised from 0.45 → 0.80 after cross-reference with the [[projects/get-home-to-kansas]] plan. Her early interventions line up with what the slippers can actually do — she is operating in good faith." },
+      { kind: "unknown", items: [
+        "The mechanism of the ruby slippers — confirmed working, never explained. Glinda has not described the prerequisites.",
+        "Whether \"South\" denotes a region, a temperament, or a faction. The map and the politics give different answers.",
+        "What she is choosing not to say about [[people/wizard-of-oz]] — her silence on his nature has been consistent across every interaction.",
+      ]},
     ],
   },
   "people/wizard-of-oz": {
@@ -204,6 +246,8 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     body: [
       { kind: "p", text: "Access is gated — audience is scheduled for Thursday 2pm per calendar. Claims about his power vary sharply by source: the green-uniformed soldiers describe him as essentially unlimited; [[people/glinda]] has never directly confirmed that claim, and in fact has been careful never to comment on it." },
       { kind: "p", text: "A journal entry dated 2026-04-22 has Dorothy searching \"the man behind the curtain\" — an early sign she's developing a hypothesis that the Wizard's power is performed rather than literal. Currently unresolved; the Thursday audience should be dispositive." },
+      { kind: "p", text: "Three pending petitions are now stacked against this audience: [[people/scarecrow]] for a brain, [[people/tin-man]] for a heart, [[people/cowardly-lion]] for courage. Each of the three has named him as the granting authority without independently verifying he can grant any of it. If the man-behind-the-curtain hypothesis lands, four resolutions become entangled in one conversation." },
+      { kind: "updated", date: "2026-04-23", text: "Audience moved from Wednesday to Thursday on his end, no reason given. Confidence on his stated power level lowered from 0.55 → 0.40. Schedule mutability is itself the data — none of the other Oz figures has rescheduled anything since Dorothy's arrival, and an unlimited entity has no reason to reschedule." },
       { kind: "unknown", items: [
         "Whether he actually possesses magical power or merely performs it.",
         "What he will ask for in exchange for helping Dorothy and her party.",
@@ -222,7 +266,13 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     body: [
       { kind: "p", text: "First identified as a hostile actor on 2026-04-19 after the flying-monkey incident near the Yellow Brick Road. Appears to have jurisdictional overlap with [[people/glinda]] (South) over Oz airspace." },
       { kind: "p", text: "Assets include a winged-primate guard, a pack of wolves, and an active surveillance capability (the crystal ball). Personal motivation is specifically Dorothy's ruby slippers — the hostility appears to be instrumental, not ideological." },
+      { kind: "p", text: "Surveillance capability is now confirmed twice: once via direct observation at Kiamo Ko, and once via [[people/scarecrow]] independently noticing he was being watched in the cornfield three days earlier. The party is being intermittently scryed; cadence and range remain unknown, but it is no longer reasonable to plan as if she cannot see them." },
       { kind: "updated", date: "2026-04-22", text: "Reclassified from 'probable nuisance' to 'active threat' after direct encounter at Kiamo Ko. The 'allergic to water' report is not a rumor — confirmed in vivo. Confidence 0.35 → 0.88." },
+      { kind: "unknown", items: [
+        "Range and persistence of the crystal-ball view — no source has confirmed whether it is continuous or polled.",
+        "Why she has not simply taken the slippers from Dorothy when Dorothy slept inside her own castle. The constraint, whatever it is, is not visible from this side.",
+        "Whether the West/South political split with [[people/glinda]] is the cause of her hostility or merely the channel for it.",
+      ]},
     ],
   },
   "people/zeke": {
@@ -235,6 +285,14 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     lede: "Neighbor on the Kansas prairie. Storm-watcher. Writes short, urgent emails.",
     body: [
       { kind: "p", text: "Domain is weather and livestock. Emails are always terse (\"storm coming in tomorrow, batten the cellar\"). A practical tether between [[people/uncle-henry]]'s farm and the surrounding county. His last email (2026-04-18, 6 hours pre-tornado) is load-bearing evidence that the storm was forecastable, and that the warning was received." },
+      { kind: "p", text: "Lives a mile and a half south of [[people/uncle-henry]]'s farm. Has never written more than two sentences in a single message — even his condolences are terse. Reading his correspondence is closer to reading a barometer than reading a person." },
+      { kind: "p", text: "The pre-tornado emails (2026-04-15 through 18) form a near-continuous channel of severe-weather warnings. The 2026-04-18 message landed approximately six hours before the storm; its terseness is itself the highest-confidence weather forecast in the recorded archive. Whatever else he is, he was right." },
+      { kind: "updated", date: "2026-04-19", text: "Page created the morning after the tornado. Initial confidence 0.30 was the prior on a barely-known neighbor; raised to 0.55 after his prior emails were re-read and his weather track record was scored against the actual storm." },
+      { kind: "unknown", items: [
+        "Whether he has spoken with [[people/uncle-henry]] since the storm — neither has mentioned the other in any captured exchange.",
+        "His full first name. Email signature is 'Zeke', and [[people/aunt-em]] refers to him the same way.",
+        "Whether he holds further weather signal at the moment — his silence since 2026-04-19 is itself ambiguous.",
+      ]},
     ],
   },
   "projects/get-home-to-kansas": {
@@ -248,6 +306,13 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     body: [
       { kind: "p", text: "Entered Oz unplanned on 2026-04-18 via a Cowley County tornado. [[people/glinda]] provided the slippers and pointed toward the Emerald City. Route: Yellow Brick Road, east → southwest → west." },
       { kind: "p", text: "Travel party acquired en route: [[people/scarecrow]] (seeks brain), [[people/tin-man]] (seeks heart), [[people/cowardly-lion]] (seeks courage). All three are traveling to the same destination on adjacent goals." },
+      { kind: "p", text: "Open dependencies, in approximate order: audience with [[people/wizard-of-oz]] (Thursday 2pm), resolution of the [[people/wicked-witch-of-the-west]] threat to the slippers, oil resupply for [[people/tin-man]], and a working theory of how the slippers actually return a person home — currently unverified beyond [[people/glinda]]'s assurance. Three of the four resolve to a single conversation; the fourth resolves only on arrival." },
+      { kind: "updated", date: "2026-04-22", text: "Plan widened from 'reach the Wizard' to 'reach the Wizard, then handle the Witch.' The witch's hostility (page 0.88) intersects this project's success path; treating her as out-of-scope is no longer viable. Estimated time-to-completion: unchanged. Estimated number of fronts open at completion: doubled." },
+      { kind: "unknown", items: [
+        "Whether the slippers can return Dorothy home alone or whether the Wizard's intervention is also required. [[people/glinda]] has implied the former; nothing has tested it.",
+        "Whether [[people/scarecrow]], [[people/tin-man]], and [[people/cowardly-lion]] travel back with her — none has discussed what they want after Oz.",
+        "What \"home\" means in operational terms once the upper structure of the farmhouse is gone. The destination is named but not yet specified.",
+      ]},
     ],
   },
   "interests/farm-life": {
@@ -261,6 +326,13 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     body: [
       { kind: "p", text: "Twelve years of journal entries, almost all dated in Kansas. Recurring themes: the cellar, the hired hands, the livestock, the weather. Not explicitly romanticized — farm life appears matter-of-factly, which is part of why it reads as missed now that Dorothy is away from it." },
       { kind: "p", text: "Strongly co-occurs with [[people/aunt-em]], [[people/uncle-henry]], and [[people/toto]] in entries. The interest isn't \"farming\" in the abstract; it's the specific texture of this particular farm." },
+      { kind: "p", text: "Pre-tornado, this page was the dominant interest in the index. Post-tornado, it has become the substrate for [[projects/get-home-to-kansas]] — the project is, in effect, a plan to return to this interest. The two pages have started cross-referencing each other in nearly every recent journal entry, and the interest now reads as the project's destination rather than its background." },
+      { kind: "updated", date: "2026-04-23", text: "Reframed from 'background context' to 'core motivation' after the journal-search audit. Confidence raised from 0.78 → 0.85 — not because new facts emerged, but because existing facts now carry more weight against the [[projects/get-home-to-kansas]] plan." },
+      { kind: "unknown", items: [
+        "Whether the farmhouse, the upper structure of which is gone, will be rebuilt or replaced. Neither [[people/aunt-em]] nor [[people/uncle-henry]] has committed in writing.",
+        "Whether the texture of this specific farm is recoverable post-storm — none of Dorothy's reflection so far engages with the question.",
+        "Whether the interest survives once Dorothy is back inside it again. Distance is doing a lot of work here.",
+      ]},
     ],
   },
   "interests/journaling": {
@@ -274,6 +346,13 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     body: [
       { kind: "p", text: "Handwritten until mid-2024, digital since. Current file: `~/journal/2026-04-23.md` — 412 words in the morning, another 188 appended after the Yellow Brick Road detour. The [[projects/get-home-to-kansas]] plan shows up in almost every entry since 2026-04-18." },
       { kind: "p", text: "Searches within the journal cluster around \"home\" (73 hits in the last two weeks), [[people/aunt-em]] (38), and [[people/toto]] (27). Only a handful of entries in that window do not reference Kansas at all." },
+      { kind: "p", text: "The practice has held its cadence even through the tornado window. The 2026-04-18 entry — written the morning of the storm — and the 2026-04-19 entry — first written from Munchkinland — sit side-by-side in the same file format on the same machine, with the only seam being a single paragraph in between that reads, simply, \"something has happened.\"" },
+      { kind: "updated", date: "2026-04-23", text: "Search behavior shifted notably this week: queries on \"home\" and \"aunt em\" are now bimodal, clustering both in the morning entries (planning) and at close-of-day (reflection). Confidence raised from 0.85 → 0.92 because the practice is being used to model the situation, not just record it." },
+      { kind: "unknown", items: [
+        "Whether the journal will be the surface where Dorothy first writes the line that resolves [[projects/get-home-to-kansas]], or whether the practice quiets once she's home.",
+        "Whether the handwritten years (pre-2024) hold material the digital index does not — they have not been scanned in.",
+        "Whether the daily cadence is the practice or the comfort. The storm did not break the cadence; nothing yet has tested whether anything could.",
+      ]},
     ],
   },
   "people/dorothy-gale": {
@@ -286,6 +365,13 @@ export const WIKI_PAGES: Record<string, WikiPage> = {
     lede: "You.",
     body: [
       { kind: "p", text: "This page is the anchor. Every other entry here either describes someone you've encountered, something you're working on, or something that matters to you. The memex is whatever portion of your life is recoverable from what the system has seen; the rest is only what you've told it." },
+      { kind: "p", text: "Sources are entirely first-person: the journal at `~/journal/`, the photo library, the calendar, the inbox, and notifications. The system does not have direct access to your interior life — every relationship, motivation, and worry on these pages is inferred from artifacts. When [[people/aunt-em]] reads as the most-loaded relationship in the index, that's because her name shows up most often in your journal, not because the system can feel your homesickness." },
+      { kind: "p", text: "The chapter break at 2026-04-18 is the largest event in the recorded archive. Every page below this one was either created or substantially rewritten in the 72 hours after the tornado; this page held steady and remains the only confidence-1.0 entry. The before-and-after split runs straight through the index." },
+      { kind: "updated", date: "2026-04-18", text: "Re-anchored after the tornado event. Most other pages were rewritten over the following 72 hours; this one held steady. Identity remains the only confidence-1.0 entry, and serves as the reference point against which every other page is calibrated." },
+      { kind: "unknown", items: [
+        "Whether the current chapter (Oz) is best read as travel, displacement, or dream — the journal does not commit to a frame either way.",
+        "What you'll write on the day after the slippers work — every entry since 2026-04-18 is a planning entry; none anticipates after.",
+      ]},
     ],
   },
 };
