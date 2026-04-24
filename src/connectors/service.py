@@ -386,19 +386,34 @@ async def run_context_logging_service(state) -> None:
     state.connectors = {c.name: c.connector for c in connector_configs}
     state.connector_auth = {c.name: c.requires_auth for c in connector_configs}
 
-    # Apply persisted enabled/disabled state and error messages from server config
+    # Apply persisted enabled/disabled state and error messages from server config.
+    # Audio is handled separately below — its enable state is keyed off the virtual
+    # names "microphone" / "system_audio", not the real connector name "audio",
+    # so this loop would otherwise always pause it.
     for cfg in connector_configs:
+        if cfg.name == "audio":
+            continue
         if cfg.name not in config.enabled_connectors:
             cfg.connector.pause()
         if cfg.name in config.connector_errors:
             cfg.connector.error = config.connector_errors[cfg.name]
 
-    # Audio connector: pause if both virtual sources are disabled
+    # Audio always starts paused at boot — recording must be explicitly enabled
+    # via the UI each session. Clear the persisted virtual-source entries so the
+    # UI reflects "off", and reset the source/session env vars so the first UI
+    # toggle goes through the clean "was_any_on == False" path in routes.py
+    # (which creates the session transcript file).
     audio_conn = state.connectors.get("audio")
     if audio_conn is not None:
-        both_off = "microphone" not in config.enabled_connectors and "system_audio" not in config.enabled_connectors
-        if both_off:
-            audio_conn.pause()
+        audio_conn.pause()
+        for vname in ("microphone", "system_audio"):
+            if vname in config.enabled_connectors:
+                config.enabled_connectors.remove(vname)
+            config.connector_errors.pop(vname, None)
+        audio_conn._server_params.env["TADA_MIC_ENABLED"] = "0"
+        audio_conn._server_params.env["TADA_SYS_ENABLED"] = "0"
+        audio_conn._server_params.env.pop("TADA_SESSION_FILE", None)
+        config.save()
 
     # Re-enable auth-error connectors whose tokens exist on disk — the startup
     # refresh in auth.refresh_expired_tokens has already rotated them.
