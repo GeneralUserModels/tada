@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from "path";
 import * as https from "https";
-import { getDataDir, getUvPath, getRgPath, getPythonPath, getPythonSrcDir } from "../paths";
+import { getDataDir, getUvPath, getRgPath, getPythonPath, getPythonSrcDir, getUvPythonInstallDir } from "../paths";
 
 type ProgressCallback = (msg: string, pct: number) => void;
 type LogCallback = (line: string) => void;
@@ -31,6 +31,23 @@ export function isReady(): boolean {
   const sentinelPath = getSentinelPath();
 
   if (!fs.existsSync(pythonPath) || !fs.existsSync(sentinelPath)) {
+    return false;
+  }
+
+  // The venv's `bin/python` is a symlink into uv's managed-Python dir. Make
+  // sure that symlink resolves to somewhere inside our data dir — otherwise
+  // we're leaning on the user's global `~/.local/share/uv/python/…`, which
+  // can disappear out from under us (and makes TCC attribute the server
+  // process to the user's home). Invalidating here forces a re-bootstrap
+  // that reinstalls Python into `getUvPythonInstallDir()`.
+  try {
+    const realPython = fs.realpathSync(pythonPath);
+    const dataDir = fs.realpathSync(getDataDir());
+    if (!realPython.startsWith(dataDir + path.sep)) {
+      return false;
+    }
+  } catch {
+    // Broken symlink or missing target → not ready.
     return false;
   }
 
@@ -121,6 +138,28 @@ export async function run(onProgress: ProgressCallback, onLog?: LogCallback): Pr
   const pythonPath = getPythonPath();
   const reqPath = getRequirementsPath();
 
+  // Keep uv's managed Python interpreters inside the app's data dir so the
+  // venv's `bin/python` symlinks resolve to app-owned storage (not the user's
+  // global `~/.local/share/uv/python/…`).
+  const uvPythonInstallDir = getUvPythonInstallDir();
+  fs.mkdirSync(uvPythonInstallDir, { recursive: true });
+  const uvEnv = { UV_PYTHON_INSTALL_DIR: uvPythonInstallDir };
+
+  // If a previous install created a venv that points at the user's global
+  // uv python dir, blow it away so `uv venv` recreates it pointing into our
+  // app-local install dir.
+  if (fs.existsSync(venvDir)) {
+    try {
+      const real = fs.realpathSync(path.join(venvDir, "bin", "python"));
+      const dataReal = fs.realpathSync(dataDir);
+      if (!real.startsWith(dataReal + path.sep)) {
+        fs.rmSync(venvDir, { recursive: true, force: true });
+      }
+    } catch {
+      fs.rmSync(venvDir, { recursive: true, force: true });
+    }
+  }
+
   // Step 1: Download uv
   if (!fs.existsSync(uvPath)) {
     onProgress("Downloading uv package manager...", 5);
@@ -154,13 +193,14 @@ export async function run(onProgress: ProgressCallback, onLog?: LogCallback): Pr
     fs.chmodSync(rgPath, 0o755);
   }
 
-  // Step 2: Install Python 3.12
+  // Step 2: Install Python 3.12 into the app-local install dir.
   onProgress("Installing Python 3.12...", 15);
-  await runCommand(uvPath, ["python", "install", "3.12"], onLog);
+  await runCommand(uvPath, ["python", "install", "3.12"], onLog, uvEnv);
 
-  // Step 3: Create venv
+  // Step 3: Create venv (symlinks into $uvPythonInstallDir, which is under
+  // the app data dir).
   onProgress("Creating virtual environment...", 25);
-  await runCommand(uvPath, ["venv", venvDir, "--python", "3.12"], onLog);
+  await runCommand(uvPath, ["venv", venvDir, "--python", "3.12"], onLog, uvEnv);
 
   // Step 4: Install requirements
   onProgress("Installing Python dependencies (this may take a few minutes)...", 40);
@@ -168,7 +208,7 @@ export async function run(onProgress: ProgressCallback, onLog?: LogCallback): Pr
     "pip", "install",
     "-r", reqPath,
     "--python", pythonPath,
-  ], onLog);
+  ], onLog, uvEnv);
 
   // Step 5: Write sentinel
   onProgress("Finalizing setup...", 95);

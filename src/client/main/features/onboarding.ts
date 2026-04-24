@@ -62,7 +62,13 @@ export function runOnboarding(serverReady?: Promise<void>): Promise<void> {
 
     const handleOpenSettings = () => shell.openExternal(screen.fixUrl);
 
-    const handleOpenFdaSettings = () => shell.openExternal(fda.fixUrl);
+    const handleOpenFdaSettings = async () => {
+      // request() forces a real open() against an FDA-protected path so macOS
+      // TCC registers Tada in the Full Disk Access list. Without this step,
+      // the Tada toggle never appears in System Settings.
+      await fda.request?.();
+      shell.openExternal(fda.fixUrl);
+    };
 
     let submitted = false;
 

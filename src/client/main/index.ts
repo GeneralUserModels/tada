@@ -109,6 +109,12 @@ function startServer(port: number): void {
         ...process.env,
         PYTHONPATH: pythonSrcDir,
         TADA_CONFIG_PATH: configPath,
+        // Never write .pyc files into the signed .app bundle — that breaks
+        // the codesign seal and causes macOS TCC to silently refuse to list
+        // the app in Privacy & Security panes. Redirect bytecode cache to
+        // the writable data dir instead.
+        PYTHONPYCACHEPREFIX: path.join(getDataDir(), "pycache"),
+        PYTHONDONTWRITEBYTECODE: "1",
       },
     });
   }
