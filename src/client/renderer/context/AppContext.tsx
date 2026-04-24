@@ -76,7 +76,8 @@ type AppAction =
   | { type: "UPDATE_INSTALLING" }
   | { type: "UPDATE_ERROR"; message: string }
   | { type: "UPDATE_DISMISSED" }
-  | { type: "AGENT_ACTIVITY"; data: { agent: string; message: string | null; slug?: string | null; num_turns?: number | null; max_turns?: number | null } };
+  | { type: "AGENT_ACTIVITY"; data: { agent: string; message: string | null; slug?: string | null; num_turns?: number | null; max_turns?: number | null } }
+  | { type: "SET_AGENT_ACTIVITIES"; activities: Record<string, AgentActivity> };
 
 let historyCounter = 0;
 
@@ -273,6 +274,21 @@ function reducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    case "SET_AGENT_ACTIVITIES": {
+      const next: Record<string, AgentActivityInfo> = {};
+      for (const [agent, info] of Object.entries(action.activities)) {
+        if (!info.message) continue;
+        next[agent] = {
+          agent,
+          message: info.message,
+          slug: info.slug ?? undefined,
+          numTurns: info.num_turns ?? null,
+          maxTurns: info.max_turns ?? null,
+        };
+      }
+      return { ...state, agentActivities: next };
+    }
+
     default:
       return state;
   }
@@ -326,12 +342,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const status = await api.getStatus();
         dispatch({ type: "SERVER_READY", status: status as StatusData });
-        const activeAgents = (status as StatusData).active_agents;
-        if (activeAgents) {
-          for (const act of Object.values(activeAgents)) {
-            dispatch({ type: "AGENT_ACTIVITY", data: act });
-          }
-        }
+        const activeAgents = (status as StatusData).active_agents ?? {};
+        dispatch({ type: "SET_AGENT_ACTIVITIES", activities: activeAgents });
         console.log("[app] server ready, url:", url);
 
         try {
