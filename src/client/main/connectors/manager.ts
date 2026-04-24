@@ -10,8 +10,16 @@ import { IPC } from "../ipc";
 import { connectorPermissions, canUseConnector } from "./permissions";
 
 export function setupConnectorIpc(): void {
-  ipcMain.handle(IPC.CONNECTOR_OPEN_FDA_SETTINGS, (_e, name?: string) => {
-    const url = (name && connectorPermissions[name]?.fixUrl)
+  ipcMain.handle(IPC.CONNECTOR_OPEN_FDA_SETTINGS, async (_e, name?: string) => {
+    // Call request() first so permissions that need to trigger TCC registration
+    // (Full Disk Access) do an actual open() on the protected path — without
+    // this, the app never appears in the Full Disk Access list in System
+    // Settings and the user has nothing to toggle.
+    const desc = name ? connectorPermissions[name] : undefined;
+    if (desc?.request) {
+      try { await desc.request(); } catch { /* fall through to Settings */ }
+    }
+    const url = desc?.fixUrl
       ?? "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
     shell.openExternal(url);
   });

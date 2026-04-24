@@ -18,6 +18,7 @@
   "dependencies": {
     "electron-updater": "^6.8.3",
     "eventsource": "^3.0.7",
+    "node-mac-permissions": "^2.5.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-markdown": "^9.1.0",
@@ -58,43 +59,60 @@
       "icon": "src/client/build/icon.icns",
       "category": "public.app-category.productivity",
       "hardenedRuntime": true,
+      "entitlements": "src/client/build/entitlements.mac.plist",
+      "entitlementsInherit": "src/client/build/entitlements.mac.plist",
       "target": [
         "dmg",
         "zip"
       ],
       "extendInfo": {
         "NSScreenCaptureUsageDescription": "Tada needs screen recording to observe your workflow.",
-        "NSAccessibilityUsageDescription": "Tada needs accessibility access to track input events."
+        "NSAccessibilityUsageDescription": "Tada needs accessibility access to track input events.",
+        "NSMicrophoneUsageDescription": "Tada needs microphone access to transcribe your speech.",
+        "NSDesktopFolderUsageDescription": "Tada watches your Desktop for file changes so it can learn your workflow.",
+        "NSDocumentsFolderUsageDescription": "Tada watches your Documents folder for file changes so it can learn your workflow.",
+        "NSDownloadsFolderUsageDescription": "Tada watches your Downloads folder for file changes so it can learn your workflow.",
+        "NSSystemAdministrationUsageDescription": "Tada uses Full Disk Access to read notifications and browser data."
       }
     },
+    "asarUnpack": [
+      "**/node_modules/node-mac-permissions/**"
+    ],
     "extraResources": [
       {
         "from": "./src/server",
-        "to": "python-src/server"
+        "to": "python-src/server",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
       },
       {
         "from": "./src/connectors",
-        "to": "python-src/connectors"
+        "to": "python-src/connectors",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
       },
       {
         "from": "./src/user_models",
-        "to": "python-src/user_models"
+        "to": "python-src/user_models",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
       },
       {
         "from": "./src/apps",
-        "to": "python-src/apps"
+        "to": "python-src/apps",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
       },
       {
         "from": "./src/agent",
-        "to": "python-src/agent"
+        "to": "python-src/agent",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
       },
       {
         "from": "./src/retrievers",
-        "to": "python-src/retrievers"
+        "to": "python-src/retrievers",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
       },
       {
         "from": "./src/chat",
-        "to": "python-src/chat"
+        "to": "python-src/chat",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
       },
       {
         "from": "./bootstrap/requirements.txt",

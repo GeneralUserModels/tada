@@ -27,9 +27,6 @@ export function App() {
       <Sidebar
         activeView={state.activeView}
         connected={state.connected}
-        seekerHasQuestions={state.seekerHasQuestions}
-        tadaHasNew={state.tadaHasNew}
-        memexHasNew={state.memexHasNew}
         agentActivities={state.agentActivities}
         onNavigate={navigate}
       />

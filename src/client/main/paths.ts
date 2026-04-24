@@ -37,6 +37,16 @@ export function getUvPath(): string {
     : path.join(getDataDir(), "uv");
 }
 
+/**
+ * Directory where uv stores its managed Python interpreters for the packaged
+ * app. Kept inside the app's data dir (instead of the user's global
+ * `~/.local/share/uv/python`) so the app fully owns its Python and doesn't
+ * break when the user clears their uv cache.
+ */
+export function getUvPythonInstallDir(): string {
+  return path.join(getDataDir(), "uv-python");
+}
+
 export function getLogDir(): string {
   return path.join(getDataDir(), "logs");
 }

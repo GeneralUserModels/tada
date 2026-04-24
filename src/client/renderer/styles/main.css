@@ -215,21 +215,6 @@ body {
   color: var(--sage);
 }
 
-.nav-notify-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--sage);
-  margin-left: auto;
-  flex-shrink: 0;
-  animation: notifyPulse 2s ease-in-out infinite;
-}
-
-@keyframes notifyPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
 /* ── Update banner ────────────────────────────────────────── */
 
 .update-banner {
@@ -494,11 +479,6 @@ body {
   animation: spin 0.8s linear infinite;
   margin-left: auto;
   flex-shrink: 0;
-}
-
-/* When both spinner and notify dot are present, let spinner take precedence */
-.nav-item .nav-activity-spinner ~ .nav-notify-dot {
-  margin-left: 4px;
 }
 
 /* ── Tada card running state ───────────────────────────────── */

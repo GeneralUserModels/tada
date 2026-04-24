@@ -1,9 +1,12 @@
+/// <reference path="../../../tada.d.ts" />
 import React from "react";
 import { AdvancedLLMSection } from "../../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, AGENT_MODELS, TINKER_MODELS } from "../../shared/ModelDropdown";
 
 const GOOGLE_AI_STUDIO_API_KEY_URL = "https://aistudio.google.com/app/apikey";
 const ANTHROPIC_API_KEY_URL = "https://console.anthropic.com/settings/keys";
+const GOOGLE_ZDR_URL = "https://cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention";
+const ANTHROPIC_ZDR_URL = "https://platform.claude.com/docs/en/build-with-claude/zero-data-retention";
 
 type Props = {
   flag: (name: string) => boolean;
@@ -38,11 +41,19 @@ export function ModelsKeysStep(props: Props) {
     e.preventDefault();
     void window.tada.openExternalUrl(ANTHROPIC_API_KEY_URL);
   };
+  const openGoogleZdrPage = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    void window.tada.openExternalUrl(GOOGLE_ZDR_URL);
+  };
+  const openAnthropicZdrPage = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    void window.tada.openExternalUrl(ANTHROPIC_ZDR_URL);
+  };
   const agentLmNeeded =
     props.flag("moments") || props.flag("memory") || props.flag("seeker");
 
   return (
-    <div className="page active">
+    <div className="page active page--scroll">
       <div className="page-icon">
         <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M4 12V7M8 12V4M12 12V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
       </div>
@@ -71,7 +82,11 @@ export function ModelsKeysStep(props: Props) {
             <a href={GOOGLE_AI_STUDIO_API_KEY_URL} onClick={openGoogleApiKeyPage}>
               Google AI Studio
             </a>
-            {" "}. Make sure your account is upgraded from the free tier so you don't run into rate limits.
+            {" "}. Make sure your account is upgraded from the free tier so you don't run into rate limits. For sensitive data, consider setting up{" "}
+            <a href={GOOGLE_ZDR_URL} onClick={openGoogleZdrPage}>
+              Zero Data Retention on Vertex AI
+            </a>
+            .
           </p>
         </div>
         {agentLmNeeded && (
@@ -97,7 +112,11 @@ export function ModelsKeysStep(props: Props) {
               <a href={ANTHROPIC_API_KEY_URL} onClick={openAnthropicApiKeyPage}>
                 Anthropic Console
               </a>
-              {" "}. Make sure your account is upgraded from the free tier so you don't run into rate limits.
+              {" "}. Make sure your account is upgraded from the free tier so you don't run into rate limits. For sensitive data, consider requesting{" "}
+              <a href={ANTHROPIC_ZDR_URL} onClick={openAnthropicZdrPage}>
+                Zero Data Retention
+              </a>
+              {" "}from your Anthropic account team.
             </p>
           </div>
         )}
