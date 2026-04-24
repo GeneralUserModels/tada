@@ -1,0 +1,1155 @@
+/* ─────────────────────────────────────────────────────────
+   Memex demo — Liquid Greenhouse (matches src/client/)
+   Loaded only at ?demo=memex
+   ───────────────────────────────────────────────────────── */
+
+.memex-root {
+  --sage:       #84B179;
+  --fern:       #A2CB8B;
+  --mint:       #C7EABB;
+  --cream:      #E8F5BD;
+  --sage-rgb:   132,177,121;
+  --fern-rgb:   162,203,139;
+  --mint-rgb:   199,234,187;
+  --cream-rgb:  232,245,189;
+
+  --bg:            #F4F2EE;
+  --bg-warm:       #EBE8E2;
+  --glass:         rgba(255,255,255,0.55);
+  --glass-border:  rgba(var(--sage-rgb), 0.18);
+  --glass-shadow:  rgba(var(--sage-rgb), 0.08);
+
+  --text:           #2C3A28;
+  --text-secondary: #6B7A65;
+  --text-tertiary:  #9BA896;
+
+  --active-green:  #5DA34E;
+  --kansas:        #B2894D;
+  --kansas-soft:   rgba(178, 137, 77, 0.12);
+
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 26px;
+
+  --fs-sans: 'Tahoe', -apple-system, BlinkMacSystemFont, system-ui, 'Helvetica Neue', sans-serif;
+  --fs-mono: 'SF Mono', 'JetBrains Mono', Menlo, Monaco, monospace;
+
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  font-family: var(--fs-sans);
+  color: var(--text);
+  overflow: hidden;
+  z-index: 10000;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 20px 10px;
+  gap: 14px;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.memex-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 200px;
+}
+
+/* ── Hero ──────────────────────────────────────────────── */
+
+.memex-hero {
+  max-width: 720px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.memex-hero-title {
+  font-size: clamp(26px, 4.4vw, 40px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--text);
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28em;
+}
+
+.memex-hero-logo {
+  width: 0.88em;
+  height: 0.88em;
+  color: var(--sage);
+  flex-shrink: 0;
+}
+
+.memex-hero-subtitle {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  max-width: 540px;
+  margin: 0;
+}
+
+.memex-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.memex-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--fs-sans);
+  letter-spacing: -0.002em;
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.memex-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.memex-btn:active { transform: scale(0.98); }
+
+.memex-btn-primary {
+  color: white;
+  background: var(--active-green);
+  border-color: var(--active-green);
+  box-shadow:
+    0 1px 2px rgba(44, 58, 40, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.memex-btn-primary:hover {
+  background: #4E9340;
+  border-color: #4E9340;
+}
+
+.memex-btn-secondary {
+  color: var(--text);
+  background: var(--glass);
+  border-color: var(--glass-border);
+  backdrop-filter: blur(30px) saturate(1.3);
+  -webkit-backdrop-filter: blur(30px) saturate(1.3);
+}
+.memex-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(var(--sage-rgb), 0.32);
+}
+
+.memex-btn-accent {
+  color: var(--text);
+  background: rgba(var(--mint-rgb), 0.5);
+  border-color: rgba(var(--sage-rgb), 0.35);
+}
+.memex-btn-accent:hover {
+  background: rgba(var(--mint-rgb), 0.75);
+  border-color: rgba(var(--sage-rgb), 0.5);
+}
+
+.memex-btn-ghost {
+  color: var(--text-secondary);
+  background: transparent;
+  border-color: var(--glass-border);
+}
+.memex-btn-ghost:hover {
+  background: var(--glass);
+  color: var(--text);
+}
+
+.memex-btn-sub {
+  font-weight: 450;
+  opacity: 0.75;
+  margin-left: -2px;
+}
+
+/* ── Footer ────────────────────────────────────────────── */
+
+.memex-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  padding: 0;
+  font-family: var(--fs-mono);
+  flex-shrink: 0;
+}
+
+.memex-footer a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(var(--sage-rgb), 0.25);
+}
+
+.memex-footer a:hover {
+  color: var(--active-green);
+  border-bottom-color: var(--active-green);
+}
+
+/* ── Stage (demo canvas) ───────────────────────────────── */
+
+.memex-stage {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* The inner "app window" — styled like a macOS Tada window.
+   Constrained by BOTH the viewport width (max-width 1440) AND the
+   available vertical space (height: 100%), while preserving 16:9.
+   Registered as a size container so children can scale with cqi/cqb. */
+.memex-canvas {
+  width: 100%;
+  max-width: 1440px;
+  height: 100%;
+  max-height: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-warm);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border: 1px solid rgba(var(--sage-rgb), 0.22);
+  box-shadow:
+    0 1px 3px rgba(44, 58, 40, 0.05),
+    0 20px 48px rgba(44, 58, 40, 0.1),
+    0 6px 18px rgba(var(--sage-rgb), 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  container-type: size;
+  container-name: canvas;
+}
+
+/* Subtle grain, matching the app */
+.memex-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 200px;
+}
+
+.memex-canvas > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Topbar (macOS traffic lights + title) ─────────────── */
+
+.memex-titlebar {
+  height: 36px;
+  padding: 0 14px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(0,0,0,0.035);
+  border-bottom: 1px solid rgba(var(--sage-rgb), 0.15);
+  user-select: none;
+}
+
+.memex-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.memex-dots span {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.15);
+}
+
+.memex-dots span:nth-child(1) { background: #FF5F57; }
+.memex-dots span:nth-child(2) { background: #FEBC2E; }
+.memex-dots span:nth-child(3) { background: #28C840; }
+
+.memex-titlebar-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.memex-icon {
+  color: var(--sage);
+  font-size: 12px;
+}
+
+.memex-app {
+  color: var(--text);
+  font-weight: 650;
+  letter-spacing: 0.005em;
+}
+
+.memex-path-sep { color: var(--text-tertiary); }
+
+.memex-path {
+  font-family: var(--fs-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.memex-titlebar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.memex-status {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--sage-rgb), 0.12);
+  color: var(--sage);
+}
+
+.memex-timecode {
+  font-family: var(--fs-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Body layout ───────────────────────────────────────── */
+
+.memex-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 44% 56%;
+  gap: 0;
+  min-height: 0;
+  background: var(--bg);
+  position: relative;
+}
+
+.memex-stage[data-phase="wiki"] .memex-body,
+.memex-stage[data-phase="browse"] .memex-body {
+  grid-template-columns: 38% 62%;
+  transition: grid-template-columns 1.2s cubic-bezier(0.6, 0.05, 0.2, 1);
+}
+
+.memex-left,
+.memex-right {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  padding: 18px 20px;
+  transition: opacity 0.5s ease;
+}
+
+.memex-left {
+  border-right: 1px solid rgba(var(--sage-rgb), 0.1);
+}
+
+.memex-left-header,
+.memex-right-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+.panel-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+/* ── Source lanes ──────────────────────────────────────── */
+
+.memex-lanes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.lane {
+  background: var(--glass);
+  backdrop-filter: blur(30px) saturate(1.3);
+  -webkit-backdrop-filter: blur(30px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  min-height: 90px;
+  max-height: 112px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow:
+    0 1px 3px var(--glass-shadow),
+    inset 0 1px 0 rgba(255,255,255,0.5);
+}
+
+.lane[data-source="filesys"] {
+  grid-column: span 2;
+}
+
+.lane-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.lane-glyph {
+  color: var(--sage);
+  font-size: 11px;
+}
+
+.lane-name {
+  flex: 1;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.lane-count {
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: rgba(var(--sage-rgb), 0.1);
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+
+.lane-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lane-empty {
+  color: var(--text-tertiary);
+  font-family: var(--fs-mono);
+  font-size: 10.5px;
+  padding: 2px 0;
+}
+
+.lane-chip {
+  display: flex;
+  gap: 8px;
+  font-family: var(--fs-mono);
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text);
+  animation: lane-chip-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.lane-chip[data-idx="0"] { color: var(--text); }
+.lane-chip[data-idx="1"] { opacity: 0.72; }
+.lane-chip[data-idx="2"] { opacity: 0.48; }
+.lane-chip[data-idx="3"] { opacity: 0.28; }
+.lane-chip[data-idx="4"] { opacity: 0.14; }
+.lane-chip[data-idx="5"] { opacity: 0.06; }
+
+@keyframes lane-chip-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+    filter: blur(1.5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.chip-ts {
+  color: var(--kansas);
+  flex-shrink: 0;
+}
+
+.chip-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit;
+}
+
+/* ── Label synthesis (matches .agent-activity-banner) ──── */
+
+.memex-label-synth {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--glass);
+  backdrop-filter: blur(30px) saturate(1.3);
+  -webkit-backdrop-filter: blur(30px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  box-shadow:
+    0 1px 3px var(--glass-shadow),
+    0 8px 24px rgba(var(--sage-rgb), 0.04),
+    inset 0 1px 0 rgba(255,255,255,0.5);
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.memex-label-synth-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.synth-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 6px rgba(var(--sage-rgb), 0.55);
+  animation: synth-pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes synth-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+
+.synth-model {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--sage-rgb), 0.12);
+  color: var(--sage);
+}
+
+.synth-sep {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.synth-label {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-weight: 550;
+}
+
+.memex-label-synth-body {
+  font-size: clamp(12px, 1.3cqi, 15px);
+  line-height: 1.5;
+  color: var(--text);
+  min-height: 38px;
+  font-weight: 450;
+  letter-spacing: -0.003em;
+}
+
+.synth-text {
+  white-space: pre-wrap;
+}
+
+.synth-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  background: var(--sage);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 1s steps(2) infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.synth-placeholder {
+  color: var(--text-tertiary);
+  font-style: italic;
+  font-size: 13px;
+}
+
+.memex-label-synth-target {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+/* ── Wikilinks ─────────────────────────────────────────── */
+
+.wikilink {
+  display: inline-block;
+  color: var(--active-green);
+  font-weight: 550;
+  padding: 1px 6px;
+  background: rgba(var(--sage-rgb), 0.08);
+  border: 1px solid rgba(var(--sage-rgb), 0.2);
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 11px;
+  font-family: var(--fs-mono);
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  cursor: pointer;
+}
+
+button.wikilink {
+  font-family: var(--fs-mono);
+  color: var(--active-green);
+}
+
+button.wikilink:hover {
+  background: rgba(var(--sage-rgb), 0.18);
+  color: var(--text);
+}
+
+button.wikilink:active {
+  transform: translateY(0.5px);
+}
+
+.wikilink-sm {
+  font-size: 10px;
+  padding: 1px 6px;
+}
+
+/* Wikilinks in prose (inside wiki pages): subtler */
+.wiki-page .wikilink,
+.wiki-page button.wikilink {
+  color: var(--active-green);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(var(--sage-rgb), 0.35);
+  padding: 0 2px;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wiki-page button.wikilink:hover {
+  background: rgba(var(--sage-rgb), 0.1);
+  color: var(--text);
+}
+
+/* ── Right panel — wiki view ───────────────────────────── */
+
+.wiki-view {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 16px;
+  min-height: 0;
+}
+
+.file-tree {
+  background: var(--glass);
+  backdrop-filter: blur(30px) saturate(1.3);
+  -webkit-backdrop-filter: blur(30px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  padding: 14px 10px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.55;
+  box-shadow:
+    0 1px 3px var(--glass-shadow),
+    inset 0 1px 0 rgba(255,255,255,0.5);
+}
+
+.ft-icon {
+  font-size: 12px;
+  color: var(--sage);
+}
+
+.ft-dir {
+  margin-top: 8px;
+}
+
+.ft-dir:first-child {
+  margin-top: 0;
+}
+
+.ft-dir-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  font-size: 11.5px;
+  font-family: var(--fs-mono);
+}
+
+.ft-dir-name {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ft-dir-count {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(var(--sage-rgb), 0.08);
+  font-family: var(--fs-sans);
+}
+
+.ft-files {
+  padding-left: 10px;
+  margin-left: 10px;
+  border-left: 1px dashed rgba(var(--sage-rgb), 0.18);
+  margin-top: 2px;
+}
+
+.ft-file {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-secondary);
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  animation: ft-file-in 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  font-family: var(--fs-mono);
+  font-size: 11px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+}
+
+button.ft-file {
+  font-family: var(--fs-mono);
+  color: var(--text-secondary);
+}
+
+.ft-file-clickable {
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.ft-file-clickable:hover {
+  background: rgba(var(--sage-rgb), 0.08);
+  color: var(--text);
+}
+
+.ft-file-clickable:hover .ft-file-conf {
+  color: var(--sage);
+}
+
+.ft-file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ft-file-conf {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--fs-sans);
+}
+
+.ft-file-active {
+  background: rgba(var(--sage-rgb), 0.14);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--sage);
+}
+
+.ft-file-active .ft-file-conf {
+  color: var(--sage);
+  font-weight: 600;
+}
+
+@keyframes ft-file-in {
+  0% { opacity: 0; transform: translateX(-6px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Wiki page pane ────────────────────────────────────── */
+
+.wiki-page-pane {
+  background: var(--glass);
+  backdrop-filter: blur(30px) saturate(1.3);
+  -webkit-backdrop-filter: blur(30px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  padding: 22px 28px;
+  overflow: auto;
+  min-height: 0;
+  box-shadow:
+    0 1px 3px var(--glass-shadow),
+    0 12px 32px rgba(var(--sage-rgb), 0.05),
+    inset 0 1px 0 rgba(255,255,255,0.5);
+}
+
+.wiki-idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+}
+
+.wiki-idle-title {
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-secondary);
+}
+
+.wiki-idle-sub {
+  font-size: 12px;
+  margin-top: 8px;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+/* ── Showcased page ────────────────────────────────────── */
+
+.wiki-page {
+  animation: wiki-page-in 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes wiki-page-in {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.wiki-path-bar {
+  font-family: var(--fs-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.wiki-path-crumb { color: var(--text-tertiary); }
+.wiki-path-sep { color: var(--text-tertiary); opacity: 0.5; }
+.wiki-path-leaf {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.wiki-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 2px 0 4px;
+}
+
+.wiki-h1 {
+  font-size: clamp(20px, 2.4cqi, 28px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0;
+  font-weight: 700;
+  flex: 1;
+  min-width: 0;
+}
+
+.wiki-confidence {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: clamp(10px, 1cqi, 11.5px);
+  font-weight: 650;
+  padding: 2px 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  border: 1px solid;
+  transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease;
+}
+
+.wiki-confidence-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.wiki-confidence-label {
+  font-size: 0.88em;
+  font-weight: 550;
+  letter-spacing: 0.03em;
+  opacity: 0.8;
+}
+
+.wiki-confidence-low {
+  color: #C9594B;
+  background: rgba(201, 89, 75, 0.08);
+  border-color: rgba(201, 89, 75, 0.25);
+}
+.wiki-confidence-mid {
+  color: #B38A23;
+  background: rgba(212, 168, 67, 0.1);
+  border-color: rgba(212, 168, 67, 0.3);
+}
+.wiki-confidence-high {
+  color: #6C9A5E;
+  background: rgba(139, 185, 126, 0.12);
+  border-color: rgba(139, 185, 126, 0.35);
+}
+.wiki-confidence-max {
+  color: #4E8C3F;
+  background: rgba(93, 163, 78, 0.12);
+  border-color: rgba(93, 163, 78, 0.35);
+}
+
+.wiki-meta {
+  font-size: clamp(10px, 1cqi, 12px);
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wiki-h2 {
+  font-size: clamp(13px, 1.4cqi, 16px);
+  color: var(--text);
+  margin: 14px 0 6px;
+  font-weight: 660;
+  letter-spacing: -0.005em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(var(--sage-rgb), 0.14);
+}
+
+.wiki-lede {
+  font-size: clamp(12px, 1.25cqi, 15px);
+  line-height: 1.55;
+  color: var(--text);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.wiki-p {
+  font-size: clamp(11px, 1.12cqi, 14px);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.wiki-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 1em;
+  background: var(--sage);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 1s steps(2) infinite;
+}
+
+.wiki-updated {
+  margin: 14px 0 10px;
+  padding: 10px 16px;
+  background: rgba(var(--sage-rgb), 0.05);
+  border-left: 3px solid rgba(var(--sage-rgb), 0.45);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  animation: wiki-reveal 0.5s ease both;
+}
+
+@keyframes wiki-reveal {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.wiki-updated-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.wiki-updated-badge {
+  font-family: var(--fs-mono);
+  font-size: 10px;
+  color: var(--sage);
+  background: rgba(var(--sage-rgb), 0.12);
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+
+.wiki-updated-date {
+  font-family: var(--fs-mono);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.wiki-updated-body {
+  font-size: clamp(11px, 1.1cqi, 13px);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.wiki-unknown {
+  margin-top: 18px;
+  animation: wiki-reveal 0.5s ease both;
+}
+
+.wiki-unknown-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.wiki-unknown-list li {
+  font-size: clamp(11px, 1.1cqi, 13px);
+  color: var(--text-secondary);
+  padding: 5px 0 5px 22px;
+  position: relative;
+  line-height: 1.5;
+  border-bottom: 1px dashed rgba(var(--sage-rgb), 0.12);
+}
+
+.wiki-unknown-list li:last-child { border-bottom: none; }
+
+.wiki-unknown-list li::before {
+  content: "?";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--kansas-soft);
+  color: var(--kansas);
+  font-family: var(--fs-mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* ── Twister overlay ───────────────────────────────────── */
+
+.twister-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 8;
+}
+
+.twister-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1200px;
+  height: 1200px;
+  margin-left: -600px;
+  margin-top: -600px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--sage-rgb), 0.3);
+  animation: twister-spin 4.5s linear both;
+}
+
+.twister-ring-1 {
+  animation-duration: 3.6s;
+  border-color: rgba(var(--sage-rgb), 0.4);
+}
+.twister-ring-2 {
+  animation-duration: 4.2s;
+  border-color: rgba(var(--sage-rgb), 0.25);
+  width: 900px; height: 900px;
+  margin-left: -450px; margin-top: -450px;
+}
+.twister-ring-3 {
+  animation-duration: 5s;
+  border-color: rgba(var(--sage-rgb), 0.18);
+  width: 1500px; height: 1500px;
+  margin-left: -750px; margin-top: -750px;
+}
+
+@keyframes twister-spin {
+  0% {
+    transform: scale(0.3) rotate(0deg);
+    opacity: 0;
+    filter: blur(6px);
+  }
+  30% { opacity: 0.85; filter: blur(1px); }
+  100% {
+    transform: scale(1.1) rotate(540deg);
+    opacity: 0;
+    filter: blur(0);
+  }
+}
+
+.twister-caption {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--sage);
+  font-weight: 700;
+  animation: caption-in 4s ease both;
+}
+
+@keyframes caption-in {
+  0% { opacity: 0; }
+  20%, 80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── Hide underlying site while memex is active ────────── */
+
+body:has(.memex-root) { overflow: hidden; }
+body:has(.memex-root) .grain,
+body:has(.memex-root) .page { display: none !important; }

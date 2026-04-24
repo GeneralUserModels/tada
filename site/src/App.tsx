@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { DEMOS } from "./demos";
+import { MemexDemo } from "./memex/memex";
 
 const REPO = "GeneralUserModels/tada";
 const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
@@ -346,6 +347,14 @@ function useAutocompleteDemo() {
 }
 
 export function App() {
+  const { pathname, search } = window.location;
+  const isMemex =
+    pathname.replace(/\/$/, "").endsWith("/memex") ||
+    new URLSearchParams(search).get("demo") === "memex";
+  return isMemex ? <MemexDemo /> : <HomePage />;
+}
+
+function HomePage() {
   const {
     demoIdx,
     segments,
