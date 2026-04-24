@@ -589,8 +589,13 @@ function ShowcasedPage({
   const body1Frac = clamp01((prog - 0.45) / 0.22);
 
   const ledeShown = page.lede.slice(0, Math.floor(page.lede.length * ledeFrac));
-  const body0 = page.body.find((b) => b.kind === "p");
-  const body1 = page.body.filter((b) => b.kind === "p")[1];
+  const paragraphs = page.body.filter(
+    (b): b is Extract<WikiPage["body"][number], { kind: "p" }> => b.kind === "p"
+  );
+  const body0 = paragraphs[0];
+  const body1 = paragraphs[1];
+  const extras = paragraphs.slice(2);
+  const extrasVisible = prog >= 0.67;
   const updatedBlock = page.body.find((b) => b.kind === "updated");
   const unknownBlock = page.body.find((b) => b.kind === "unknown");
 
@@ -646,6 +651,13 @@ function ShowcasedPage({
           {body1Frac < 1 && <span className="wiki-cursor" />}
         </p>
       )}
+
+      {extrasVisible &&
+        extras.map((p, i) => (
+          <p className="wiki-p" key={`extra-${i}`}>
+            <WithWikilinks text={p.text} onClick={onLinkClick} />
+          </p>
+        ))}
 
       {state.showUpdated && updatedBlock && updatedBlock.kind === "updated" && (
         <div className="wiki-updated">
