@@ -115,41 +115,24 @@ const screenPermission: PermissionDescriptor = {
 const hasFullDiskAccess = () =>
   mac()?.getAuthStatus("full-disk-access") === "authorized";
 
-/**
- * Trigger per-folder TCC prompts for Desktop / Documents / Downloads via the
- * native AppKit folder-access APIs. macOS Sonoma+ keeps these three folders
- * as their own TCC classes, separate from Full Disk Access, so each one must
- * be asked for individually. Running them during onboarding means the user
- * answers once here instead of being surprised by prompts at every launch
- * when the Python filesystem connector starts FSEvents on those directories.
- */
-async function askForUserFolders(): Promise<void> {
-  const m = mac();
-  if (!m) return;
-  for (const f of ["desktop", "documents", "downloads"] as const) {
-    try { await m.askForFoldersAccess(f); } catch { /* user denied — TCC entry still recorded */ }
-  }
-}
-
 const notificationsPermission: PermissionDescriptor = {
   check: hasFullDiskAccess,
 
   // FDA has no programmatic consent API. `hasFullDiskAccess()` registers the
   // app with TCC (via the internal TCC.db read) so it appears in System
-  // Settings, and `askForFullDiskAccess()` opens the pane. We also fire the
-  // per-folder prompts for Desktop / Documents / Downloads here — those *do*
-  // have a native API — so the filesystem connector doesn't re-prompt at
-  // launch.
+  // Settings, and `askForFullDiskAccess()` opens the pane. Per-folder
+  // (Desktop/Documents/Downloads) prompts are handled by their own
+  // descriptors below so the user isn't hit with four stacked popups when
+  // they click a single "Grant Access" button.
   request: async () => {
     const before = hasFullDiskAccess();
     if (!before) mac()?.askForFullDiskAccess();
-    await askForUserFolders();
     return hasFullDiskAccess();
   },
 
   fixUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
   title: "Full Disk Access Required",
-  body: "Tada needs Full Disk Access to read notifications, files, and browser data.",
+  body: "Tada needs Full Disk Access to read notifications and browser data.",
   steps: [
     "Open System Settings → Privacy & Security → Full Disk Access",
     'If Tada isn\'t an option, click the "+" button and select "Tada"',
@@ -157,6 +140,72 @@ const notificationsPermission: PermissionDescriptor = {
     '(Note: if you\'re in developer mode, you may need to toggle on the terminal switch instead)',
   ],
 };
+
+// ── Protected Folders (Desktop / Documents / Downloads) ──────────────────────
+//
+// macOS Sonoma+ keeps these three folders as their own TCC classes, separate
+// from Full Disk Access. Each one must be asked for individually — `node-mac-
+// permissions.askForFoldersAccess` wraps `NSFileManager contentsOfDirectoryAt-
+// Path`, which triggers the native prompt the first time TCC has no decision
+// and silently returns `authorized`/`denied` thereafter. We expose one
+// descriptor per folder so the onboarding UI can render four independent
+// "Grant Access" buttons instead of firing all prompts at once.
+
+type ProtectedFolder = "desktop" | "documents" | "downloads";
+
+function makeFolderPermission(
+  folder: ProtectedFolder,
+  label: string,
+): PermissionDescriptor {
+  // `asked` guards against re-calling `askForFoldersAccess` from the modal's
+  // 1.5s poller before the user has engaged with the prompt at all — that
+  // first call is the one that surfaces the native dialog, so we only want
+  // it to happen in response to an explicit `request()`. After the user has
+  // made a decision once, TCC caches it and subsequent calls are silent, so
+  // we can safely re-check on every poll.
+  let asked = false;
+  let cached: "authorized" | "denied" | null = null;
+
+  const probe = async (): Promise<boolean> => {
+    const m = mac();
+    if (!m) return false;
+    try {
+      const result = await m.askForFoldersAccess(folder);
+      cached = result === "authorized" ? "authorized" : "denied";
+    } catch {
+      cached = "denied";
+    }
+    return cached === "authorized";
+  };
+
+  return {
+    check: async () => {
+      if (hasFullDiskAccess()) return true;
+      if (cached === "authorized") return true;
+      if (asked) return probe();
+      return false;
+    },
+
+    request: async () => {
+      asked = true;
+      if (hasFullDiskAccess()) return true;
+      return probe();
+    },
+
+    fixUrl:
+      "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders",
+    title: `${label} Folder Access`,
+    body: `Tada needs access to your ${label} folder to watch for new files.`,
+    steps: [
+      `Click "Allow" on the macOS permission prompt for your ${label} folder`,
+      `Or: System Settings → Privacy & Security → Files and Folders → toggle ${label} on for Tada`,
+    ],
+  };
+}
+
+const folderDesktopPermission = makeFolderPermission("desktop", "Desktop");
+const folderDocumentsPermission = makeFolderPermission("documents", "Documents");
+const folderDownloadsPermission = makeFolderPermission("downloads", "Downloads");
 
 // ── Accessibility ────────────────────────────────────────────────────────────
 
@@ -263,6 +312,9 @@ export const connectorPermissions: Partial<Record<string, PermissionDescriptor>>
   browser_cookies: browserCookiesPermission,
   microphone: microphonePermission,
   system_audio: systemAudioPermission,
+  folder_desktop: folderDesktopPermission,
+  folder_documents: folderDocumentsPermission,
+  folder_downloads: folderDownloadsPermission,
 };
 
 /** Returns true if the named connector either has no permission requirement or passes its check. */

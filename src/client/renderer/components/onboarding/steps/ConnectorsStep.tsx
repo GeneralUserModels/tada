@@ -27,6 +27,12 @@ type Props = {
   setMicGranted: (v: boolean) => void;
   sysAudioGranted: boolean;
   setSysAudioGranted: (v: boolean) => void;
+  desktopGranted: boolean;
+  setDesktopGranted: (v: boolean) => void;
+  documentsGranted: boolean;
+  setDocumentsGranted: (v: boolean) => void;
+  downloadsGranted: boolean;
+  setDownloadsGranted: (v: boolean) => void;
 };
 
 export function ConnectorsStep(props: Props) {
@@ -37,7 +43,7 @@ export function ConnectorsStep(props: Props) {
   );
 
   return (
-    <div className="page active">
+    <div className="page active page--scroll">
       <div className="page-icon">
         <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M6 2v3H3v6h3v3h4v-3h3V5h-3V2H6z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
       </div>
@@ -174,21 +180,71 @@ export function ConnectorsStep(props: Props) {
           )}
 
           {props.flag("permission_disk_access") && (
-            <div className="connector-row">
-              <div className="connector-icon">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+            <>
+              <div className="connector-row">
+                <div className="connector-icon">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6a4 4 0 018 0v3l1.5 2H2.5L4 9V6z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M6.5 13a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3"/></svg>
+                </div>
+                <div className="connector-info">
+                  <div className="connector-name">Notifications</div>
+                  <div className="connector-desc">Read your macOS notifications (Full Disk Access)</div>
+                </div>
+                <div className="connector-action">
+                  {props.notifAvailable
+                    ? <span className="perm-badge granted">Granted</span>
+                    : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("notifications", () => { props.setNotifAvailable(true); props.setNotifEnabled(true); props.setFsAvailable(true); props.setFsEnabled(true); })}>Grant Access</button>
+                  }
+                </div>
               </div>
-              <div className="connector-info">
-                <div className="connector-name">Disk Access</div>
-                <div className="connector-desc">Notifications, Desktop, Documents, Downloads</div>
+
+              <div className="connector-row">
+                <div className="connector-icon">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                </div>
+                <div className="connector-info">
+                  <div className="connector-name">Desktop folder</div>
+                  <div className="connector-desc">Watch for new files on your Desktop</div>
+                </div>
+                <div className="connector-action">
+                  {props.desktopGranted
+                    ? <span className="perm-badge granted">Granted</span>
+                    : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("folder_desktop", () => props.setDesktopGranted(true))}>Grant Access</button>
+                  }
+                </div>
               </div>
-              <div className="connector-action">
-                {props.notifAvailable && props.fsAvailable
-                  ? <span className="perm-badge granted">Granted</span>
-                  : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("notifications", () => { props.setNotifAvailable(true); props.setNotifEnabled(true); props.setFsAvailable(true); props.setFsEnabled(true); })}>Grant Access</button>
-                }
+
+              <div className="connector-row">
+                <div className="connector-icon">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                </div>
+                <div className="connector-info">
+                  <div className="connector-name">Documents folder</div>
+                  <div className="connector-desc">Watch for new files in Documents</div>
+                </div>
+                <div className="connector-action">
+                  {props.documentsGranted
+                    ? <span className="perm-badge granted">Granted</span>
+                    : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("folder_documents", () => props.setDocumentsGranted(true))}>Grant Access</button>
+                  }
+                </div>
               </div>
-            </div>
+
+              <div className="connector-row">
+                <div className="connector-icon">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                </div>
+                <div className="connector-info">
+                  <div className="connector-name">Downloads folder</div>
+                  <div className="connector-desc">Watch for new files in Downloads</div>
+                </div>
+                <div className="connector-action">
+                  {props.downloadsGranted
+                    ? <span className="perm-badge granted">Granted</span>
+                    : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("folder_downloads", () => props.setDownloadsGranted(true))}>Grant Access</button>
+                  }
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>

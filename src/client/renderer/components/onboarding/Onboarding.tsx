@@ -49,6 +49,9 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
   const [fsAvailable, setFsAvailable] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [fsEnabled, setFsEnabled] = useState(false);
+  const [desktopGranted, setDesktopGranted] = useState(false);
+  const [documentsGranted, setDocumentsGranted] = useState(false);
+  const [downloadsGranted, setDownloadsGranted] = useState(false);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [browserCookiesGranted, setBrowserCookiesGranted] = useState(false);
   const [micGranted, setMicGranted] = useState(false);
@@ -101,6 +104,12 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
       const { granted: fs } = await checkFilesystemPermission();
       setFsAvailable(fs);
       if (fs) setFsEnabled(true);
+      // Folder descriptors return true if Full Disk Access implies folder
+      // access OR the user has previously granted the per-folder prompt in
+      // this session; they don't surface a popup on a plain check.
+      setDesktopGranted(await window.tada.checkConnectorPermission("folder_desktop"));
+      setDocumentsGranted(await window.tada.checkConnectorPermission("folder_documents"));
+      setDownloadsGranted(await window.tada.checkConnectorPermission("folder_downloads"));
       const accOk = await window.tada.checkConnectorPermission("accessibility");
       setAccessibilityGranted(accOk);
       // Use a non-invasive check on load. Real cookie/keychain access only runs
@@ -194,7 +203,12 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
     if (gmailConnected) enabled.push("gmail");
     if (outlookConnected) { enabled.push("outlook_email"); enabled.push("outlook_calendar"); }
     if (notifAvailable) enabled.push("notifications");
-    if (fsAvailable) enabled.push("filesystem");
+    // Filesystem watcher needs access to at least one of Desktop / Documents
+    // / Downloads. FDA covers all three (fsAvailable) but users can also grant
+    // folders individually now.
+    if (fsAvailable || desktopGranted || documentsGranted || downloadsGranted) {
+      enabled.push("filesystem");
+    }
     if (micGranted) enabled.push("microphone");
     if (sysAudioGranted) enabled.push("system_audio");
     await completeOnboarding(enabled);
@@ -301,6 +315,12 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           setMicGranted={setMicGranted}
           sysAudioGranted={sysAudioGranted}
           setSysAudioGranted={setSysAudioGranted}
+          desktopGranted={desktopGranted}
+          setDesktopGranted={setDesktopGranted}
+          documentsGranted={documentsGranted}
+          setDocumentsGranted={setDocumentsGranted}
+          downloadsGranted={downloadsGranted}
+          setDownloadsGranted={setDownloadsGranted}
         />
       )}
 

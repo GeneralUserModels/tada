@@ -262,6 +262,37 @@ button, input, select, textarea, a {
   gap: 2px;
   -webkit-app-region: no-drag;
 }
+
+/* Onboarding steps with long content: scroll inside the card, not the whole page */
+.page--scroll {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  position: relative;
+}
+.page--scroll > .glass-card {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+  /* Soft fade at the bottom to hint that the list is scrollable. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), rgba(0,0,0,0.35) 100%);
+          mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), rgba(0,0,0,0.35) 100%);
+}
+.page--scroll > .glass-card::-webkit-scrollbar {
+  width: 6px;
+}
+.page--scroll > .glass-card::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 6px 0;
+}
+.page--scroll > .glass-card::-webkit-scrollbar-thumb {
+  background: rgba(var(--sage-rgb), 0.28);
+  border-radius: 3px;
+}
+.page--scroll > .glass-card::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--sage-rgb), 0.45);
+}
 .connector-row {
   display: flex;
   align-items: center;
