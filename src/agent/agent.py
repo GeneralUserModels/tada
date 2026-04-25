@@ -30,13 +30,21 @@ class Agent:
         api_key: str | None = None,
         on_round: Callable[[int, int], None] | None = None,
         on_tool_call: Callable[[str, dict], None] | None = None,
+        on_token: Callable[[str, int], None] | None = None,
+        on_round_end: Callable[[int, bool], None] | None = None,
+        should_stop: Callable[[], bool] | None = None,
+        max_output_tokens: int | None = None,
     ):
         self.model = model
         self.api_key = api_key or None
         self.system_prompt = system_prompt
         self.max_rounds = max_rounds
+        self.max_output_tokens = max_output_tokens
         self.on_round = on_round
         self.on_tool_call = on_tool_call
+        self.on_token = on_token
+        self.on_round_end = on_round_end
+        self.should_stop = should_stop
         self._compact = compact_tool
         self._bg = bg_manager
         if web_search is True:
@@ -57,8 +65,14 @@ class Agent:
 
     def run(self, messages: list) -> str:
         rounds_without_plan = 0
+        output_tokens_used = 0
+        warned_80 = False
+        warned_95 = False
 
         for round_num in range(self.max_rounds):
+            if self.should_stop and self.should_stop():
+                print(f"  [agent] stop requested before round {round_num+1}, exiting")
+                return ""
             if self.on_round:
                 try:
                     self.on_round(round_num + 1, self.max_rounds)
@@ -87,13 +101,17 @@ class Agent:
 
             # LLM call
             print(f"  [round {round_num+1}/{self.max_rounds}] calling {self.model}...")
-            response = self._call_llm(messages)
+            if self.on_token:
+                response = self._call_llm_streaming(messages, round_num)
+            else:
+                response = self._call_llm(messages)
             usage = getattr(response, "usage", None)
             if usage:
                 cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
                 cache_creation = getattr(usage, "cache_creation_input_tokens", 0) or 0
                 if cache_read or cache_creation:
                     print(f"  [cache] read={cache_read} creation={cache_creation}")
+                output_tokens_used += getattr(usage, "completion_tokens", 0) or 0
             choice = response.choices[0]
             assistant_msg = choice.message
             messages.append(assistant_msg.model_dump())
@@ -133,7 +151,14 @@ class Agent:
                         except Exception as e:
                             print(f"  [on_tool_call error] {e}")
 
-            if not local_calls:
+            is_final_round = not local_calls
+            if self.on_round_end:
+                try:
+                    self.on_round_end(round_num, is_final_round)
+                except Exception as e:
+                    print(f"  [on_round_end error] {e}")
+
+            if is_final_round:
                 print(f"  [round {round_num+1}] no tool calls, finishing (reason={choice.finish_reason})")
                 return assistant_msg.content or ""
 
@@ -208,12 +233,21 @@ class Agent:
                         print(f"  > task result: {str(output)[:500]}")
                         messages.append({"role": "tool", "tool_call_id": call.id, "content": str(output)})
 
-            # turns remaining warning
-            remaining = self.max_rounds - round_num - 1
-            if remaining == int(self.max_rounds * 0.2):
-                messages.append({"role": "user", "content": f"<warning>You have {remaining} turns remaining out of {self.max_rounds}. Wrap up soon.</warning>"})
-            elif remaining == 3:
-                messages.append({"role": "user", "content": f"<warning>Only {remaining} turns left. Finish now — write final output and stop.</warning>"})
+            # budget warnings — token-based when a budget is set, else turn-based
+            if self.max_output_tokens:
+                pct = output_tokens_used / self.max_output_tokens
+                if pct >= 0.95 and not warned_95:
+                    warned_95 = True
+                    messages.append({"role": "user", "content": f"<error>You've used {output_tokens_used}/{self.max_output_tokens} output tokens. Stop calling tools and write your final answer NOW with whatever you have.</error>"})
+                elif pct >= 0.8 and not warned_80:
+                    warned_80 = True
+                    messages.append({"role": "user", "content": f"<warning>You've used {int(pct*100)}% of your output token budget ({output_tokens_used}/{self.max_output_tokens}). Wrap up — finalize with minimal additional tool use.</warning>"})
+            else:
+                remaining = self.max_rounds - round_num - 1
+                if remaining == int(self.max_rounds * 0.2):
+                    messages.append({"role": "user", "content": f"<warning>You have {remaining} turns remaining out of {self.max_rounds}. Wrap up soon.</warning>"})
+                elif remaining == 3:
+                    messages.append({"role": "user", "content": f"<warning>Only {remaining} turns left. Finish now — write final output and stop.</warning>"})
 
             # plan nag
             rounds_without_plan = 0 if used_plan else rounds_without_plan + 1
@@ -229,12 +263,7 @@ class Agent:
         print(f"  [agent] max rounds ({self.max_rounds}) reached")
         return "(max rounds reached)"
 
-    @retry(
-        stop=stop_after_attempt(5),
-        wait=wait_exponential_jitter(initial=1, max=30, jitter=3),
-        retry=retry_if_exception_type((litellm.RateLimitError, litellm.APIConnectionError, litellm.InternalServerError, litellm.Timeout, httpx.ReadTimeout)),
-    )
-    def _call_llm(self, messages: list):
+    def _build_llm_kwargs(self, messages: list) -> dict:
         is_gemini = self.model.startswith("gemini/")
         cache_control = None if is_gemini else {"type": "ephemeral"}
         system_block = {"type": "text", "text": self.system_prompt}
@@ -275,4 +304,35 @@ class Agent:
                 # Gemini requires this when combining web search with function calling
                 if self.model.startswith("gemini/"):
                     kwargs["include_server_side_tool_invocations"] = True
-        return litellm.completion(**kwargs)
+        return kwargs
+
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential_jitter(initial=1, max=30, jitter=3),
+        retry=retry_if_exception_type((litellm.RateLimitError, litellm.APIConnectionError, litellm.InternalServerError, litellm.Timeout, httpx.ReadTimeout)),
+    )
+    def _call_llm(self, messages: list):
+        return litellm.completion(**self._build_llm_kwargs(messages))
+
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential_jitter(initial=1, max=30, jitter=3),
+        retry=retry_if_exception_type((litellm.RateLimitError, litellm.APIConnectionError, litellm.InternalServerError, litellm.Timeout, httpx.ReadTimeout)),
+    )
+    def _call_llm_streaming(self, messages: list, round_num: int):
+        kwargs = self._build_llm_kwargs(messages)
+        kwargs["stream"] = True
+        chunks = []
+        for chunk in litellm.completion(**kwargs):
+            chunks.append(chunk)
+            try:
+                delta = chunk.choices[0].delta
+                text = getattr(delta, "content", None)
+            except (IndexError, AttributeError):
+                text = None
+            if text and self.on_token:
+                try:
+                    self.on_token(text, round_num)
+                except Exception as e:
+                    print(f"  [on_token error] {e}")
+        return litellm.stream_chunk_builder(chunks, messages=kwargs["messages"])

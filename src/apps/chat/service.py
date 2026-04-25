@@ -38,8 +38,16 @@ from agent.tools import (
 from agent.tools.compact import CompactTool
 from chat import ChatAgent
 
-EFFORT_TO_MAX_ROUNDS = {"low": 5, "medium": 15, "high": 30}
+# Effort caps the agent's *output* tokens (its generated text + tool-call args).
+# This is a better proxy than turns for "how much agent work this response can
+# do": a single turn can read a 50KB file or write a 10KB file, so turns
+# under-count work; output tokens scale with what the agent actually produces.
+EFFORT_TO_MAX_TOKENS = {"low": 5_000, "medium": 20_000, "high": 60_000}
 DEFAULT_EFFORT = "medium"
+
+# Hard safety cap on agent loop iterations. Tokens are the primary budget;
+# this just prevents pathological infinite-tool-call loops.
+SAFETY_MAX_ROUNDS = 40
 
 AVAILABLE_MODELS = ["anthropic/claude-sonnet-4-6"]
 DEFAULT_MODEL = AVAILABLE_MODELS[0]
@@ -97,7 +105,7 @@ def list_sessions(state) -> list[dict]:
 def create_session(state, model: str, effort: str, title: str | None = None) -> dict:
     if model not in AVAILABLE_MODELS:
         model = DEFAULT_MODEL
-    if effort not in EFFORT_TO_MAX_ROUNDS:
+    if effort not in EFFORT_TO_MAX_TOKENS:
         effort = DEFAULT_EFFORT
     sid = new_session_id()
     now = _now()
@@ -143,6 +151,43 @@ def delete_session(state, session_id: str) -> bool:
     return True
 
 
+def update_session_meta(state, session_id: str, **fields) -> dict | None:
+    """Patch meta.json with the given fields (effort/title/etc)."""
+    data = load_session(state, session_id)
+    if data is None:
+        return None
+    meta = {**data["meta"], **fields, "updated_at": _now()}
+    sdir = _session_dir(state, session_id)
+    (sdir / "meta.json").write_text(json.dumps(meta, indent=2))
+    return meta
+
+
+TITLE_MODEL = "gemini/gemini-3.1-flash-lite-preview"
+
+
+async def generate_title(state, content: str) -> str:
+    """Use Gemini Flash Lite to make a short title from the first user message."""
+    api_key = state.config.default_llm_api_key or None
+    snippet = content.strip()[:600]
+    prompt = (
+        "Write a concise 3-5 word title for a chat that starts with this user message. "
+        "Output only the title — no quotes, no punctuation, no commentary.\n\n"
+        f"Message: {snippet}"
+    )
+    kwargs = {
+        "model": TITLE_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 30,
+        "metadata": {"app": "chat_title"},
+    }
+    if api_key:
+        kwargs["api_key"] = api_key
+    resp = await litellm.acompletion(**kwargs)
+    title = (resp.choices[0].message.content or "").strip()
+    title = title.strip("\"'`").strip()
+    return title or "New chat"
+
+
 # ── Visible-message extraction ──────────────────────────────────
 
 
@@ -160,12 +205,13 @@ def _flatten_text(content) -> str:
 
 
 def visible_messages(messages: list[dict]) -> list[dict]:
-    """Render a chat-friendly stream of {user|assistant|step} entries.
+    """Flatten the raw litellm message list into chat bubbles for the UI.
 
-    - Show only the final assistant message per turn (no prelude bubbles
-      with tool_calls — those become step chips instead).
-    - Tool-result messages are dropped; the chip already says what was done.
-    - Step entries are derived from each assistant message's `tool_calls`.
+    Emits user messages and the *final* assistant message of each turn (the one
+    with no `tool_calls`). Prelude prose — assistant messages that came with
+    tool calls — is the agent's between-tool narration; it surfaces live in the
+    progress preamble area, not as a persisted bubble. Tool-result messages
+    are dropped entirely.
     """
     out: list[dict] = []
     for msg in messages:
@@ -174,36 +220,12 @@ def visible_messages(messages: list[dict]) -> list[dict]:
             text = _flatten_text(msg.get("content"))
             out.append({"role": "user", "content": text})
         elif role == "assistant":
-            tool_calls = msg.get("tool_calls") or []
-            for call in tool_calls:
-                name, args = _extract_call(call)
-                out.append({
-                    "role": "step",
-                    "tool": name,
-                    "summary": format_tool_action(name, args),
-                })
+            if msg.get("tool_calls"):
+                continue
             content = _flatten_text(msg.get("content"))
-            if content.strip() and not tool_calls:
+            if content.strip():
                 out.append({"role": "assistant", "content": content})
     return out
-
-
-def _extract_call(call) -> tuple[str, dict]:
-    """Pull (name, args) from a litellm tool_call dict (or object)."""
-    fn = call.get("function") if isinstance(call, dict) else getattr(call, "function", None)
-    name = ""
-    raw_args = "{}"
-    if isinstance(fn, dict):
-        name = fn.get("name", "")
-        raw_args = fn.get("arguments", "{}")
-    elif fn is not None:
-        name = getattr(fn, "name", "")
-        raw_args = getattr(fn, "arguments", "{}")
-    try:
-        args = json.loads(raw_args) if isinstance(raw_args, str) else (raw_args or {})
-    except (json.JSONDecodeError, TypeError):
-        args = {}
-    return name, args
 
 
 # ── Tool-action formatter ────────────────────────────────────────
@@ -286,17 +308,20 @@ async def build_chat_agent(
     meta: dict,
     on_round: Callable[[int, int], None] | None = None,
     on_tool_call: Callable[[str, dict], None] | None = None,
+    on_token: Callable[[str, int], None] | None = None,
+    on_round_end: Callable[[int, bool], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> ChatAgent:
     config = state.config
     model = meta.get("model", DEFAULT_MODEL)
     effort = meta.get("effort", DEFAULT_EFFORT)
-    max_rounds = EFFORT_TO_MAX_ROUNDS.get(effort, EFFORT_TO_MAX_ROUNDS[DEFAULT_EFFORT])
+    max_output_tokens = EFFORT_TO_MAX_TOKENS.get(effort, EFFORT_TO_MAX_TOKENS[DEFAULT_EFFORT])
     api_key = resolve_api_key(config)
 
     log_dir = str(Path(config.log_dir).resolve())
     await _ensure_sandbox_async([log_dir])
 
-    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(logs_dir=log_dir)
+    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(logs_dir=log_dir, max_tokens=max_output_tokens)
 
     transcript_dir = Path(log_dir) / "chats" / "_transcripts"
     compact_tool = CompactTool(transcript_dir, _make_summarizer(model, api_key), model=model)
@@ -310,8 +335,12 @@ async def build_chat_agent(
         api_key=api_key,
         compact_tool=compact_tool,
         bg_manager=_bg_manager,
-        max_rounds=max_rounds,
+        max_rounds=SAFETY_MAX_ROUNDS,
+        max_output_tokens=max_output_tokens,
         web_search=True,
         on_round=on_round,
         on_tool_call=on_tool_call,
+        on_token=on_token,
+        on_round_end=on_round_end,
+        should_stop=should_stop,
     )

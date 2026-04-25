@@ -83,6 +83,8 @@ export const createChatSession = (body: { model: string; effort: string; title?:
   request("POST", "/api/chat/sessions", body) as Promise<ChatSessionMeta>;
 export const getChatSession = (id: string) =>
   request("GET", `/api/chat/sessions/${id}`) as Promise<{ meta: ChatSessionMeta; messages: ChatItem[] }>;
+export const updateChatSession = (id: string, body: { effort?: string; title?: string }) =>
+  request("PUT", `/api/chat/sessions/${id}`, body) as Promise<ChatSessionMeta>;
 export const deleteChatSession = (id: string) =>
   request("DELETE", `/api/chat/sessions/${id}`);
 

@@ -27,6 +27,16 @@ const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
     ),
   },
   {
+    view: "chat",
+    label: "Assistant",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2.5 4.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H7l-3 2.5v-2.5h-.5a2 2 0 0 1-2-2v-5z"
+          stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
     view: "tada",
     label: "Tada",
     icon: (
@@ -57,16 +67,6 @@ const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
         <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-      </svg>
-    ),
-  },
-  {
-    view: "chat",
-    label: "Assistant",
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M2.5 4.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H7l-3 2.5v-2.5h-.5a2 2 0 0 1-2-2v-5z"
-          stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
       </svg>
     ),
   },

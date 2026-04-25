@@ -124,18 +124,13 @@ interface ChatMessage {
   content: string;
 }
 
-interface ChatStepItem {
-  role: "step";
-  tool: string;
-  summary: string;
-}
-
 interface ChatBubbleItem {
   role: "assistant" | "user";
   content: string;
+  round?: number;
 }
 
-type ChatItem = ChatBubbleItem | ChatStepItem;
+type ChatItem = ChatBubbleItem;
 
 interface ChatSessionMeta {
   id: string;
@@ -152,7 +147,7 @@ interface ChatOptions {
   efforts: ("low" | "medium" | "high")[];
   default_model: string;
   default_effort: "low" | "medium" | "high";
-  effort_max_rounds: Record<string, number>;
+  effort_max_tokens: Record<string, number>;
 }
 
 interface TadaAPI {
