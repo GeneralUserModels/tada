@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAppContext } from "../../context/AppContext";
-import { useFeatureFlag } from "../../featureFlags";
+import { useFeatureFlag, useFeatureFlags, getFlag } from "../../featureFlags";
+import * as api from "../../api/client";
 import { getSettings, updateSettings } from "../../api/client";
 import { AdvancedLLMSection, ADVANCED_ROWS, LLM_ROWS, AGENT_ROWS, fanOut } from "../shared/AdvancedLLMSection";
 import { ModelDropdown, LLM_MODELS, AGENT_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
+import { useConnectors } from "../../hooks/useConnectors";
+import { ConnectorItem, CONNECTOR_META } from "../connectors/ConnectorItem";
 
 
 // All keys used across all sections
@@ -37,6 +40,7 @@ function allKeys(): string[] {
 
 export function SettingsView() {
   const { state, dispatch } = useAppContext();
+  const featureFlags = useFeatureFlags();
   const momentsEnabled = useFeatureFlag("moments");
   const memoryEnabled = useFeatureFlag("memory");
   const seekerFlagEnabled = useFeatureFlag("seeker");
@@ -44,6 +48,43 @@ export function SettingsView() {
   const tinkerEnabled = useFeatureFlag("tinker");
   const [values, setValues] = useState<Record<string, string>>({});
   const [showSaved, setShowSaved] = useState(false);
+
+  const { connectors, loading: connectorsLoading, load: loadConnectors, toggle, toggling, connectGoogle, connectOutlook, retry } = useConnectors();
+  const [connectingName, setConnectingName] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (state.connected && !state.servicesReady) {
+      pollRef.current = setInterval(async () => {
+        const status = await api.getStatus();
+        if (status.services_started) {
+          dispatch({ type: "STATUS_UPDATE", data: status });
+        }
+      }, 2000);
+      return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    }
+  }, [state.connected, state.servicesReady, dispatch]);
+
+  useEffect(() => {
+    if (state.servicesReady) {
+      loadConnectors();
+    }
+  }, [state.servicesReady, loadConnectors]);
+
+  const calendarOn = !!(connectors.calendar?.enabled && connectors.calendar?.available);
+  const gmailOn = !!(connectors.gmail?.enabled && connectors.gmail?.available);
+
+  const handleConnectGoogle = async (svc: string, otherIsOn: boolean) => {
+    setConnectingName(svc);
+    await connectGoogle(svc, otherIsOn);
+    setConnectingName(null);
+  };
+
+  const handleConnectOutlook = async () => {
+    setConnectingName("outlook_calendar");
+    await connectOutlook();
+    setConnectingName(null);
+  };
 
   useEffect(() => {
     const populated: Record<string, string> = {};
@@ -103,6 +144,47 @@ export function SettingsView() {
 
   return (
     <div id="settings-view" className="view active">
+      <section className="glass-card">
+        <div className="card-header">
+          <h2>Connectors</h2>
+        </div>
+        {!state.servicesReady ? (
+          <div style={{ color: "#9BA896", fontSize: 13, padding: "24px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="spinner" />
+            Starting up (this can take a few seconds)...
+          </div>
+        ) : connectorsLoading ? (
+          <div style={{ color: "#9BA896", fontSize: 12, padding: 12 }}>Loading...</div>
+        ) : Object.keys(connectors).length === 0 ? (
+          <div style={{ color: "#9BA896", fontSize: 12, padding: 12 }}>
+            Unable to load connector status.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {Object.entries(connectors)
+              .filter(([name]) => CONNECTOR_META[name] && getFlag(featureFlags, `connector_${name}`))
+              .sort(([a], [b]) => {
+                const keys = Object.keys(CONNECTOR_META);
+                return keys.indexOf(a) - keys.indexOf(b);
+              })
+              .map(([name, info]) => (
+                <ConnectorItem
+                  key={name}
+                  name={name}
+                  info={info}
+                  calendarOn={calendarOn}
+                  gmailOn={gmailOn}
+                  toggling={toggling.has(name) || connectingName === name}
+                  onToggle={toggle}
+                  onConnectGoogle={handleConnectGoogle}
+                  onConnectOutlook={handleConnectOutlook}
+                  onRetry={retry}
+                />
+              ))}
+          </div>
+        )}
+      </section>
+
       <section className="glass-card" style={{ position: "relative", zIndex: 1 }}>
         <div className="card-header">
           <h2>Configuration</h2>

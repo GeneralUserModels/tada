@@ -4,13 +4,14 @@ import * as sse from "../api/sse";
 
 // ── Types ─────────────────────────────────────────────────────
 
-export type ActiveView = "connectors" | "tada" | "memex" | "seeker" | "usermodel" | "settings";
+export type ActiveView = "activity" | "tada" | "memex" | "seeker" | "usermodel" | "settings";
 
 export interface HistoryItem {
   id: number;
   type: "prediction" | "label" | "training";
   text: string;
   timestamp: string;
+  denseCaption?: string;
 }
 
 export interface RewardPoint {
@@ -24,6 +25,7 @@ export interface AgentActivityInfo {
   agent: string;
   message: string;
   slug?: string;
+  frequency?: string;
   numTurns: number | null;
   maxTurns: number | null;
 }
@@ -64,7 +66,7 @@ type AppAction =
   | { type: "TRAINING_STEP"; data: TrainingStepData }
   | { type: "LABEL"; data: LabelData }
   | { type: "SEED_HISTORY"; history: TrainingStepData[] }
-  | { type: "SEED_LABEL_HISTORY"; history: { text: string; timestamp: number }[] }
+  | { type: "SEED_LABEL_HISTORY"; history: { text: string; timestamp: number; dense_caption?: string }[] }
   | { type: "LOAD_SETTINGS"; settings: Record<string, unknown> }
   | { type: "UPDATE_AVAILABLE"; version: string }
   | { type: "SEEKER_QUESTIONS_READY" }
@@ -76,7 +78,7 @@ type AppAction =
   | { type: "UPDATE_INSTALLING" }
   | { type: "UPDATE_ERROR"; message: string }
   | { type: "UPDATE_DISMISSED" }
-  | { type: "AGENT_ACTIVITY"; data: { agent: string; message: string | null; slug?: string | null; num_turns?: number | null; max_turns?: number | null } }
+  | { type: "AGENT_ACTIVITY"; data: { agent: string; message: string | null; slug?: string | null; frequency?: string | null; num_turns?: number | null; max_turns?: number | null } }
   | { type: "SET_AGENT_ACTIVITIES"; activities: Record<string, AgentActivity> };
 
 let historyCounter = 0;
@@ -85,9 +87,10 @@ function addHistoryItem(
   items: HistoryItem[],
   type: HistoryItem["type"],
   text: string,
-  timestamp: string
+  timestamp: string,
+  denseCaption?: string
 ): HistoryItem[] {
-  const next = [{ id: historyCounter++, type, text, timestamp }, ...items];
+  const next = [{ id: historyCounter++, type, text, timestamp, denseCaption }, ...items];
   return next.length > 100 ? next.slice(0, 100) : next;
 }
 
@@ -97,7 +100,7 @@ const initialState: AppState = {
   trainingActive: false,
   labels: 0,
   step: 0,
-  activeView: "connectors",
+  activeView: "activity",
   prediction: null,
   generating: false,
   rewardHistory: [],
@@ -197,13 +200,13 @@ function reducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         labels: action.data.count ?? state.labels,
-        historyItems: addHistoryItem(state.historyItems, "label", action.data.text ?? "", ""),
+        historyItems: addHistoryItem(state.historyItems, "label", action.data.text ?? "", "", action.data.dense_caption),
       };
 
     case "SEED_LABEL_HISTORY": {
       let items = state.historyItems;
       for (const entry of action.history) {
-        items = addHistoryItem(items, "label", entry.text, "");
+        items = addHistoryItem(items, "label", entry.text, "", entry.dense_caption);
       }
       // addHistoryItem prepends; reverse the seeded items so oldest appears last
       return { ...state, historyItems: items };
@@ -254,7 +257,7 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, memexHasNew: true };
 
     case "AGENT_ACTIVITY": {
-      const { agent, message, slug, num_turns, max_turns } = action.data;
+      const { agent, message, slug, frequency, num_turns, max_turns } = action.data;
       if (!message) {
         const { [agent]: _, ...rest } = state.agentActivities;
         return { ...state, agentActivities: rest };
@@ -267,6 +270,7 @@ function reducer(state: AppState, action: AppAction): AppState {
             agent,
             message,
             slug: slug ?? undefined,
+            frequency: frequency ?? undefined,
             numTurns: num_turns ?? null,
             maxTurns: max_turns ?? null,
           },
@@ -282,6 +286,7 @@ function reducer(state: AppState, action: AppAction): AppState {
           agent,
           message: info.message,
           slug: info.slug ?? undefined,
+          frequency: info.frequency ?? undefined,
           numTurns: info.num_turns ?? null,
           maxTurns: info.max_turns ?? null,
         };
@@ -320,19 +325,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     registered.current = true;
 
     // SSE events — direct from Python, no IPC hop
-    sse.on("status",        (data) => dispatch({ type: "STATUS_UPDATE", data: data as StatusData }));
-    sse.on("prediction",    (data) => dispatch({ type: "PREDICTION", data: data as PredictionData }));
-    sse.on("score",         (data) => dispatch({ type: "SCORE", data: data as ScoreData }));
-    sse.on("elbo_score",    (data) => dispatch({ type: "ELBO_SCORE", data: data as ElboScoreData }));
-    sse.on("training_step", (data) => dispatch({ type: "TRAINING_STEP", data: data as TrainingStepData }));
-    sse.on("label",         (data) => dispatch({ type: "LABEL", data: data as LabelData }));
+    sse.on<StatusData>("status",            (data) => dispatch({ type: "STATUS_UPDATE", data }));
+    sse.on<PredictionData>("prediction",    (data) => dispatch({ type: "PREDICTION", data }));
+    sse.on<ScoreData>("score",              (data) => dispatch({ type: "SCORE", data }));
+    sse.on<ElboScoreData>("elbo_score",     (data) => dispatch({ type: "ELBO_SCORE", data }));
+    sse.on<TrainingStepData>("training_step", (data) => dispatch({ type: "TRAINING_STEP", data }));
+    sse.on<LabelData>("label",              (data) => dispatch({ type: "LABEL", data }));
     sse.on("seeker_questions_ready", () => dispatch({ type: "SEEKER_QUESTIONS_READY" }));
     sse.on("moment_completed", () => dispatch({ type: "TADA_NEW_MOMENT" }));
     sse.on("memory_updated", () => dispatch({ type: "MEMEX_UPDATED" }));
-    sse.on("agent_activity", (data) => {
-      console.log("[sse] agent_activity", data);
-      dispatch({ type: "AGENT_ACTIVITY", data: data as { agent: string; message: string | null } });
-    });
+    sse.on<{ agent: string; message: string | null; slug?: string | null; frequency?: string | null; num_turns?: number | null; max_turns?: number | null }>(
+      "agent_activity",
+      (data) => {
+        console.log("[sse] agent_activity", data);
+        dispatch({ type: "AGENT_ACTIVITY", data });
+      },
+    );
 
     // server:ready — main sends URL once server is up; we initialize api + sse then seed state
     window.tada.onServerReady(async ({ url }: { url: string }) => {
@@ -341,9 +349,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       try {
         const status = await api.getStatus();
-        dispatch({ type: "SERVER_READY", status: status as StatusData });
-        const activeAgents = (status as StatusData).active_agents ?? {};
-        dispatch({ type: "SET_AGENT_ACTIVITIES", activities: activeAgents });
+        dispatch({ type: "SERVER_READY", status });
+        dispatch({ type: "SET_AGENT_ACTIVITIES", activities: status.active_agents ?? {} });
         console.log("[app] server ready, url:", url);
 
         try {

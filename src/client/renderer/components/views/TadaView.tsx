@@ -149,6 +149,30 @@ function buildSchedule(frequency: string, time24: string, day: string): string {
   return `at ${friendly}`;
 }
 
+/** Compute progress percent (0-100) from a run activity, or 0 if unknown. */
+function activityPercent(activity?: { numTurns: number | null; maxTurns: number | null }): number {
+  if (!activity?.maxTurns || activity.maxTurns <= 0 || activity.numTurns == null) return 0;
+  return Math.min(100, Math.max(0, (activity.numTurns / activity.maxTurns) * 100));
+}
+
+/** Spinner + percent + progress bar for an in-progress moment run. */
+function RunningIndicator({ pct }: { pct: number }) {
+  return (
+    <div className="tada-card-running">
+      <div className="tada-card-running-row">
+        <div className="feature-activity-spinner" />
+        <span className="tada-card-running-text">Running…</span>
+        {pct > 0 && <span className="tada-card-running-pct">{Math.round(pct)}%</span>}
+      </div>
+      {pct > 0 && (
+        <div className="feature-activity-progress-track">
+          <div className="feature-activity-progress-fill" style={{ width: `${pct}%` }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TadaView() {
   const { state } = useAppContext();
   const discoveryActivity = state.agentActivities["moments_discovery"];
@@ -178,6 +202,24 @@ export function TadaView() {
   const oneOffUnread = useMemo(() => oneOffResults.filter(isUnread).length, [oneOffResults]);
   const recurringUnread = useMemo(() => recurringResults.filter(isUnread).length, [recurringResults]);
   const tabResults = tab === "one-off" ? oneOffResults : recurringResults;
+
+  // Determine the running moment's frequency so we only show the placeholder card
+  // on the matching tab. Prefer the activity payload, fall back to looking up
+  // the slug in `results` for already-known moments.
+  const runFrequency = useMemo(() => {
+    if (!runActivity?.slug) return null;
+    if (runActivity.frequency) return runActivity.frequency;
+    const r = results.find((x) => x.slug === runActivity.slug);
+    return r ? (r.frequency_override || r.frequency) : null;
+  }, [runActivity?.slug, runActivity?.frequency, results]);
+  const runIsOneOff = runFrequency === "once";
+  const showRunPlaceholder =
+    !!runActivity?.slug
+    && !loading
+    && !results.some((r) => r.slug === runActivity.slug)
+    // If we know the frequency, only show on the matching tab. If unknown,
+    // show on the current tab so the user always sees that something is running.
+    && (runFrequency == null || (tab === "one-off") === runIsOneOff);
 
   useEffect(() => {
     if (state.connected) load();
@@ -395,37 +437,23 @@ export function TadaView() {
         </button>
       </div>
 
-      {/* Placeholder card for a moment that's running but has no completed result yet */}
-      {runActivity?.slug && !loading && !results.some((r) => r.slug === runActivity.slug) && (() => {
-        const pct = runActivity.maxTurns && runActivity.maxTurns > 0 && runActivity.numTurns != null
-          ? Math.min(100, Math.max(0, (runActivity.numTurns / runActivity.maxTurns) * 100)) : 0;
-        return (
-          <section className="glass-card tada-card tada-card--running">
-            <div className="tada-card-header">
-              <h3 className="tada-card-title">{runActivity.message.replace(/^Running:\s*/, "")}</h3>
-            </div>
-            <div className="tada-card-running">
-              <div className="tada-card-running-row">
-                <div className="feature-activity-spinner" />
-                <span className="tada-card-running-text">Running…</span>
-                {pct > 0 && <span className="tada-card-running-pct">{Math.round(pct)}%</span>}
-              </div>
-              {pct > 0 && (
-                <div className="feature-activity-progress-track">
-                  <div className="feature-activity-progress-fill" style={{ width: `${pct}%` }} />
-                </div>
-              )}
-            </div>
-          </section>
-        );
-      })()}
+      {/* Placeholder card for a moment running on the current tab that doesn't
+          have a result on disk yet. Only shown on the tab matching its frequency. */}
+      {showRunPlaceholder && runActivity && (
+        <section className="glass-card tada-card tada-card--running">
+          <div className="tada-card-header">
+            <h3 className="tada-card-title">{runActivity.message.replace(/^Running:\s*/, "")}</h3>
+          </div>
+          <RunningIndicator pct={activityPercent(runActivity)} />
+        </section>
+      )}
 
       {loading ? (
         <div className="tada-empty-state">
           <div className="tada-spinner" />
           <span>Loading moments...</span>
         </div>
-      ) : tabResults.length === 0 && !runActivity ? (
+      ) : tabResults.length === 0 && !showRunPlaceholder ? (
         <div className="tada-empty-state">
           <svg className="tada-empty-icon" width="32" height="32" viewBox="0 0 32 32" fill="none">
             <path d="M16 4l3.09 6.26L26 11.27l-5 4.87 1.18 6.88L16 19.77l-6.18 3.25L11 16.14l-5-4.87 6.91-1.01L16 4z"
@@ -443,9 +471,7 @@ export function TadaView() {
         }).map((r, i) => {
           const isRunning = runActivity?.slug === r.slug;
           const cardUnread = isUnread(r);
-          const runPct = isRunning && runActivity.maxTurns && runActivity.maxTurns > 0 && runActivity.numTurns != null
-            ? Math.min(100, Math.max(0, (runActivity.numTurns / runActivity.maxTurns) * 100))
-            : 0;
+          const runPct = isRunning ? activityPercent(runActivity) : 0;
           return (
           <section
             key={r.slug}
@@ -585,20 +611,7 @@ export function TadaView() {
               </div>
             )}
 
-            {isRunning && (
-              <div className="tada-card-running">
-                <div className="tada-card-running-row">
-                  <div className="feature-activity-spinner" />
-                  <span className="tada-card-running-text">Running…</span>
-                  {runPct > 0 && <span className="tada-card-running-pct">{Math.round(runPct)}%</span>}
-                </div>
-                {runPct > 0 && (
-                  <div className="feature-activity-progress-track">
-                    <div className="feature-activity-progress-fill" style={{ width: `${runPct}%` }} />
-                  </div>
-                )}
-              </div>
-            )}
+            {isRunning && <RunningIndicator pct={runPct} />}
           </section>
           );
         })

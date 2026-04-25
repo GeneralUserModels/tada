@@ -1,0 +1,7 @@
+{
+  "extends": "../../../tsconfig.renderer.json",
+  "compilerOptions": {
+    "rootDir": "../"
+  },
+  "include": ["../../client/renderer/**/*", "../../client/shared/**/*"]
+}

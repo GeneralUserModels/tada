@@ -260,8 +260,13 @@ async def rerun_moment(slug: str, request: Request):
 
             moment_title = fm.get("title", slug)
             run_msg = f"Running: {moment_title}"
-            await state.broadcast_activity("moment_run", run_msg, slug=slug)
-            on_round = state.make_round_callback("moment_run", run_msg, slug=slug)
+            effective_frequency = freq_override or fm.get("frequency", "")
+            await state.broadcast_activity(
+                "moment_run", run_msg, slug=slug, frequency=effective_frequency,
+            )
+            on_round = state.make_round_callback(
+                "moment_run", run_msg, slug=slug, frequency=effective_frequency,
+            )
             try:
                 success = await asyncio.to_thread(
                     execute_moment, str(task_path), output_dir, logs_dir, model,
@@ -276,7 +281,6 @@ async def rerun_moment(slug: str, request: Request):
             save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")
 
             if success:
-                effective_frequency = freq_override or fm.get("frequency", "")
                 effective_schedule = sched_override or fm.get("schedule", "")
                 meta_path = Path(output_dir) / "meta.json"
                 meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}

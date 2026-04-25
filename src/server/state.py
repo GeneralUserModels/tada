@@ -73,6 +73,7 @@ class ServerState:
         slug: str | None = None,
         num_turns: int | None = None,
         max_turns: int | None = None,
+        frequency: str | None = None,
     ):
         """Set or clear a single agent's activity. Pass message=None to clear."""
         if message:
@@ -84,6 +85,8 @@ class ServerState:
             }
             if slug is not None:
                 info["slug"] = slug
+            if frequency is not None:
+                info["frequency"] = frequency
             self.active_agents[agent] = info
         else:
             self.active_agents.pop(agent, None)
@@ -93,10 +96,12 @@ class ServerState:
             "slug": slug,
             "num_turns": num_turns,
             "max_turns": max_turns,
+            "frequency": frequency,
         })
 
     def make_round_callback(
-        self, agent: str, message: str, *, slug: str | None = None,
+        self, agent: str, message: str, *,
+        slug: str | None = None, frequency: str | None = None,
     ) -> Callable[[int, int], None]:
         """Build a thread-safe callback that broadcasts round progress for (agent, message).
 
@@ -109,7 +114,7 @@ class ServerState:
         def on_round(num_turns: int, max_turns: int) -> None:
             asyncio.run_coroutine_threadsafe(
                 self.broadcast_activity(
-                    agent, message, slug=slug,
+                    agent, message, slug=slug, frequency=frequency,
                     num_turns=num_turns, max_turns=max_turns,
                 ),
                 loop,

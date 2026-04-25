@@ -208,8 +208,12 @@ async def run_moments_scheduler(state) -> None:
                     sched_override = slug_state.get("schedule_override") or None
                     moment_title = fm.get("title", slug)
                     run_msg = f"Running: {moment_title}"
-                    await state.broadcast_activity("moment_run", run_msg, slug=slug)
-                    on_round = state.make_round_callback("moment_run", run_msg, slug=slug)
+                    await state.broadcast_activity(
+                        "moment_run", run_msg, slug=slug, frequency=effective_frequency,
+                    )
+                    on_round = state.make_round_callback(
+                        "moment_run", run_msg, slug=slug, frequency=effective_frequency,
+                    )
                     try:
                         success = await asyncio.to_thread(
                             execute_moment, str(md_file), output_dir, logs_dir, model,

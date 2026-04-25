@@ -8,7 +8,7 @@ export const startTraining = () => request("POST", "/api/user_models/training/st
 export const stopTraining = () => request("POST", "/api/user_models/training/stop");
 
 // ── Status / Settings ────────────────────────────────────────
-export const getStatus = () => request("GET", "/api/status");
+export const getStatus = () => request("GET", "/api/status") as Promise<StatusData>;
 export const getSettings = () => request("GET", "/api/settings");
 export const updateSettings = (data: Record<string, unknown>) =>
   request("PUT", "/api/settings", data);
