@@ -138,10 +138,17 @@ async def _run_connector(cfg: ConnectorConfig, log_dir: Path, seen_dir: Path, fi
                 "prediction_event": cfg.prediction_event,
                 "img_path": item.get("screenshot_path") if cfg.prediction_event else None,
             })
+            dense_caption = item.get("dense_caption", "") or ""
             if cfg.prediction_event:
-                await state.broadcast("label", {"text": item.get("summary", "")[:200]})
+                await state.broadcast("label", {
+                    "text": item.get("summary", "")[:200],
+                    "dense_caption": dense_caption,
+                })
             else:
-                await state.broadcast("label", {"text": f"[{cfg.name}] {item.get('summary', '')}"[:200]})
+                await state.broadcast("label", {
+                    "text": f"[{cfg.name}] {item.get('summary', '')}"[:200],
+                    "dense_caption": dense_caption,
+                })
         for item in items:
             seen.add(item["id"])
         _trim_seen(seen)

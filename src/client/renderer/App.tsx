@@ -2,7 +2,7 @@ import React from "react";
 import { useAppContext } from "./context/AppContext";
 import { useFeatureFlag } from "./featureFlags";
 import { Sidebar } from "./components/Sidebar";
-import { ConnectorsView } from "./components/views/ConnectorsView";
+import { ActivityLogView } from "./components/views/ActivityLogView";
 import { UserModelView } from "./components/views/UserModelView";
 import { SettingsView } from "./components/views/SettingsView";
 import { TadaView } from "./components/views/TadaView";
@@ -42,7 +42,7 @@ export function App() {
             onDismiss={() => dispatch({ type: "UPDATE_DISMISSED" })}
           />
         )}
-        {state.activeView === "connectors" && <ConnectorsView />}
+        {state.activeView === "activity" && <ActivityLogView />}
         {state.activeView === "tada" && momentsEnabled && <TadaView />}
         {state.activeView === "memex" && memoryEnabled && <MemexView />}
         {state.activeView === "seeker" && seekerEnabled && <SeekerView />}

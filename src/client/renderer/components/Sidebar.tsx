@@ -17,11 +17,11 @@ const AGENTS_FOR_VIEW: Partial<Record<ActiveView, string[]>> = {
 
 const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
   {
-    view: "connectors",
-    label: "Connectors",
+    view: "activity",
+    label: "Activity",
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M6 2v3H3v6h3v3h4v-3h3V5h-3V2H6z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+        <path d="M3 3.5h10M3 8h10M3 12.5h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
       </svg>
     ),
   },

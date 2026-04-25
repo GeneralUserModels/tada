@@ -1,9 +1,10 @@
 /** Shared SSE client factory — used by both main and renderer processes. */
 
-export type EventHandler = (data: Record<string, unknown>) => void;
+export type EventHandler<T = Record<string, unknown>> = (data: T) => void;
 
 export interface SSEClient {
-  on: (event: string, handler: EventHandler) => void;
+  /** Subscribe to an SSE event. Pass a type parameter to type the payload at the call site. */
+  on: <T = Record<string, unknown>>(event: string, handler: EventHandler<T>) => void;
   connect: () => void;
   disconnect: () => void;
   isConnected: () => boolean;
@@ -17,12 +18,13 @@ interface SSEClientOptions {
 
 export function createSSEClient(opts: SSEClientOptions): SSEClient {
   let es: InstanceType<typeof EventSource> | null = null;
+  // Stored as the loose handler type; on() narrows for callers via generics.
   const handlers: Map<string, EventHandler[]> = new Map();
   let connected = false;
 
-  function on(event: string, handler: EventHandler) {
+  function on<T = Record<string, unknown>>(event: string, handler: EventHandler<T>) {
     if (!handlers.has(event)) handlers.set(event, []);
-    handlers.get(event)!.push(handler);
+    handlers.get(event)!.push(handler as EventHandler);
   }
 
   function connect() {

@@ -6,6 +6,7 @@ interface AgentActivity {
   agent: string;
   message: string | null;
   slug?: string | null;
+  frequency?: string | null;
   num_turns?: number | null;
   max_turns?: number | null;
 }
@@ -47,6 +48,7 @@ interface TrainingStepData {
 interface LabelData {
   count: number;
   text: string;
+  dense_caption?: string;
 }
 
 interface UpdateData {
