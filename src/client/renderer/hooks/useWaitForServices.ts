@@ -14,7 +14,6 @@ const EMPTY: ServicesStatus = {
 };
 
 const POLL_INTERVAL_MS = 500;
-const DEFAULT_TIMEOUT_MS = 60_000;
 
 export type UseWaitForServicesOpts = {
   // Don't start polling until the renderer has actually wired up to the
@@ -25,7 +24,6 @@ export type UseWaitForServicesOpts = {
   // before polling. The dashboard's BootGate leaves it false — for returning
   // users the lifespan handler has already kicked start_services.
   finalize?: boolean;
-  timeoutMs?: number;
 };
 
 /**
@@ -34,60 +32,65 @@ export type UseWaitForServicesOpts = {
  *
  * Used by both the onboarding "Getting ready" step and the dashboard
  * BootGate so there's a single definition of "system is calm enough to use".
+ *
+ * There is intentionally no timeout / error path: cold boot of init_model +
+ * connectors can legitimately take a couple of minutes, and the only useful
+ * thing we can tell the user is "keep waiting". Surfacing a "try again"
+ * button just punishes the user for a slow machine.
  */
 export function useWaitForServices({
   enabled,
   finalize = false,
-  timeoutMs = DEFAULT_TIMEOUT_MS,
 }: UseWaitForServicesOpts) {
   const [status, setStatus] = useState<ServicesStatus>(EMPTY);
   const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!enabled || ready) return;
     let cancelled = false;
     let timer: number | null = null;
-    setError(null);
     setStatus(EMPTY);
 
-    const startedAt = Date.now();
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => {
+        timer = window.setTimeout(resolve, ms);
+      });
+
     const poll = async () => {
-      try {
-        const next = await getServicesStatus();
-        if (cancelled) return;
-        setStatus(next);
-        if (
-          next.services_started &&
-          next.tabracadabra_ready &&
-          next.screen_frame_fresh
-        ) {
-          setReady(true);
-          return;
+      while (!cancelled) {
+        try {
+          const next = await getServicesStatus();
+          if (cancelled) return;
+          setStatus(next);
+          if (
+            next.services_started &&
+            next.tabracadabra_ready &&
+            next.screen_frame_fresh
+          ) {
+            setReady(true);
+            return;
+          }
+        } catch {
+          // Server is probably still warming up — keep polling.
         }
-      } catch {
-        // Server is probably still warming up — keep polling, only the
-        // wall-clock timeout surfaces an error.
+        await sleep(POLL_INTERVAL_MS);
       }
-      if (Date.now() - startedAt > timeoutMs) {
-        setError(
-          "Things are taking longer than expected. Make sure screen recording is granted, then try again.",
-        );
-        return;
-      }
-      timer = window.setTimeout(poll, POLL_INTERVAL_MS);
     };
 
     (async () => {
       if (finalize) {
-        try {
-          await finalizeOnboarding();
-        } catch (e) {
-          if (cancelled) return;
-          console.error("[boot] finalize failed", e);
-          setError("Couldn't start services. Please try again.");
-          return;
+        // Retry finalize until the server accepts it. Same philosophy as the
+        // poll loop: a transient failure shouldn't wedge the user on an
+        // error screen.
+        while (!cancelled) {
+          try {
+            await finalizeOnboarding();
+            break;
+          } catch (e) {
+            if (cancelled) return;
+            console.error("[boot] finalize failed, retrying", e);
+            await sleep(POLL_INTERVAL_MS);
+          }
         }
       }
       if (!cancelled) poll();
@@ -97,12 +100,7 @@ export function useWaitForServices({
       cancelled = true;
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [enabled, attempt, finalize, timeoutMs, ready]);
+  }, [enabled, finalize, ready]);
 
-  const retry = () => {
-    setReady(false);
-    setAttempt((n) => n + 1);
-  };
-
-  return { status, ready, error, retry };
+  return { status, ready };
 }

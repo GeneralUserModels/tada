@@ -11,6 +11,10 @@ type TutorialPage = {
   description: string;
   placeholder: string;
   hint: string;
+  // Pre-filled body so the user can immediately press Option+Tab and watch
+  // the autocomplete continue from a sensible jumping-off point, instead of
+  // staring at a blank box trying to think of something to type.
+  initialText?: string;
 };
 
 // The textarea here is just a focused playground. The real TabracadabraService
@@ -24,6 +28,7 @@ const TUTORIALS: TutorialPage[] = [
     placeholder:
       "Type a few sentences here, then press Option + Tab to keep going.",
     hint: "Tabracadabra picks up where you left off.",
+    initialText: "Here's what I've been up to: ",
   },
   {
     title: "You can prompt it too",
@@ -32,6 +37,10 @@ const TUTORIALS: TutorialPage[] = [
     placeholder:
       "Try: 'rewrite this in pirate speak' or 'summarize the meeting in three bullets'. Then press Option + Tab.",
     hint: "Tabracadabra responds to instructions, not just autocomplete.",
+    // Trailing newlines so the textarea reads as a question with the cursor
+    // sitting on a fresh line below — visually a prompt, ready for the
+    // Option+Tab response to drop right in.
+    initialText: "who is gollum? \n\n",
   },
 ];
 
@@ -39,17 +48,21 @@ export function TabracadabraStep({ onBack, onContinue, isFinal = true }: Props) 
   const [tutorialStep, setTutorialStep] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const tutorial = TUTORIALS[tutorialStep];
+
   // Reset focus when the user flips between sub-steps so they can keep typing
   // immediately. The textarea is uncontrolled (the real event tap writes to it
-  // directly), so we just clear the value and refocus.
+  // directly), so we just (re)seed the value and refocus, dropping the cursor
+  // at the end so Option+Tab continues from the seed text.
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.value = "";
+    const seed = tutorial.initialText ?? "";
+    el.value = seed;
     el.focus();
-  }, [tutorialStep]);
-
-  const tutorial = TUTORIALS[tutorialStep];
+    const end = seed.length;
+    el.setSelectionRange(end, end);
+  }, [tutorialStep, tutorial.initialText]);
 
   const handleBack = () => {
     if (tutorialStep > 0) {

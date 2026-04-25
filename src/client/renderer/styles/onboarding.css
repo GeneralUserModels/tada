@@ -459,6 +459,72 @@ button, input, select, textarea, a {
   animation: onb-spin 0.8s linear infinite;
   flex-shrink: 0;
 }
+
+/* ── Boot progress (shared with BootGate via BootProgress.tsx) ── */
+
+.boot-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.boot-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(var(--sage-rgb), 0.18);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.boot-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--sage);
+  border-radius: 999px;
+  transition: width 220ms linear;
+}
+
+.boot-progress-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.boot-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  transition: opacity 0.2s, color 0.2s;
+}
+
+.boot-progress-item.done {
+  color: var(--text);
+  opacity: 1;
+}
+
+.boot-progress-marker {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sage);
+}
+
+.boot-progress-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(var(--sage-rgb), 0.2);
+  border-top-color: var(--sage);
+  border-radius: 50%;
+  animation: onb-spin 0.8s linear infinite;
+}
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
