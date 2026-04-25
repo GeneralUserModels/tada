@@ -33,13 +33,18 @@ SETTINGS_API_FIELDS: frozenset[str] = frozenset({
     "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
     "agent_model", "agent_api_key",
     "feature_flags",
+    # Persisted directly via PUT /api/settings during onboarding (and by the
+    # connector toggle UI later). The settings UI does not surface this field —
+    # it's allowlisted there explicitly — so exposing it here just gives the
+    # onboarding flow a single, idempotent write path.
+    "enabled_connectors",
 })
 
 # All fields that are user-settable and persisted to disk.
 # Superset of SETTINGS_API_FIELDS — includes internal fields not shown in the UI.
 _PERSISTED_FIELDS = SETTINGS_API_FIELDS | {
     "model_type",
-    "enabled_connectors", "connector_errors", "mcp_connectors",
+    "connector_errors", "mcp_connectors",
     "onboarding_complete", "onboarding_steps_seen",
     "memory_enabled", "memory_agent_model", "memory_agent_api_key", "memory_schedule",
     "tada_dir", "moments_agent_model", "moments_agent_api_key", "moments_discovery_schedule", "moments_enabled",
@@ -190,7 +195,7 @@ class ServerConfig(BaseModel):
     # Community / custom MCP connectors added by the user
     mcp_connectors: list[MCPConnectorDef] = Field(default_factory=list)
 
-    # Onboarding completion flag (set by POST /api/onboarding/complete)
+    # Onboarding completion flag (set by POST /api/onboarding/finalize)
     onboarding_complete: bool = False
 
     # Step IDs the user has finished in any onboarding run. Used to detect

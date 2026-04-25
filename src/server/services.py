@@ -54,6 +54,26 @@ async def start_services(state: ServerState) -> None:
     await state.connectors_ready.wait()
     state.services_started = True
 
+    # Tabracadabra event tap service (macOS only). The event tap itself doesn't
+    # depend on the predictor, so we bring it up here — long before init_model
+    # — so the onboarding "Getting ready" step can advance without waiting for
+    # the (potentially slow) trainer init. The prediction loop, which does need
+    # the predictor, is started later below.
+    if sys.platform == "darwin" and is_enabled(state.config, "tabracadabra") and state.config.tabracadabra_enabled:
+        try:
+            from apps.tabracadabra.main import TabracadabraService, load_prompt
+
+            config = {
+                "model": state.config.tabracadabra_model,
+                "api_key": state.config.resolve_api_key("tabracadabra_api_key"),
+                "tada_base_url": f"http://localhost:{os.environ.get('TADA_PORT', '8000')}",
+            }
+            service = TabracadabraService(config=config, prompt_text=load_prompt())
+            service.start()
+            state.tabracadabra_service = service
+        except Exception:
+            logger.warning("Tabracadabra service failed to start", exc_info=True)
+
     # Memory wiki service
     if is_enabled(state.config, "memory") and state.config.memory_enabled:
         from apps.memory.service import run_memory_service
@@ -76,21 +96,8 @@ async def start_services(state: ServerState) -> None:
     state.model.training_task = asyncio.create_task(run_training_service(state))
     logger.info("Training service started (%s mode)", state.config.model_type)
 
-    # Tabracadabra event tap service (macOS only)
-    if sys.platform == "darwin" and is_enabled(state.config, "tabracadabra") and state.config.tabracadabra_enabled:
+    # Prediction loop depends on the predictor created by init_model.
+    if state.tabracadabra_service is not None:
         state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
-        try:
-            from apps.tabracadabra.main import TabracadabraService, load_prompt
-
-            config = {
-                "model": state.config.tabracadabra_model,
-                "api_key": state.config.resolve_api_key("tabracadabra_api_key"),
-                "tada_base_url": f"http://localhost:{os.environ.get('TADA_PORT', '8000')}",
-            }
-            service = TabracadabraService(config=config, prompt_text=load_prompt())
-            service.start()
-            state.tabracadabra_service = service
-        except Exception:
-            logger.warning("Tabracadabra service failed to start", exc_info=True)
 
     logger.info("Tada server started")

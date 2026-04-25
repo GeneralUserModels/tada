@@ -7,6 +7,7 @@ import { WelcomeStep } from "./steps/WelcomeStep";
 import { WhatsNewStep } from "./steps/WhatsNewStep";
 import { GoogleSignInStep } from "./steps/GoogleSignInStep";
 import { ConnectorsStep } from "./steps/ConnectorsStep";
+import { GettingReadyStep } from "./steps/GettingReadyStep";
 import { TabracadabraStep } from "./steps/TabracadabraStep";
 import { TadasStep } from "./steps/TadasStep";
 import { MemexStep } from "./steps/MemexStep";
@@ -25,6 +26,7 @@ import {
   updateSettings,
   completeOnboarding,
   getOnboardingStatus,
+  getServicesStatus,
   getGoogleConnectorStatus,
   getOutlookConnectorStatus,
 } from "../../api/client";
@@ -127,7 +129,7 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
 
     let cancelled = false;
     (async () => {
-      const [settings, status, user] = await Promise.all([
+      const [settings, status, user, services] = await Promise.all([
         getSettings().catch(() => ({} as Record<string, unknown>)),
         getOnboardingStatus().catch(() => ({
           complete: false,
@@ -135,6 +137,11 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           enabled_connectors: [] as string[],
         })),
         getGoogleUser().catch(() => null),
+        getServicesStatus().catch(() => ({
+          services_started: false,
+          tabracadabra_ready: false,
+          screen_frame_fresh: false,
+        })),
       ]);
       if (cancelled) return;
 
@@ -153,6 +160,12 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           typeof (settings as Record<string, unknown>).default_llm_api_key === "string" &&
           ((settings as Record<string, unknown>).default_llm_api_key as string).length > 0,
         onboardingComplete: status.complete,
+        // Treat "all three green" as "ready" — matches GettingReadyStep's
+        // advance condition so returning users skip the spool wait entirely.
+        servicesReady:
+          services.services_started &&
+          services.tabracadabra_ready &&
+          services.screen_frame_fresh,
       };
       const pending = pendingSteps(state);
 
@@ -303,19 +316,24 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
 
   const saveSettings = () => updateSettings(buildSettings());
 
-  const handleSubmit = async () => {
-    // Settings are saved in ModelsKeysStep.onFinish when that step is visited.
-    // Saving here would wipe persisted keys when models_keys was skipped,
-    // since the local state variables are never populated with existing values.
+  // When the user advances past the connectors step, snapshot every connector
+  // they've granted/connected and persist it via PUT /api/settings. This is
+  // the single write path for enabled_connectors during onboarding — finalize
+  // (called later by GettingReadyStep) is body-less and just flips the
+  // onboarding_complete flag + kicks start_services.
+  const handleConnectorsContinue = async () => {
     const enabled: string[] = [];
     if (screenGranted) enabled.push("screen");
     if (calendarConnected) enabled.push("calendar");
     if (gmailConnected) enabled.push("gmail");
-    if (outlookConnected) { enabled.push("outlook_email"); enabled.push("outlook_calendar"); }
+    if (outlookConnected) {
+      enabled.push("outlook_email");
+      enabled.push("outlook_calendar");
+    }
     if (notifAvailable) enabled.push("notifications");
-    // Re-check per-folder TCC grants here since SubPermissionRow owns
-    // that state. Any one folder being granted is enough to enable the
-    // connector — the watcher tolerates the others being denied.
+    // Re-check per-folder TCC grants here since SubPermissionRow owns that
+    // state. Any one folder being granted is enough to enable the connector —
+    // the watcher tolerates the others being denied.
     const folderGrants = await Promise.all([
       window.tada.checkConnectorPermission("folder_desktop"),
       window.tada.checkConnectorPermission("folder_documents"),
@@ -328,11 +346,28 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
     if (micGranted) enabled.push("microphone");
     if (sysAudioGranted) enabled.push("system_audio");
 
+    try {
+      await updateSettings({ enabled_connectors: enabled });
+    } catch (e) {
+      // Don't block advance on a transient settings write failure — finalize
+      // will surface a "Try again" if start_services can't bring the screen
+      // recorder up. Logging here so we have something in the console.
+      console.error("[onboarding] failed to persist enabled_connectors", e);
+    }
+    advance(step);
+  };
+
+  const handleSubmit = async () => {
+    // By the time we reach the final tutorial page, everything heavy has
+    // already been persisted: connectors via PUT /api/settings on the
+    // connectors step, model + API keys via ModelsKeysStep.onFinish, and
+    // onboarding_complete via /api/onboarding/finalize on getting_ready. All
+    // that's left is recording which intro pages the user actually saw.
     const seenIntros = (visibleSteps ?? [])
       .filter((s) => s.type === "intro" && s.id !== WHATS_NEW_STEP.id)
       .map((s) => s.id);
 
-    await completeOnboarding(enabled, seenIntros);
+    await completeOnboarding(seenIntros);
     window.tada.onboardingComplete();
   };
 
@@ -437,7 +472,7 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           connectingGoogle={connectingGoogle}
           connectingOutlook={connectingOutlook}
           onBack={() => goBack(step)}
-          onContinue={() => advance(step)}
+          onContinue={handleConnectorsContinue}
           onOpenPermissionModal={openPermissionModal}
           onConnectGoogle={handleConnectGoogle}
           onConnectOutlook={handleConnectOutlook}
@@ -479,6 +514,10 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           onBack={() => goBack(step)}
           onFinish={() => { saveSettings(); advance(step); }}
         />
+      )}
+
+      {currentId === "getting_ready" && (
+        <GettingReadyStep onContinue={() => advance(step)} />
       )}
 
       {currentId === "tabracadabra" && (

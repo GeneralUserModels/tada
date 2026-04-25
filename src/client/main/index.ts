@@ -62,6 +62,10 @@ function readOnboardingState(): { needed: boolean; mode: "first" | "returning" }
     enabledConnectors: Array.isArray(cfg.enabled_connectors) ? cfg.enabled_connectors as string[] : [],
     hasLlmApiKey: typeof cfg.default_llm_api_key === "string" && cfg.default_llm_api_key.length > 0,
     onboardingComplete: cfg.onboarding_complete === true,
+    // The main process can't probe live service status; treat onboardingComplete
+    // as a good proxy here (the lifespan auto-starts services on next boot).
+    // The renderer re-evaluates with a real /api/services/status call.
+    servicesReady: cfg.onboarding_complete === true,
   };
   return {
     needed: pendingSteps(state).length > 0,

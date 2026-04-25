@@ -11,7 +11,6 @@ from server.state import ServerState
 from server.routes import settings, status, events
 from server.routes.auth import router as auth_router
 from server.routes.onboarding import router as onboarding_router
-from server.routes.completions import router as completions_router
 from connectors.routes import router as connectors_router
 from user_models.routes import router as user_models_router
 from server.services import start_services, _log_startup_failure
@@ -110,7 +109,6 @@ def create_app() -> FastAPI:
     # Register REST + SSE routes
     app.include_router(auth_router)
     app.include_router(onboarding_router)
-    app.include_router(completions_router)
     app.include_router(connectors_router)
     app.include_router(memory_router)
     app.include_router(moments_router)
