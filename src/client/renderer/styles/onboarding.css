@@ -302,6 +302,26 @@ button, input, select, textarea, a {
   transition: background 0.15s;
 }
 .connector-row:hover { background: rgba(var(--sage-rgb), 0.04); }
+.sub-connector-row { padding-top: 4px; padding-bottom: 4px; }
+.sub-connector-row .connector-name { font-size: 12px; }
+.sub-connector-row .connector-desc { font-size: 10.5px; }
+
+/* Toggle row that expands the optional connectors below the required ones. */
+.connector-expander {
+  background: transparent;
+  border: none;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.connector-expander .connector-icon {
+  background: transparent;
+  color: var(--text-tertiary);
+}
+.connector-expander .connector-name { font-weight: 500; color: var(--text-tertiary); }
 .connector-icon {
   width: 28px; height: 28px;
   border-radius: 6px;

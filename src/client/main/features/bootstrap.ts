@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as crypto from "crypto";
 import * as path from "path";
 import * as https from "https";
-import { getDataDir, getUvPath, getRgPath, getPythonPath, getPythonSrcDir, getUvPythonInstallDir } from "../paths";
+import { getDataDir, getUvPath, getRgPath, getPythonPath, getPythonSrcDir, getUvPythonInstallDir, getPlaywrightBrowsersDir } from "../paths";
 
 type ProgressCallback = (msg: string, pct: number) => void;
 type LogCallback = (line: string) => void;
@@ -209,6 +209,18 @@ export async function run(onProgress: ProgressCallback, onLog?: LogCallback): Pr
     "-r", reqPath,
     "--python", pythonPath,
   ], onLog, uvEnv);
+
+  // Step 4b: Install Playwright's Chromium binaries. The `playwright` PyPI
+  // wheel doesn't bundle browsers (~170MB); they're fetched separately and
+  // each playwright version pins a specific Chromium build. We pin the
+  // download to an app-local dir (same reason as `UV_PYTHON_INSTALL_DIR`) so
+  // clearing `~/Library/Caches/ms-playwright` or another `playwright`
+  // version landing in that global cache can't break us.
+  onProgress("Installing Chromium for browser tools...", 80);
+  const playwrightBrowsersDir = getPlaywrightBrowsersDir();
+  fs.mkdirSync(playwrightBrowsersDir, { recursive: true });
+  const playwrightEnv = { PLAYWRIGHT_BROWSERS_PATH: playwrightBrowsersDir };
+  await runCommand(pythonPath, ["-m", "playwright", "install", "chromium"], onLog, playwrightEnv);
 
   // Step 5: Write sentinel
   onProgress("Finalizing setup...", 95);

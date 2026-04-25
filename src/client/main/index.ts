@@ -14,7 +14,7 @@ import { spawn, ChildProcess } from "child_process";
 import { IPC } from "./ipc";
 import * as api from "./api";
 import * as sse from "./sse";
-import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogleTokenPath, getOutlookTokenPath } from "./paths";
+import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogleTokenPath, getOutlookTokenPath, getPlaywrightBrowsersDir } from "./paths";
 import * as bootstrap from "./features/bootstrap";
 import { runOnboarding, getOnboardingWindow } from "./features/onboarding";
 import { setupConnectorIpc } from "./connectors/manager";
@@ -128,6 +128,9 @@ function startServer(port: number): void {
         // the writable data dir instead.
         PYTHONPYCACHEPREFIX: path.join(getDataDir(), "pycache"),
         PYTHONDONTWRITEBYTECODE: "1",
+        // Pin Playwright to the app-local browsers dir installed in
+        // bootstrap. Must match the path used at install time.
+        PLAYWRIGHT_BROWSERS_PATH: getPlaywrightBrowsersDir(),
       },
     });
   }

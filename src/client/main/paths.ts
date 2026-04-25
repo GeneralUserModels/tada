@@ -47,6 +47,21 @@ export function getUvPythonInstallDir(): string {
   return path.join(getDataDir(), "uv-python");
 }
 
+/**
+ * Directory where Playwright stores downloaded browser binaries (~170MB
+ * Chromium). Kept inside the app's data dir for the same reason as the uv
+ * Python install dir: another app/tool clearing `~/Library/Caches/ms-playwright`,
+ * or a different `playwright` version landing in the same global cache, would
+ * otherwise silently break our `browser_navigate` tool.
+ *
+ * Both `bootstrap.ts` (install) and `index.ts` (server spawn) export this
+ * path as `PLAYWRIGHT_BROWSERS_PATH` so install-time and runtime resolve to
+ * the same location.
+ */
+export function getPlaywrightBrowsersDir(): string {
+  return path.join(getDataDir(), "playwright-browsers");
+}
+
 export function getLogDir(): string {
   return path.join(getDataDir(), "logs");
 }

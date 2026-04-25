@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { SubPermissionRow } from "./SubPermissionRow";
 
 const CONNECTOR_ICONS: Record<string, JSX.Element> = {
   monitor: (
@@ -54,14 +55,38 @@ const CONNECTOR_ICONS: Record<string, JSX.Element> = {
   ),
 };
 
-export const CONNECTOR_META: Record<string, { label: string; desc: string; icon: string }> = {
+export interface ConnectorMeta {
+  label: string;
+  desc: string;
+  icon: string;
+  /**
+   * Optional list of OS-level sub-permissions to surface as indented rows
+   * beneath the parent connector. Used by `filesystem` to expose the
+   * separate Desktop/Documents/Downloads TCC grants without duplicating
+   * the connector itself.
+   */
+  subPermissions?: { key: string; label: string; desc?: string }[];
+}
+
+export const FILESYSTEM_SUB_PERMISSIONS = [
+  { key: "folder_desktop",   label: "Desktop folder",   desc: "Watch for new files on your Desktop" },
+  { key: "folder_documents", label: "Documents folder", desc: "Watch for new files in Documents" },
+  { key: "folder_downloads", label: "Downloads folder", desc: "Watch for new files in Downloads" },
+];
+
+export const CONNECTOR_META: Record<string, ConnectorMeta> = {
   screen:           { label: "Screen Recording",  desc: "Captures your screen to observe workflow",       icon: "monitor" },
   calendar:         { label: "Google Calendar",    desc: "Read your upcoming events for context",          icon: "calendar" },
   gmail:            { label: "Gmail",              desc: "Read recent emails for context",                 icon: "mail" },
   outlook_calendar: { label: "Outlook Calendar",   desc: "Read your upcoming Outlook events for context",  icon: "calendar" },
   outlook_email:    { label: "Outlook Email",      desc: "Read recent Outlook emails for context",         icon: "mail" },
   notifications:    { label: "Notifications",      desc: "Read macOS notification history",                icon: "bell" },
-  filesystem:       { label: "Filesystem",         desc: "Watch Desktop, Documents, Downloads",            icon: "folder" },
+  filesystem:       {
+    label: "Filesystem",
+    desc: "Watch Desktop, Documents, Downloads",
+    icon: "folder",
+    subPermissions: FILESYSTEM_SUB_PERMISSIONS,
+  },
   microphone:       { label: "Microphone",         desc: "Transcribe speech from your microphone",         icon: "microphone" },
   system_audio:     { label: "System Audio",       desc: "Transcribe system audio output",                 icon: "speaker" },
 };
@@ -227,24 +252,43 @@ export function ConnectorItem({
     );
   }
 
+  // Sub-permissions only render when the connector is actually on; if the
+  // user has the connector toggled off there's no point asking them to
+  // grant per-folder TCC access.
+  const showSubPermissions = !!meta.subPermissions && info.enabled && !info.error;
+
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderRadius: 8 }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center",
-        justifyContent: "center", background: "rgba(199,234,187,0.3)", color: "#84B179", flexShrink: 0,
-      }}>
-        {icon}
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderRadius: 8 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center",
+          justifyContent: "center", background: "rgba(199,234,187,0.3)", color: "#84B179", flexShrink: 0,
+        }}>
+          {icon}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600 }}>{meta.label}</div>
+          <div style={{ fontSize: 11, color: "#9BA896" }}>{meta.desc}</div>
+          {info.error && (
+            <div style={{ fontSize: 10, color: "#C9594B", marginTop: 2 }}>{info.error}</div>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {action}
+        </div>
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{meta.label}</div>
-        <div style={{ fontSize: 11, color: "#9BA896" }}>{meta.desc}</div>
-        {info.error && (
-          <div style={{ fontSize: 10, color: "#C9594B", marginTop: 2 }}>{info.error}</div>
-        )}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-        {action}
-      </div>
+      {showSubPermissions && (
+        <div style={{ paddingBottom: 6 }}>
+          {meta.subPermissions!.map((sub) => (
+            <SubPermissionRow
+              key={sub.key}
+              permissionKey={sub.key}
+              label={sub.label}
+              variant="list"
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

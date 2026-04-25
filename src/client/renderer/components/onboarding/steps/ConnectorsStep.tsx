@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
+import { SubPermissionRow } from "../../connectors/SubPermissionRow";
+import { FILESYSTEM_SUB_PERMISSIONS } from "../../connectors/ConnectorItem";
 
 type Props = {
   flag: (name: string) => boolean;
@@ -27,12 +29,6 @@ type Props = {
   setMicGranted: (v: boolean) => void;
   sysAudioGranted: boolean;
   setSysAudioGranted: (v: boolean) => void;
-  desktopGranted: boolean;
-  setDesktopGranted: (v: boolean) => void;
-  documentsGranted: boolean;
-  setDocumentsGranted: (v: boolean) => void;
-  downloadsGranted: boolean;
-  setDownloadsGranted: (v: boolean) => void;
 };
 
 export function ConnectorsStep(props: Props) {
@@ -41,6 +37,23 @@ export function ConnectorsStep(props: Props) {
     || !props.accessibilityGranted
     || (props.flag("permission_browser_cookies") && !props.browserCookiesGranted)
   );
+
+  const [showOptional, setShowOptional] = useState(false);
+
+  // How many optional rows we'd show if expanded — used to label the
+  // expander and to suppress it entirely when nothing optional is gated on.
+  const hasMicrophone = props.flag("permission_microphone");
+  const hasSystemAudio = props.flag("permission_system_audio");
+  const hasGoogle = props.flag("connector_gmail") || props.flag("connector_calendar");
+  const hasOutlook = props.flag("connector_outlook_email") || props.flag("connector_outlook_calendar");
+  const hasDiskAccess = props.flag("permission_disk_access");
+  const optionalCount =
+    (hasMicrophone ? 1 : 0) +
+    (hasSystemAudio ? 1 : 0) +
+    (hasGoogle ? 1 : 0) +
+    (hasOutlook ? 1 : 0) +
+    (hasDiskAccess ? 2 : 0);
+  const hasOptional = optionalCount > 0;
 
   return (
     <div className="page active page--scroll">
@@ -101,7 +114,31 @@ export function ConnectorsStep(props: Props) {
             </div>
           )}
 
-          {props.flag("permission_microphone") && (
+          {hasOptional && (
+            <button
+              type="button"
+              className="connector-row connector-expander"
+              onClick={() => setShowOptional((s) => !s)}
+              aria-expanded={showOptional}
+            >
+              <div className="connector-icon">
+                <svg
+                  width="14" height="14" viewBox="0 0 16 16" fill="none"
+                  style={{ transform: showOptional ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}
+                >
+                  <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              <div className="connector-info">
+                <div className="connector-name">Optional connectors</div>
+                <div className="connector-desc">
+                  {showOptional ? "Hide" : "Show"} {optionalCount} more data source{optionalCount === 1 ? "" : "s"}
+                </div>
+              </div>
+            </button>
+          )}
+
+          {showOptional && hasMicrophone && (
             <div className="connector-row">
               <div className="connector-icon">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="6" y="1" width="4" height="8" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M4 7a4 4 0 008 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M8 11v3M6 14h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
@@ -119,7 +156,7 @@ export function ConnectorsStep(props: Props) {
             </div>
           )}
 
-          {props.flag("permission_system_audio") && (
+          {showOptional && hasSystemAudio && (
             <div className="connector-row">
               <div className="connector-icon">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 5.5h2.5L8 2v12l-3.5-3.5H2a1 1 0 01-1-1v-3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M11 5.5a3.5 3.5 0 010 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M13 3.5a6.5 6.5 0 010 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
@@ -137,13 +174,13 @@ export function ConnectorsStep(props: Props) {
             </div>
           )}
 
-          {(props.flag("permission_microphone") || props.flag("permission_system_audio")) && (
+          {showOptional && (hasMicrophone || hasSystemAudio) && (
             <p className="connector-hint">
               Audio is only used when you hit record for meeting notes.
             </p>
           )}
 
-          {(props.flag("connector_gmail") || props.flag("connector_calendar")) && (
+          {showOptional && hasGoogle && (
             <div className="connector-row">
               <div className="connector-icon">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.3"/><path d="M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
@@ -161,7 +198,7 @@ export function ConnectorsStep(props: Props) {
             </div>
           )}
 
-          {(props.flag("connector_outlook_email") || props.flag("connector_outlook_calendar")) && (
+          {showOptional && hasOutlook && (
             <div className="connector-row">
               <div className="connector-icon">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6.5h12" stroke="currentColor" strokeWidth="1.3"/><path d="M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
@@ -179,7 +216,7 @@ export function ConnectorsStep(props: Props) {
             </div>
           )}
 
-          {props.flag("permission_disk_access") && (
+          {showOptional && hasDiskAccess && (
             <>
               <div className="connector-row">
                 <div className="connector-icon">
@@ -202,48 +239,21 @@ export function ConnectorsStep(props: Props) {
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
                 </div>
                 <div className="connector-info">
-                  <div className="connector-name">Desktop folder</div>
-                  <div className="connector-desc">Watch for new files on your Desktop</div>
+                  <div className="connector-name">Filesystem</div>
+                  <div className="connector-desc">Watch Desktop, Documents, Downloads</div>
                 </div>
-                <div className="connector-action">
-                  {props.desktopGranted
-                    ? <span className="perm-badge granted">Granted</span>
-                    : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("folder_desktop", () => props.setDesktopGranted(true))}>Grant Access</button>
-                  }
-                </div>
+                <div className="connector-action" />
               </div>
-
-              <div className="connector-row">
-                <div className="connector-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-                </div>
-                <div className="connector-info">
-                  <div className="connector-name">Documents folder</div>
-                  <div className="connector-desc">Watch for new files in Documents</div>
-                </div>
-                <div className="connector-action">
-                  {props.documentsGranted
-                    ? <span className="perm-badge granted">Granted</span>
-                    : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("folder_documents", () => props.setDocumentsGranted(true))}>Grant Access</button>
-                  }
-                </div>
-              </div>
-
-              <div className="connector-row">
-                <div className="connector-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5V13a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H7.5L6 3H3a1 1 0 00-1 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-                </div>
-                <div className="connector-info">
-                  <div className="connector-name">Downloads folder</div>
-                  <div className="connector-desc">Watch for new files in Downloads</div>
-                </div>
-                <div className="connector-action">
-                  {props.downloadsGranted
-                    ? <span className="perm-badge granted">Granted</span>
-                    : <button className="btn btn-outline btn-sm" onClick={() => props.onOpenPermissionModal("folder_downloads", () => props.setDownloadsGranted(true))}>Grant Access</button>
-                  }
-                </div>
-              </div>
+              {FILESYSTEM_SUB_PERMISSIONS.map((sub) => (
+                <SubPermissionRow
+                  key={sub.key}
+                  permissionKey={sub.key}
+                  label={sub.label}
+                  desc={sub.desc}
+                  variant="card"
+                  onRequest={() => props.onOpenPermissionModal(sub.key, () => {})}
+                />
+              ))}
             </>
           )}
         </div>

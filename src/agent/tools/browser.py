@@ -4,11 +4,16 @@ All Playwright operations run on a dedicated thread since Playwright's sync API
 is greenlet-bound and cannot be used from arbitrary threads (e.g. subagent threads).
 """
 
+import asyncio
+import subprocess
+import sys
 import tempfile
 import threading
 from pathlib import Path
 from queue import Queue
 from urllib.parse import urlparse
+
+from playwright.sync_api import Error as PWError, sync_playwright
 
 from .base_tool import BaseTool
 
@@ -34,7 +39,6 @@ class BrowserManager:
 
     def _run_loop(self):
         """Dedicated thread: process browser commands sequentially."""
-        import asyncio
         asyncio.set_event_loop(None)
         while True:
             fn, args, result_q = self._queue.get()
@@ -55,12 +59,48 @@ class BrowserManager:
             raise value
         return value
 
+    def _install_chromium(self) -> None:
+        """Self-heal for missing/outdated Chromium binary (~170MB download).
+
+        The `playwright` PyPI wheel doesn't bundle browsers, and each version
+        pins a specific Chromium build — so a fresh dev checkout or a
+        `playwright` upgrade without re-running `playwright install` will hit
+        "Executable doesn't exist" on first launch. Packaged builds normally
+        cover this in `bootstrap.ts`; this is the dev/upgrade fallback.
+        """
+        print("[browser] Chromium binary missing or outdated — running `playwright install chromium` (~170MB, one-time)...")
+        result = subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            timeout=600,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Auto-install failed (exit {result.returncode}). "
+                f"Run manually: {sys.executable} -m playwright install chromium"
+            )
+        print("[browser] Chromium install complete.")
+
     def _ensure_browser(self):
         if self._browser is not None:
             return
-        from playwright.sync_api import sync_playwright
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=True)
+        try:
+            self._browser = self._playwright.chromium.launch(headless=True)
+        except PWError as e:
+            if "Executable doesn't exist" not in str(e):
+                raise
+            # Tear down the driver before retry — some Playwright versions
+            # cache the binary-resolution path inside the running driver, so
+            # a second launch on the same instance still fails even after
+            # the binary is on disk.
+            try:
+                self._playwright.stop()
+            except Exception:
+                pass
+            self._playwright = None
+            self._install_chromium()
+            self._playwright = sync_playwright().start()
+            self._browser = self._playwright.chromium.launch(headless=True)
         self._context = self._browser.new_context(
             viewport={"width": 1280, "height": 720},
             user_agent=(
@@ -72,9 +112,13 @@ class BrowserManager:
         self._page = self._context.new_page()
 
     def _inject_cookies(self, url: str) -> str | None:
-        from pycookiecheat import chrome_cookies
+        # Lazy import: pycookiecheat probes the OS keychain at module-load
+        # time and can fail on headless / non-macOS / no-Chrome systems.
+        # Keeping it deferred means a broken keychain only disables cookie
+        # injection, not the whole browser tool.
         domain = urlparse(url).netloc
         try:
+            from pycookiecheat import chrome_cookies
             cookies = chrome_cookies(url, as_cookies=True)
         except Exception as e:
             return f"Warning: cookie extraction failed for {domain}: {e}"
