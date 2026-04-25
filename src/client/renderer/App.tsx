@@ -8,6 +8,7 @@ import { SettingsView } from "./components/views/SettingsView";
 import { TadaView } from "./components/views/TadaView";
 import { MemexView } from "./components/views/MemexView";
 import { SeekerView } from "./components/views/SeekerView";
+import { ChatAppView } from "./components/views/ChatAppView";
 import { UpdateBanner } from "./components/UpdateBanner";
 
 export function App() {
@@ -15,6 +16,7 @@ export function App() {
   const momentsEnabled = useFeatureFlag("moments");
   const memoryEnabled = useFeatureFlag("memory");
   const seekerEnabled = useFeatureFlag("seeker");
+  const chatEnabled = useFeatureFlag("chat");
 
   const navigate = (view: typeof state.activeView) => {
     dispatch({ type: "NAVIGATE", view });
@@ -46,6 +48,7 @@ export function App() {
         {state.activeView === "tada" && momentsEnabled && <TadaView />}
         {state.activeView === "memex" && memoryEnabled && <MemexView />}
         {state.activeView === "seeker" && seekerEnabled && <SeekerView />}
+        {state.activeView === "chat" && chatEnabled && <ChatAppView />}
         {state.activeView === "usermodel" && <UserModelView />}
         {state.activeView === "settings" && <SettingsView />}
       </main>

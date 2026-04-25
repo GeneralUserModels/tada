@@ -29,12 +29,14 @@ class Agent:
         web_search: bool | dict = False,
         api_key: str | None = None,
         on_round: Callable[[int, int], None] | None = None,
+        on_tool_call: Callable[[str, dict], None] | None = None,
     ):
         self.model = model
         self.api_key = api_key or None
         self.system_prompt = system_prompt
         self.max_rounds = max_rounds
         self.on_round = on_round
+        self.on_tool_call = on_tool_call
         self._compact = compact_tool
         self._bg = bg_manager
         if web_search is True:
@@ -123,7 +125,13 @@ class Agent:
                         args = json.loads(call.function.arguments)
                         print(f"  > {call.function.name} (server): {args.get('query', '')[:500]}")
                     except (json.JSONDecodeError, AttributeError):
+                        args = {}
                         print(f"  > {call.function.name} (server)")
+                    if self.on_tool_call:
+                        try:
+                            self.on_tool_call(call.function.name, args)
+                        except Exception as e:
+                            print(f"  [on_tool_call error] {e}")
 
             if not local_calls:
                 print(f"  [round {round_num+1}] no tool calls, finishing (reason={choice.finish_reason})")
@@ -157,6 +165,11 @@ class Agent:
                     manual_compress = True
                 args_summary = {k: (v[:200] + "..." if isinstance(v, str) and len(v) > 200 else v) for k, v in args.items()}
                 print(f"  > {name}({json.dumps(args_summary, default=str)[:800]})")
+                if self.on_tool_call:
+                    try:
+                        self.on_tool_call(name, args)
+                    except Exception as e:
+                        print(f"  [on_tool_call error] {e}")
                 tool = self._tool_map.get(name)
                 try:
                     output = tool.run(**args) if tool else f"Unknown tool: {name}"
@@ -177,6 +190,11 @@ class Agent:
                     for i, (call, args) in enumerate(subagent_calls):
                         args_summary = {k: (v[:200] + "..." if isinstance(v, str) and len(v) > 200 else v) for k, v in args.items()}
                         print(f"  > task({json.dumps(args_summary, default=str)[:800]})")
+                        if self.on_tool_call:
+                            try:
+                                self.on_tool_call(call.function.name, args)
+                            except Exception as e:
+                                print(f"  [on_tool_call error] {e}")
                         if i > 0:
                             time.sleep(2)
                         futures[pool.submit(tool.run, **args)] = call

@@ -13,6 +13,7 @@ const AGENTS_FOR_VIEW: Partial<Record<ActiveView, string[]>> = {
   tada: ["moments_discovery", "moment_run"],
   memex: ["memory"],
   seeker: ["seeker"],
+  chat: ["chat"],
 };
 
 const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
@@ -60,6 +61,16 @@ const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
     ),
   },
   {
+    view: "chat",
+    label: "Assistant",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2.5 4.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H7l-3 2.5v-2.5h-.5a2 2 0 0 1-2-2v-5z"
+          stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
+  {
     view: "usermodel",
     label: "User Model",
     icon: (
@@ -85,6 +96,7 @@ const FLAG_FOR_VIEW: Partial<Record<ActiveView, string>> = {
   tada: "moments",
   memex: "memory",
   seeker: "seeker",
+  chat: "chat",
 };
 
 export function Sidebar({ activeView, connected, agentActivities, onNavigate }: Props) {

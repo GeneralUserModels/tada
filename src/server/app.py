@@ -19,6 +19,7 @@ from server.services import start_services, _log_startup_failure
 from apps.memory.routes import router as memory_router
 from apps.moments.routes import router as moments_router
 from apps.seeker.routes import router as seeker_router
+from apps.chat.routes import router as chat_router
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(memory_router)
     app.include_router(moments_router)
     app.include_router(seeker_router)
+    app.include_router(chat_router)
     app.include_router(settings.router)
     app.include_router(status.router)
     app.include_router(user_models_router)

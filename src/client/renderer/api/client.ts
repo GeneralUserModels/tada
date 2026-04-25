@@ -74,6 +74,18 @@ export const getSeekerHistory = () =>
 export const getSeekerPastConversation = (filename: string) =>
   request("GET", `/api/seeker/history/${filename}`) as Promise<{ filename: string; messages: SeekerMessage[] }>;
 
+// ── Chat assistant ──────────────────────────────────────────
+export const getChatOptions = () =>
+  request("GET", "/api/chat/options") as Promise<ChatOptions>;
+export const listChatSessions = () =>
+  request("GET", "/api/chat/sessions") as Promise<ChatSessionMeta[]>;
+export const createChatSession = (body: { model: string; effort: string; title?: string }) =>
+  request("POST", "/api/chat/sessions", body) as Promise<ChatSessionMeta>;
+export const getChatSession = (id: string) =>
+  request("GET", `/api/chat/sessions/${id}`) as Promise<{ meta: ChatSessionMeta; messages: ChatItem[] }>;
+export const deleteChatSession = (id: string) =>
+  request("DELETE", `/api/chat/sessions/${id}`);
+
 // ── Memory wiki ─────────────────────────────────────────────
 export const getMemoryPages = (q?: string) =>
   request("GET", q ? `/api/memory/pages?q=${encodeURIComponent(q)}` : "/api/memory/pages") as Promise<{ path: string; title: string; confidence: number | null; last_updated: string | null; category: string | null }[]>;

@@ -23,12 +23,14 @@ class ChatAgent(Agent):
         system_prompt: str,
         tools: list | None = None,
         api_key: str | None = None,
+        **kwargs,
     ):
         super().__init__(
             model=model,
             system_prompt=system_prompt,
             tools=tools or [],
             api_key=api_key,
+            **kwargs,
         )
 
     async def respond_stream(self, messages: list[dict]) -> AsyncIterator[str]:
