@@ -166,7 +166,6 @@ export function ChatAppView() {
               className="chat-effort-select"
               value={headerEffort}
               onChange={(e) => setEffort(e.target.value)}
-              disabled={streaming}
               title={
                 options
                   ? `Max output tokens: ${options.effort_max_tokens[headerEffort]?.toLocaleString() ?? "?"}`
@@ -186,18 +185,9 @@ export function ChatAppView() {
           {loadingSession && <div className="chat-app-loading">Loading…</div>}
           {!loadingSession && items.length === 0 && (
             <div className="chat-welcome-thread">
-              <h2>Hi — ask me anything.</h2>
-              <p>
-                I'm a general assistant. I can answer questions, run things on your behalf,
-                and browse the live web for you.
-              </p>
-              <p>
-                What's special: I can also read your activity logs (screen, calendar, email,
-                files, audio transcripts) when context about you would help.
-              </p>
-              <p>
-                Tell me about yourself any time and I'll use it to be more helpful.
-              </p>
+              <h2>Ask me anything.</h2>
+              <p>I'll personalize answers using your activity logs and the live web.</p>
+              <p>Tell me about yourself any time and I'll use it to be more helpful.</p>
             </div>
           )}
           {items.map((item, i) => (
@@ -231,13 +221,19 @@ export function ChatAppView() {
             disabled={streaming}
             rows={1}
           />
-          <button
-            className="pill-btn pill-start"
-            onClick={handleSend}
-            disabled={streaming || !input.trim()}
-          >
-            Send
-          </button>
+          {streaming ? (
+            <button className="pill-btn pill-stop" onClick={abort}>
+              Stop
+            </button>
+          ) : (
+            <button
+              className="pill-btn pill-start"
+              onClick={handleSend}
+              disabled={!input.trim()}
+            >
+              Send
+            </button>
+          )}
         </div>
       </section>
     </div>

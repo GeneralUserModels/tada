@@ -125,7 +125,14 @@ export function useChatApp() {
       // `items` (rendered as a normal markdown bubble). round_end then either
       // makes it permanent (final round) or removes it (prelude).
       // Tentative bubbles carry a `round` field; permanent ones don't.
-      let promotedFinal = false;
+      //
+      // These flags MUST live outside the setItems updater functions: React
+      // runs updaters during the render phase, not synchronously when called,
+      // so mutating a closure var inside an updater isn't visible to code
+      // running between SSE events. Tracking out here ensures the {final}
+      // backstop only fires when no streaming bubble was produced.
+      let gotTokensForCurrentRound = false;
+      let finalBubbleEmitted = false;
 
       try {
         const res = await fetch(`${getServerUrl()}/api/chat/sessions/${currentId}/message`, {
@@ -158,6 +165,7 @@ export function useChatApp() {
 
             if (typeof data.token === "string") {
               const round = data.round ?? 0;
+              gotTokensForCurrentRound = true;
               setItems((prev) => {
                 const last = prev[prev.length - 1];
                 if (last && last.role === "assistant" && last.round === round) {
@@ -176,18 +184,22 @@ export function useChatApp() {
             if (typeof data.round_end === "number") {
               const r = data.round_end;
               if (data.is_final) {
-                // Promote tentative → permanent (drop the round flag).
-                setItems((prev) => {
-                  const last = prev[prev.length - 1];
-                  if (last && last.role === "assistant" && last.round === r && last.content.trim()) {
-                    promotedFinal = true;
-                    return [
-                      ...prev.slice(0, -1),
-                      { role: "assistant", content: last.content },
-                    ];
-                  }
-                  return prev;
-                });
+                if (gotTokensForCurrentRound) {
+                  // Tentative bubble exists — promote (drop the round flag).
+                  finalBubbleEmitted = true;
+                  setItems((prev) => {
+                    const last = prev[prev.length - 1];
+                    if (last && last.role === "assistant" && last.round === r) {
+                      return [
+                        ...prev.slice(0, -1),
+                        { role: "assistant", content: last.content },
+                      ];
+                    }
+                    return prev;
+                  });
+                }
+                // else: no tokens streamed for the final round; the {final}
+                // backstop below will provide the bubble.
               } else {
                 // Prelude — drop the tentative bubble. The agent's narration
                 // (if any leaked through despite the prompt) was just status.
@@ -199,17 +211,18 @@ export function useChatApp() {
                   return prev;
                 });
               }
+              gotTokensForCurrentRound = false;
             }
 
             if (typeof data.final === "string") {
-              // Backstop: if streaming produced no tokens at all (e.g. the
-              // provider didn't stream content), surface the final text now.
-              if (!promotedFinal && data.final.trim()) {
+              // Backstop: if no streamed bubble was promoted (provider didn't
+              // emit deltas, agent hit max_rounds, etc.), surface final text.
+              if (!finalBubbleEmitted && data.final.trim()) {
+                finalBubbleEmitted = true;
                 setItems((prev) => [
                   ...prev,
                   { role: "assistant", content: data.final },
                 ]);
-                promotedFinal = true;
               }
             }
 
