@@ -10,6 +10,7 @@
     "tabracadabra": true,
     "tinker": false,
     "seeker": false,
+    "chat": true,
 
     "connector_screen": true,
     "permission_screen": true,

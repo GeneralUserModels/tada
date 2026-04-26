@@ -35,9 +35,10 @@ The current interface files are at `{output_dir}/`. Read them with your tools to
 The user's data is in `{logs_dir}/`. Only use sources relevant to the task above:
 
 **Screen activity**: `session_*/labels.jsonl` — fields: text, start_time. Each session directory is a recording session. Ignore raw_events (mouse noise).
-**Audio**: `audio/filtered.jsonl` — fields: text, timestamp, summary (nested under "source"). Transcribed audio.
+**Audio**: `audio/<YYYY-MM-DD_HH-MM-SS>.md` — one markdown transcript per recording session. Each file has time-range headers (e.g. `## 15:01:02 – 15:03:02`) and bracketed-timestamp transcript lines. Captures meetings, calls, voice notes.
 **Memory wiki**: `memory/` — markdown pages about the user (people, projects, interests, habits). Read `memory/index.md` for a catalog.
 **Seeker conversations**: `active-conversations/conversation_*.md` — past conversations where the user answered questions about their beliefs, intentions, values, and habits. First-person self-reports.
+**Past chats with assistant**: `chats/<session_id>/conversation.md` — markdown transcripts of the user's prior chats with the Tada assistant (User/Assistant turns). Useful for preferences, unfinished threads, and what the user has been thinking about.
 
 **Email**: `email/filtered.jsonl` — fields: subject, from, date, summary (nested under "source")
 **Calendar**: `calendar/events.jsonl` — fields: summary, start, end, location, description (nested under "source")
