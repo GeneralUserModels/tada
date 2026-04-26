@@ -1,5 +1,5 @@
 /// <reference path="../../tada.d.ts" />
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { PermissionModal } from "../modals/PermissionModal";
 import { getFlag } from "../../featureFlags";
 import { StepIndicator } from "./StepIndicator";
@@ -405,6 +405,27 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
     setPermModal({ name, onGranted });
   };
 
+  // Verify Chrome cookies decrypt — but only after FDA is granted, and only
+  // once. Each pycookiecheat call reads the "Chrome Safe Storage" keychain
+  // entry, which surfaces a popup until the user clicks "Always Allow"; the
+  // 1.5s modal poller used to spam that popup. Now we poll FDA silently via
+  // node-mac-permissions and run the cookie verify exactly one time, giving
+  // the user a single Always-Allow prompt to authorize Tada's binary.
+  const browserCookiesCheck = useMemo(() => {
+    let attempted = false;
+    let verified = false;
+    return async () => {
+      if (verified) return true;
+      const fdaOk = await window.tada.checkConnectorPermission("browser_cookies");
+      if (!fdaOk) return false;
+      if (attempted) return verified;
+      attempted = true;
+      const { granted } = await checkBrowserCookiesPermission();
+      verified = granted;
+      return granted;
+    };
+  }, [permModal?.name === "browser_cookies"]);
+
   // Before the step snapshot is ready, render the shell that matches whatever
   // the first real step is going to be — Welcome for first-timers, What's New
   // for returning users — so the handshake doesn't flash the wrong screen.
@@ -435,9 +456,7 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           onClose={() => setPermModal(null)}
           onGranted={permModal.onGranted}
           checkPermission={
-            permModal.name === "browser_cookies"
-              ? async () => (await checkBrowserCookiesPermission()).granted
-              : undefined
+            permModal.name === "browser_cookies" ? browserCookiesCheck : undefined
           }
           skipConnectorUpdate
           dismissDelay={700}
