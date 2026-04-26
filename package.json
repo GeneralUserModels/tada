@@ -1,6 +1,6 @@
 {
   "name": "tada",
-  "version": "0.0.5-alpha",
+  "version": "0.0.6-alpha",
   "description": "Tada — predict what you'll do next",
   "author": "Tada",
   "main": "dist/main/index.js",
@@ -82,37 +82,72 @@
       {
         "from": "./src/server",
         "to": "python-src/server",
-        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo"
+        ]
       },
       {
         "from": "./src/connectors",
         "to": "python-src/connectors",
-        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo"
+        ]
       },
       {
         "from": "./src/user_models",
         "to": "python-src/user_models",
-        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo"
+        ]
       },
       {
         "from": "./src/apps",
         "to": "python-src/apps",
-        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo"
+        ]
       },
       {
         "from": "./src/agent",
         "to": "python-src/agent",
-        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo"
+        ]
       },
       {
         "from": "./src/retrievers",
         "to": "python-src/retrievers",
-        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo"
+        ]
       },
       {
         "from": "./src/chat",
         "to": "python-src/chat",
-        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo"
+        ]
       },
       {
         "from": "./bootstrap/requirements.txt",
