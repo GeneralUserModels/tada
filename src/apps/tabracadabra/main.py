@@ -44,11 +44,23 @@ from connectors.screen.napsack.recorder import (
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
-def load_prompt(logs_dir: str | None = None) -> str:
-    """Load the tabracadabra system prompt and substitute the user's logs directory."""
-    text = (_PROMPTS_DIR / "tab.txt").read_text()
-    resolved = logs_dir or os.getenv("TADA_LOG_DIR", "./logs")
-    return text.replace("{logs_dir}", str(Path(resolved).expanduser().resolve()))
+from typing import NamedTuple
+
+
+class TabraPrompts(NamedTuple):
+    """Phase-1 (research, sees tools and logs) and Phase-2 (writer, sees output rules)
+    prompts are kept separate so the research model never reads output-style
+    instructions and the writer model never reads research instructions."""
+    phase1: str
+    phase2: str
+
+
+def load_prompt(logs_dir: str | None = None) -> TabraPrompts:
+    """Load both tabracadabra system prompts and substitute the user's logs directory."""
+    resolved = str(Path(logs_dir or os.getenv("TADA_LOG_DIR", "./logs")).expanduser().resolve())
+    phase1 = (_PROMPTS_DIR / "tab_phase1.txt").read_text().replace("{logs_dir}", resolved)
+    phase2 = (_PROMPTS_DIR / "tab_phase2.txt").read_text().replace("{logs_dir}", resolved)
+    return TabraPrompts(phase1=phase1, phase2=phase2)
 
 
 _TABRA_TOOL_CLASSES = (
@@ -249,11 +261,12 @@ def _fetch_tada_config(base_url: str = "http://localhost:8000") -> dict:
 class TabracadabraService:
     """Manages the Tab-key event tap lifecycle in a dedicated thread."""
 
-    def __init__(self, config: dict, prompt_text: str, placeholder: bool = False):
+    def __init__(self, config: dict, prompts: TabraPrompts, placeholder: bool = False):
         self._model = config["model"]
         self._api_key = config.get("api_key", "")
         self._tada_base_url = config.get("tada_base_url", "http://localhost:8000")
-        self._prompt_text = prompt_text
+        self._phase1_prompt = prompts.phase1
+        self._phase2_prompt = prompts.phase2
         self._placeholder = placeholder
 
         # Thread & lifecycle
@@ -458,7 +471,7 @@ class TabracadabraService:
         tools.append(ReadOnlyTerminalTool())
         return Agent(
             model=self._model,
-            system_prompt=self._prompt_text,
+            system_prompt=self._phase1_prompt,
             tools=tools,
             max_rounds=_TABRA_MAX_ROUNDS,
             max_output_tokens=_MEDIUM_EFFORT_OUTPUT_TOKENS,
@@ -563,11 +576,13 @@ class TabracadabraService:
             if cancel_event.is_set():
                 return
 
-            # Phase 2: streamed completion typed to the keyboard.
+            # Phase 2: streamed completion typed to the keyboard. Uses a
+            # separate system prompt that contains *only* output instructions
+            # — the research model in phase 1 never sees these.
             phase2_messages = [
-                {"role": "system", "content": self._prompt_text},
+                {"role": "system", "content": self._phase2_prompt},
                 user_msg,
-                {"role": "assistant", "content": phase1_text or "(no plan)"},
+                {"role": "assistant", "content": phase1_text or "(no research summary)"},
                 {"role": "user", "content": _PHASE2_USER_PROMPT},
             ]
             t_phase2 = time.perf_counter()
@@ -795,8 +810,8 @@ if __name__ == "__main__":
 
     base_url = os.getenv("TADA_BASE_URL", "http://localhost:8000")
     config = _fetch_tada_config(base_url)
-    prompt_text = load_prompt()
-    service = TabracadabraService(config=config, prompt_text=prompt_text, placeholder=args.placeholder)
+    prompts = load_prompt()
+    service = TabracadabraService(config=config, prompts=prompts, placeholder=args.placeholder)
     service.start()
     try:
         # Keep main thread alive

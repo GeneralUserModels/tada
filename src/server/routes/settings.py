@@ -57,7 +57,7 @@ async def update_settings(update: SettingsUpdate, request: Request):
                         "api_key": cfg.resolve_api_key("tabracadabra_api_key"),
                         "tada_base_url": f"http://localhost:{os.environ.get('TADA_PORT', '8000')}",
                     }
-                    service = TabracadabraService(config=tab_config, prompt_text=load_prompt(cfg.log_dir))
+                    service = TabracadabraService(config=tab_config, prompts=load_prompt(cfg.log_dir))
                     service.start()
                     # Block until the event tap is registered with the run loop
                     # so the response only goes back once Option+Tab actually fires.

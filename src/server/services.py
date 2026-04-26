@@ -91,7 +91,7 @@ async def start_services(state: ServerState) -> None:
                 "api_key": state.config.resolve_api_key("tabracadabra_api_key"),
                 "tada_base_url": f"http://localhost:{os.environ.get('TADA_PORT', '8000')}",
             }
-            service = TabracadabraService(config=config, prompt_text=load_prompt(state.config.log_dir))
+            service = TabracadabraService(config=config, prompts=load_prompt(state.config.log_dir))
             service.start()
             state.tabracadabra_service = service
         except Exception:
