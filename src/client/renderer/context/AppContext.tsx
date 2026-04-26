@@ -100,7 +100,7 @@ const initialState: AppState = {
   trainingActive: false,
   labels: 0,
   step: 0,
-  activeView: "activity",
+  activeView: "chat",
   prediction: null,
   generating: false,
   rewardHistory: [],

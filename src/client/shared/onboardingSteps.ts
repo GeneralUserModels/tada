@@ -28,6 +28,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   { id: "connectors",    type: "config" },
   { id: "models_keys",   type: "config" },
   { id: "tabracadabra",  type: "intro" },
+  { id: "chat",          type: "intro" },
   { id: "tadas",         type: "intro", flag: "moments" },
   { id: "memex",         type: "intro", flag: "memory"  },
 ];

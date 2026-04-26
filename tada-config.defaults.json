@@ -32,6 +32,6 @@
     "permission_system_audio": true,
 
     "permission_accessibility": true,
-    "permission_browser_cookies": false
+    "permission_browser_cookies": true
   }
 }

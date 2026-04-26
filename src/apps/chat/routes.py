@@ -121,6 +121,13 @@ async def send_message_endpoint(session_id: str, body: MessageBody, request: Req
     is_first = (meta.get("message_count") or 0) == 0
     messages.append({"role": "user", "content": body.content})
 
+    # Persist the user message synchronously, before returning the streaming
+    # response. If the client aborts before the generator runs (e.g. user
+    # clicks away to a different chat right after hitting send), the message
+    # would otherwise be lost — `_stream_response`'s save_session never fires.
+    # This guarantees the chat survives in `list_sessions` (message_count >= 1).
+    service.save_session(state, session_id, meta, messages)
+
     return StreamingResponse(
         _stream_response(state, session_id, meta, messages, is_first, body.content),
         media_type="text/event-stream",

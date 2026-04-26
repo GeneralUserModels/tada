@@ -8,6 +8,7 @@ import { WhatsNewStep } from "./steps/WhatsNewStep";
 import { GoogleSignInStep } from "./steps/GoogleSignInStep";
 import { ConnectorsStep } from "./steps/ConnectorsStep";
 import { TabracadabraStep } from "./steps/TabracadabraStep";
+import { ChatStep } from "./steps/ChatStep";
 import { TadasStep } from "./steps/TadasStep";
 import { MemexStep } from "./steps/MemexStep";
 import { ModelsKeysStep } from "./steps/ModelsKeysStep";
@@ -40,12 +41,14 @@ import {
 const STEP_TITLES: Record<string, string> = {
   welcome: "Welcome to Tada",
   tabracadabra: "Tabracadabra",
+  chat: "Chat",
   tadas: "Moments",
   memex: "Memex",
 };
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
   tabracadabra: "Press Option + Tab to autocomplete or prompt from anywhere.",
+  chat: "Ask anything — answers personalized with your emails, calendar, and what you've been working on.",
   tadas: "Proactive mini-apps that run on their own schedule — answers waiting before you need to ask.",
   memex: "A personal wiki of your life — pages for the people, projects, and threads that keep coming up.",
 };
@@ -55,6 +58,14 @@ const STEP_ICONS: Record<string, React.ReactNode> = {
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
       <path d="M3 4.5h10M3 8h10M3 11.5h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
       <path d="M11.2 10.7 13.5 8.4l-2.3-2.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  chat: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M2.5 4.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v4.5a2 2 0 0 1-2 2H7l-2.8 2.2v-2.2H4.5a2 2 0 0 1-2-2v-4.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+      <circle cx="6" cy="6.8" r="0.7" fill="currentColor"/>
+      <circle cx="8" cy="6.8" r="0.7" fill="currentColor"/>
+      <circle cx="10" cy="6.8" r="0.7" fill="currentColor"/>
     </svg>
   ),
   tadas: (
@@ -483,6 +494,14 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
 
       {currentId === "tabracadabra" && (
         <TabracadabraStep
+          onBack={() => goBack(step)}
+          onContinue={() => advance(step)}
+          isFinal={isFinal(step)}
+        />
+      )}
+
+      {currentId === "chat" && (
+        <ChatStep
           onBack={() => goBack(step)}
           onContinue={() => advance(step)}
           isFinal={isFinal(step)}

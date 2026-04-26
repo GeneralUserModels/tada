@@ -1,5 +1,6 @@
 import React from "react";
 import { ActiveView, AgentActivityInfo } from "../context/AppContext";
+import { useChat } from "../context/ChatContext";
 import { useFeatureFlags, getFlag } from "../featureFlags";
 
 interface Props {
@@ -101,6 +102,9 @@ const FLAG_FOR_VIEW: Partial<Record<ActiveView, string>> = {
 
 export function Sidebar({ activeView, connected, agentActivities, onNavigate }: Props) {
   const featureFlags = useFeatureFlags();
+  const { pendingSessions, unreadSessions } = useChat();
+  const chatPending = pendingSessions.size > 0;
+  const chatUnread = unreadSessions.size > 0;
 
   const visibleItems = navItems.filter(({ view }) => {
     const flag = FLAG_FOR_VIEW[view];
@@ -109,8 +113,14 @@ export function Sidebar({ activeView, connected, agentActivities, onNavigate }: 
   });
 
   const isViewActive = (view: ActiveView) => {
+    if (view === "chat") return chatPending;
     const agents = AGENTS_FOR_VIEW[view];
     return agents?.some((a) => agentActivities[a]) ?? false;
+  };
+
+  const showUnreadDot = (view: ActiveView) => {
+    // Show only when not actively running and the user is not on this view.
+    return view === "chat" && !chatPending && chatUnread && activeView !== "chat";
   };
 
   return (
@@ -133,6 +143,7 @@ export function Sidebar({ activeView, connected, agentActivities, onNavigate }: 
             {icon}
             {label}
             {isViewActive(view) && <span className="nav-activity-spinner" />}
+            {showUnreadDot(view) && <span className="tada-unread-dot" />}
           </button>
         ))}
       </div>

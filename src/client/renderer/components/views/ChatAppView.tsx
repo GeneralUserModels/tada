@@ -12,7 +12,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 
 import { useAppContext } from "../../context/AppContext";
-import { useChatApp } from "../../hooks/useChatApp";
+import { useChat } from "../../context/ChatContext";
 import { FeatureActivityBanner } from "../FeatureActivityBanner";
 import { SimpleDropdown, type DropdownOption } from "../shared/SimpleDropdown";
 
@@ -66,45 +66,83 @@ export function ChatAppView() {
     activeMeta,
     items,
     streaming,
+    pendingSessions,
+    unreadSessions,
     options,
     loadingSession,
     draftModel,
     draftEffort,
-    loadOptions,
-    loadSessions,
     selectSession,
     newDraft,
     removeSession,
     sendMessage,
     setEffort,
     abort,
-  } = useChatApp();
+  } = useChat();
 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    if (state.connected) {
-      loadOptions();
-      loadSessions();
-    }
-  }, [state.connected, loadOptions, loadSessions]);
+  // Per-session unsent-text drafts. Keyed by session id; the special key
+  // "__draft__" holds the no-active-session (new chat) draft.
+  const inputDraftsRef = useRef<Map<string, string>>(new Map());
+  const inputRef = useRef("");
+  const prevActiveIdRef = useRef<string | null | undefined>(undefined);
 
+  // Smooth scroll only on incremental updates (typing, streaming, send).
+  // Loading a past chat or switching chats jumps the length by more than 1
+  // (or shrinks it to []), so use instant auto-scroll there.
+  const lastItemsLengthRef = useRef(0);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const prev = lastItemsLengthRef.current;
+    const delta = items.length - prev;
+    const behavior: ScrollBehavior =
+      delta > 1 || delta < 0 ? "auto" : "smooth";
+    messagesEndRef.current?.scrollIntoView({ behavior });
+    lastItemsLengthRef.current = items.length;
   }, [items]);
+
+  // Save the previous chat's typed text and restore the new chat's typed text
+  // whenever the user switches between chats / drafts.
+  useEffect(() => {
+    if (prevActiveIdRef.current !== undefined) {
+      const prevKey = prevActiveIdRef.current ?? "__draft__";
+      inputDraftsRef.current.set(prevKey, inputRef.current);
+    }
+    const newKey = activeId ?? "__draft__";
+    const restored = inputDraftsRef.current.get(newKey) ?? "";
+    setInput(restored);
+    inputRef.current = restored;
+    prevActiveIdRef.current = activeId;
+
+    // Re-fit textarea height to the restored content (clearing any inline
+    // height left behind by the previous chat's auto-resize logic).
+    setTimeout(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.style.height = "auto";
+      const clamped = Math.min(el.scrollHeight, 200);
+      el.style.height = clamped + "px";
+      el.style.overflowY = el.scrollHeight > 200 ? "auto" : "hidden";
+    }, 0);
+  }, [activeId]);
 
   const handleSend = () => {
     const text = input.trim();
     if (!text || streaming) return;
     setInput("");
+    inputRef.current = "";
+    // Clear the saved draft for this session — the message has been sent.
+    const key = activeId ?? "__draft__";
+    inputDraftsRef.current.delete(key);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
     sendMessage(text);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
+    inputRef.current = e.target.value;
     const el = e.target;
     el.style.height = "auto";
     const clamped = Math.min(el.scrollHeight, 200);
@@ -134,13 +172,20 @@ export function ChatAppView() {
           {sessions.length === 0 && (
             <div className="chat-app-empty-list">No saved chats yet.</div>
           )}
-          {sessions.map((s) => (
+          {sessions.map((s) => {
+            const isPending = pendingSessions.has(s.id);
+            const isUnread = !isPending && unreadSessions.has(s.id);
+            return (
             <div
               key={s.id}
               className={`chat-app-session-item${activeId === s.id ? " active" : ""}`}
               onClick={() => selectSession(s.id)}
             >
-              <div className="chat-app-session-title">{s.title || "Untitled"}</div>
+              <div className="chat-app-session-title-row">
+                <span className="chat-app-session-title">{s.title || "Untitled"}</span>
+                {isPending && <span className="nav-activity-spinner chat-app-session-indicator" />}
+                {isUnread && <span className="tada-unread-dot chat-app-session-indicator" />}
+              </div>
               <div className="chat-app-session-meta">
                 <span>{formatRelative(s.updated_at)}</span>
                 <span className="dot">·</span>
@@ -159,7 +204,8 @@ export function ChatAppView() {
                 </svg>
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       </aside>
 
@@ -254,7 +300,6 @@ export function ChatAppView() {
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder="Ask anything…"
-            disabled={streaming}
             rows={1}
           />
           {streaming ? (
