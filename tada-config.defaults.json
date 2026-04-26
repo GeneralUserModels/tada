@@ -15,8 +15,8 @@
     "connector_screen": true,
     "permission_screen": true,
 
-    "connector_gmail": false,
-    "connector_calendar": false,
+    "connector_gmail": true,
+    "connector_calendar": true,
 
     "connector_outlook_email": false,
     "connector_outlook_calendar": false,
