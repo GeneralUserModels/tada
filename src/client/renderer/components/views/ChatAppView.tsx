@@ -12,7 +12,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 
 import { useAppContext } from "../../context/AppContext";
-import { useChatApp } from "../../hooks/useChatApp";
+import { useChat } from "../../context/ChatContext";
 import { FeatureActivityBanner } from "../FeatureActivityBanner";
 import { SimpleDropdown, type DropdownOption } from "../shared/SimpleDropdown";
 
@@ -72,15 +72,13 @@ export function ChatAppView() {
     loadingSession,
     draftModel,
     draftEffort,
-    loadOptions,
-    loadSessions,
     selectSession,
     newDraft,
     removeSession,
     sendMessage,
     setEffort,
     abort,
-  } = useChatApp();
+  } = useChat();
 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -91,13 +89,6 @@ export function ChatAppView() {
   const inputDraftsRef = useRef<Map<string, string>>(new Map());
   const inputRef = useRef("");
   const prevActiveIdRef = useRef<string | null | undefined>(undefined);
-
-  useEffect(() => {
-    if (state.connected) {
-      loadOptions();
-      loadSessions();
-    }
-  }, [state.connected, loadOptions, loadSessions]);
 
   // Smooth scroll only on incremental updates (typing, streaming, send).
   // Loading a past chat or switching chats jumps the length by more than 1

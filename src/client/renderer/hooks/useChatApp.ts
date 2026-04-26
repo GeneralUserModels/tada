@@ -18,7 +18,7 @@ import {
 import { useAppContext } from "../context/AppContext";
 
 export function useChatApp() {
-  const { dispatch } = useAppContext();
+  const { state: appState, dispatch } = useAppContext();
   const [sessions, setSessions] = useState<ChatSessionMeta[]>([]);
   const [activeId, setActiveIdState] = useState<string | null>(null);
   const [activeMeta, setActiveMeta] = useState<ChatSessionMeta | null>(null);
@@ -332,14 +332,15 @@ export function useChatApp() {
     });
   }, [activeId, dispatch]);
 
+  // Hook is mounted at App level via ChatProvider, so it persists across view
+  // switches; we deliberately do NOT abort streams on cleanup.
+
   useEffect(() => {
-    const controllers = controllersRef.current;
-    return () => {
-      // Abort all pending streams on unmount.
-      controllers.forEach((c) => c.abort());
-      controllers.clear();
-    };
-  }, []);
+    if (appState.connected) {
+      loadOptions();
+      loadSessions();
+    }
+  }, [appState.connected, loadOptions, loadSessions]);
 
   return {
     sessions,
