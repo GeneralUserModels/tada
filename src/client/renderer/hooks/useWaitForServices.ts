@@ -24,6 +24,14 @@ export type UseWaitForServicesOpts = {
   // before polling. The dashboard's BootGate leaves it false — for returning
   // users the lifespan handler has already kicked start_services.
   finalize?: boolean;
+  // When false, don't gate readiness on `tabracadabra_ready`. The backend
+  // never starts the event tap when the user has tabracadabra disabled (or
+  // the feature flag is off), so waiting for it would hang forever.
+  requireTabracadabra?: boolean;
+  // When false, don't gate readiness on `screen_frame_fresh`. The screen
+  // connector stays paused when the user hasn't enabled it (no permission
+  // granted, or toggled off in settings), so no fresh frame ever lands.
+  requireScreen?: boolean;
 };
 
 /**
@@ -41,6 +49,8 @@ export type UseWaitForServicesOpts = {
 export function useWaitForServices({
   enabled,
   finalize = false,
+  requireTabracadabra = true,
+  requireScreen = true,
 }: UseWaitForServicesOpts) {
   const [status, setStatus] = useState<ServicesStatus>(EMPTY);
   const [ready, setReady] = useState(false);
@@ -64,8 +74,8 @@ export function useWaitForServices({
           setStatus(next);
           if (
             next.services_started &&
-            next.tabracadabra_ready &&
-            next.screen_frame_fresh
+            (!requireTabracadabra || next.tabracadabra_ready) &&
+            (!requireScreen || next.screen_frame_fresh)
           ) {
             setReady(true);
             return;
@@ -100,7 +110,7 @@ export function useWaitForServices({
       cancelled = true;
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [enabled, finalize, ready]);
+  }, [enabled, finalize, ready, requireTabracadabra, requireScreen]);
 
   return { status, ready };
 }

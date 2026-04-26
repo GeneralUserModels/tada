@@ -7,6 +7,10 @@ from .base_tool import BaseTool
 
 
 class TerminalTool(BaseTool):
+    # Subclasses (e.g. ReadOnlyTerminalTool used by tabracadabra) override this
+    # for tighter budgets when latency matters more than completeness.
+    TIMEOUT_SECONDS: float = 120
+
     def __init__(self):
         super().__init__("bash", "Run a shell command (blocking).",
             {
@@ -37,9 +41,13 @@ class TerminalTool(BaseTool):
 
     def run(self, command: str):
         wrapped = self._wrap_sandbox(command)
-        result = subprocess.run(
-            wrapped, shell=True, capture_output=True, text=True, timeout=120
-        )
+        try:
+            result = subprocess.run(
+                wrapped, shell=True, capture_output=True, text=True, timeout=self.TIMEOUT_SECONDS
+            )
+        except subprocess.TimeoutExpired as e:
+            partial = (e.stdout or "") + (("\n" + e.stderr) if e.stderr else "")
+            return (partial[:50000] + "\n" if partial else "") + f"(timed out after {self.TIMEOUT_SECONDS}s — narrow the scope and retry)"
         output = result.stdout
         if result.stderr:
             output += ("\n" if output else "") + result.stderr

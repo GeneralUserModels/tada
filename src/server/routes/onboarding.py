@@ -74,9 +74,10 @@ async def services_status(request: Request):
         screen_frame_fresh = (time.time() - st.st_mtime) < _FRAME_FRESH_S
     except OSError:
         screen_frame_fresh = False
+    service = state.tabracadabra_service
     return {
         "services_started": bool(state.services_started),
-        "tabracadabra_ready": state.tabracadabra_service is not None,
+        "tabracadabra_ready": service is not None and service.is_ready(),
         "screen_frame_fresh": screen_frame_fresh,
     }
 

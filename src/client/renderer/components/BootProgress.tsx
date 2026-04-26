@@ -26,9 +26,11 @@ export const BOOT_CHECKLIST: { key: keyof ServicesStatus; label: string }[] = [
 type Props = {
   status: ServicesStatus;
   ready: boolean;
+  requireTabracadabra?: boolean;
+  requireScreen?: boolean;
 };
 
-export function BootProgress({ status, ready }: Props) {
+export function BootProgress({ status, ready, requireTabracadabra = true, requireScreen = true }: Props) {
   const [pct, setPct] = useState(0);
 
   useEffect(() => {
@@ -54,7 +56,11 @@ export function BootProgress({ status, ready }: Props) {
         />
       </div>
       <ul className="boot-progress-checklist">
-        {BOOT_CHECKLIST.map((item) => {
+        {BOOT_CHECKLIST.filter((item) => {
+          if (!requireTabracadabra && item.key === "tabracadabra_ready") return false;
+          if (!requireScreen && item.key === "screen_frame_fresh") return false;
+          return true;
+        }).map((item) => {
           const done = status[item.key];
           return (
             <li

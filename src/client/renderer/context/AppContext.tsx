@@ -378,6 +378,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
             dispatch({ type: "SEEKER_QUESTIONS_READY" });
           }
         } catch { /* seeker may not be enabled */ }
+
+        try {
+          const moments = await api.getMomentsResults();
+          const hasUnread = moments.some(
+            (r) => !r.dismissed && (!r.last_viewed || new Date(r.completed_at) > new Date(r.last_viewed))
+          );
+          if (hasUnread) dispatch({ type: "TADA_NEW_MOMENT" });
+        } catch { /* moments may not be enabled */ }
       } catch (e) { console.error("[app] getStatus failed:", e); }
     });
 
