@@ -71,6 +71,43 @@ _TABRA_TOOL_CLASSES = (
     TaskUpdateTool,
     TaskListTool,
 )
+
+
+def _flatten_phase1_transcript(messages: list) -> str:
+    """Render phase-1's full agent conversation as plain text for phase 2.
+
+    Includes assistant reasoning, tool calls, and tool outputs. Skips index 0
+    (the original user message — phase 2 already has it as its own user turn).
+    Tool calls + results are inlined so phase 2 sees the same evidence the
+    research agent saw, not just its final summary.
+
+    Phase 2 is a streaming completion with no `tools` declared, so passing
+    raw `tool_use` / `tool_result` blocks would be rejected by the provider.
+    Flattening to text sidesteps that and is provider-agnostic."""
+    pending = {}  # tool_call_id -> tool name
+    parts = []
+    for msg in messages[1:]:
+        role = msg.get("role")
+        if role == "assistant":
+            content = msg.get("content")
+            if content:
+                parts.append(f"[research]\n{content}")
+            for call in msg.get("tool_calls") or []:
+                fn = (call.get("function") or {})
+                name = fn.get("name", "?")
+                args = fn.get("arguments", "")
+                pending[call.get("id")] = name
+                parts.append(f"[tool call: {name}]\n{args}")
+        elif role == "tool":
+            name = pending.get(msg.get("tool_call_id"), "?")
+            result = msg.get("content") or ""
+            parts.append(f"[tool result: {name}]\n{result}")
+        elif role == "user":
+            # Background-result / warning messages the agent emits to itself.
+            content = msg.get("content")
+            if content:
+                parts.append(f"[system note]\n{content}")
+    return "\n\n".join(parts) if parts else "(no research)"
 _MEDIUM_EFFORT_OUTPUT_TOKENS = 20_000
 _TABRA_MAX_ROUNDS = 40
 _PHASE2_USER_PROMPT = (
@@ -562,15 +599,22 @@ class TabracadabraService:
                 self._round_num = num_turns
                 self._round_max = max_turns
 
+            # Pass a list we keep a handle to so we can read the full mutated
+            # conversation (tool calls + tool outputs + assistant turns) after
+            # the agent finishes. .run() returns only the final summary string;
+            # the rest of the evidence lives in the messages list.
+            phase1_messages = [user_msg]
             t_phase1 = time.perf_counter()
             try:
-                phase1_text = self._build_agent(on_round=_on_round).run([user_msg])
+                phase1_text = self._build_agent(on_round=_on_round).run(phase1_messages)
             except Exception as e:
                 print(f"[tabracadabra] phase 1 agent.run failed: {e}", flush=True)
                 phase1_text = ""
             phase1_ms = (time.perf_counter() - t_phase1) * 1000
+            phase1_transcript = _flatten_phase1_transcript(phase1_messages)
             print(
-                f"[tabracadabra] timing phase1 total_ms={phase1_ms:.1f} text_len={len(phase1_text)}",
+                f"[tabracadabra] timing phase1 total_ms={phase1_ms:.1f} "
+                f"summary_len={len(phase1_text)} transcript_len={len(phase1_transcript)}",
                 flush=True,
             )
             if cancel_event.is_set():
@@ -578,11 +622,14 @@ class TabracadabraService:
 
             # Phase 2: streamed completion typed to the keyboard. Uses a
             # separate system prompt that contains *only* output instructions
-            # — the research model in phase 1 never sees these.
+            # — the research model in phase 1 never sees these. The assistant
+            # message carries phase 1's full transcript (tool calls + outputs +
+            # final summary) so phase 2 can ground its answer in the raw
+            # evidence, not just the summary.
             phase2_messages = [
                 {"role": "system", "content": self._phase2_prompt},
                 user_msg,
-                {"role": "assistant", "content": phase1_text or "(no research summary)"},
+                {"role": "assistant", "content": phase1_transcript},
                 {"role": "user", "content": _PHASE2_USER_PROMPT},
             ]
             t_phase2 = time.perf_counter()
