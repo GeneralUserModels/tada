@@ -25,9 +25,10 @@ The agent CANNOT: call LLMs at runtime in its output, modify arbitrary files on 
 
 **PRIMARY — read these first, they are the most important:**
 - session_*/labels.jsonl — the user's actual screen activity sessions. Fields: text, start_time. Read ALL session directories. Ignore raw_events (mouse noise). This is where you'll find what the user is currently doing.
-- audio/filtered.jsonl — fields: text, timestamp, summary (nested under "source"). Transcribed audio from the user's microphone.
+- audio/<YYYY-MM-DD_HH-MM-SS>.md — one markdown transcript per recording session of the user's microphone. Each file has time-range headers (e.g. `## 15:01:02 – 15:03:02`) and bracketed-timestamp transcript lines. Read the most recent files for what the user has been saying.
 - memory/ — a wiki of markdown pages about the user (people, projects, interests, habits). Read memory/index.md for a catalog.
 - active-conversations/conversation_*.md — past Seeker conversations where the user directly answered questions about their beliefs, intentions, values, and habits. These reveal what the user is thinking about, what they need help with, and what they wish was done for them. Use these to identify timely one-off tasks that match what the user has expressed.
+- chats/<session_id>/conversation.md — markdown transcripts of the user's prior chats with the Tada assistant (User/Assistant turns). First-person prompts the user has actually typed — strong signal for what they're working on, want done, or are stuck on right now.
 
 **ALSO IMPORTANT — these can directly motivate tasks, not just provide context:**
 - email/filtered.jsonl — fields: subject, from, date, summary (nested under "source")

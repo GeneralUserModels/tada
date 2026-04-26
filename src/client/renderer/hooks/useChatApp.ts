@@ -16,8 +16,10 @@ import {
   listChatSessions,
   updateChatSession,
 } from "../api/client";
+import { useAppContext } from "../context/AppContext";
 
 export function useChatApp() {
+  const { dispatch } = useAppContext();
   const [sessions, setSessions] = useState<ChatSessionMeta[]>([]);
   const [activeId, setActiveIdState] = useState<string | null>(null);
   const [activeMeta, setActiveMeta] = useState<ChatSessionMeta | null>(null);
@@ -253,7 +255,14 @@ export function useChatApp() {
 
   const abort = useCallback(() => {
     if (abortRef.current) abortRef.current.abort();
-  }, []);
+    // Optimistically clear the chat activity so the sidebar pip and the
+    // inline progress banner disappear immediately. The backend will also
+    // broadcast a clear once its `finally` block runs, which is idempotent.
+    dispatch({
+      type: "AGENT_ACTIVITY",
+      data: { agent: "chat", message: null },
+    });
+  }, [dispatch]);
 
   useEffect(() => {
     return () => {

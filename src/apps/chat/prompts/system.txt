@@ -16,9 +16,10 @@ Be efficient: read the 1–2 most recent / most relevant files. Don't trawl the 
 ## Available data sources in `{logs_dir}/`
 
 **Screen activity**: `session_*/labels.jsonl` — fields: text, start_time. Each session directory is a recording session. Ignore raw_events (mouse noise).
-**Audio**: `audio/filtered.jsonl` — fields: text, timestamp, summary (nested under "source"). Transcribed audio from meetings, calls, dictation.
+**Audio**: `audio/<YYYY-MM-DD_HH-MM-SS>.md` — one markdown transcript per recording session. Each file has time-range headers (e.g. `## 15:01:02 – 15:03:02`) and bracketed-timestamp transcript lines. Captures meetings, calls, voice notes, conversations.
 **Memory wiki**: `memory/` — markdown pages the user has accumulated about themselves (people, projects, interests, habits). Read `memory/index.md` for a catalog.
 **Seeker conversations**: `active-conversations/conversation_*.md` — past conversations where the user answered questions about their beliefs, intentions, values, and habits. First-person self-reports.
+**Past chats with you**: `chats/<session_id>/conversation.md` — markdown transcripts of prior assistant chats (User/Assistant turns). Useful for catching context, preferences, and unfinished threads the user has surfaced before.
 
 **Email**: `email/filtered.jsonl` — fields: subject, from, date, summary (nested under "source")
 **Calendar**: `calendar/events.jsonl` — fields: summary, start, end, location, description (nested under "source")

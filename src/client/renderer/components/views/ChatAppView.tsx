@@ -14,6 +14,7 @@ import rehypeRaw from "rehype-raw";
 import { useAppContext } from "../../context/AppContext";
 import { useChatApp } from "../../hooks/useChatApp";
 import { FeatureActivityBanner } from "../FeatureActivityBanner";
+import { SimpleDropdown, type DropdownOption } from "../shared/SimpleDropdown";
 
 const EFFORT_LABELS: Record<string, string> = { low: "Low", medium: "Medium", high: "High" };
 
@@ -162,22 +163,20 @@ export function ChatAppView() {
           <div className="chat-app-title">{headerTitle}</div>
           <div className="chat-app-header-meta">
             <span className="chat-badge">{headerModel.split("/").pop()}</span>
-            <select
-              className="chat-effort-select"
+            <SimpleDropdown<string>
+              className={`chat-effort-dropdown chat-effort-dropdown--${headerEffort}`}
               value={headerEffort}
-              onChange={(e) => setEffort(e.target.value)}
+              options={(options?.efforts ?? ["low", "medium", "high"]).map<DropdownOption<string>>((eff) => ({
+                value: eff,
+                label: EFFORT_LABELS[eff] ?? eff,
+              }))}
+              onChange={(v) => setEffort(v)}
               title={
                 options
                   ? `Max output tokens: ${options.effort_max_tokens[headerEffort]?.toLocaleString() ?? "?"}`
                   : undefined
               }
-            >
-              {(options?.efforts ?? ["low", "medium", "high"]).map((eff) => (
-                <option key={eff} value={eff}>
-                  {EFFORT_LABELS[eff] ?? eff}
-                </option>
-              ))}
-            </select>
+            />
           </div>
         </div>
 

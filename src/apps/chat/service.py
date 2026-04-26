@@ -141,6 +141,28 @@ def save_session(state, session_id: str, meta: dict, messages: list[dict]) -> No
     meta = {**meta, "updated_at": _now(), "message_count": len(messages)}
     (sdir / "meta.json").write_text(json.dumps(meta, indent=2))
     (sdir / "messages.json").write_text(json.dumps(messages, indent=2, default=str))
+    (sdir / "conversation.md").write_text(_render_markdown(meta, messages))
+
+
+def _render_markdown(meta: dict, messages: list[dict]) -> str:
+    """Render the chat as a clean User/Assistant transcript for other agents.
+
+    Uses visible_messages so prelude prose (assistant turns with tool_calls)
+    and tool-result messages are dropped — same view the user sees in the UI.
+    """
+    title = meta.get("title") or "Chat"
+    started = meta.get("created_at", "")
+    lines = [f"# {title}"]
+    if started:
+        lines.append(f"\n_Started: {started}_\n")
+    for msg in visible_messages(messages):
+        role = msg["role"]
+        content = (msg.get("content") or "").strip()
+        if not content:
+            continue
+        speaker = "User" if role == "user" else "Assistant"
+        lines.append(f"**{speaker}:** {content}\n")
+    return "\n".join(lines) + "\n"
 
 
 def delete_session(state, session_id: str) -> bool:

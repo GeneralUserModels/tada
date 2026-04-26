@@ -147,8 +147,11 @@ async def _stream_response(
     # advances the progress counters — it doesn't reset the message back to
     # "Thinking…" so the user has time to read what the agent just did.
     current_message = ["Thinking…"]
+    stop_event = threading.Event()
 
     def on_round(num_turns: int, max_turns: int):
+        if stop_event.is_set():
+            return
         asyncio.run_coroutine_threadsafe(
             state.broadcast_activity(
                 "chat", current_message[0],
@@ -158,6 +161,8 @@ async def _stream_response(
         )
 
     def on_tool_call(name: str, args: dict):
+        if stop_event.is_set():
+            return
         summary = service.format_tool_action(name, args)
         current_message[0] = summary
         asyncio.run_coroutine_threadsafe(
@@ -166,17 +171,19 @@ async def _stream_response(
         )
 
     def on_token(text: str, round_num: int):
+        if stop_event.is_set():
+            return
         loop.call_soon_threadsafe(
             event_queue.put_nowait, {"token": text, "round": round_num}
         )
 
     def on_round_end(round_num: int, is_final: bool):
+        if stop_event.is_set():
+            return
         loop.call_soon_threadsafe(
             event_queue.put_nowait,
             {"round_end": round_num, "is_final": is_final},
         )
-
-    stop_event = threading.Event()
 
     agent = await service.build_chat_agent(
         state, meta,
