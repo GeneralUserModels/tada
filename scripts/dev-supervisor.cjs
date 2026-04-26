@@ -81,6 +81,9 @@ function shutdown(exitCode = 0) {
   killTree(children.get("server"), "SIGTERM");
   killTree(children.get("vite"), "SIGTERM");
 
+  // 20 s gives the python server enough time to flush large checkpoints
+  // (e.g. the prompted predictor's gzipped retriever) on SIGTERM before we
+  // SIGKILL anything still hanging around.
   setTimeout(() => {
     killTree(buildProc, "SIGKILL");
     killTree(children.get("electron"), "SIGKILL");
@@ -89,7 +92,7 @@ function shutdown(exitCode = 0) {
     killTree(children.get("server"), "SIGKILL");
     killTree(children.get("vite"), "SIGKILL");
     process.exit(exitCode);
-  }, 2000);
+  }, 20000);
 }
 
 function maybeStartElectron(serverUrl) {

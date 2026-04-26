@@ -2652,7 +2652,15 @@ button, input, select, textarea, canvas, a, label,
   padding-top: 12px;
   border-top: 1px solid var(--glass-border);
   margin-top: 8px;
-  align-items: center;
+  align-items: stretch;
+}
+
+/* Match the Send/Stop button height to the (auto-resizing) textarea so
+   the input row reads as a single bar instead of a button floating
+   inside a taller field. */
+.chat-input-area .pill-btn {
+  align-self: stretch;
+  min-height: 56px;
 }
 
 .chat-input {
@@ -2815,6 +2823,15 @@ button, input, select, textarea, canvas, a, label,
 }
 
 /* ── Chat App ─────────────────────────────────────────────── */
+
+/* The chat view is full-bleed (sidebar + main pane) and handles its own
+   internal padding, so cancel #content's default 24px padding. Without
+   this the chat header / "+ New chat" button sit double-padded (24px from
+   #content + 12px from the inner panes) and feel inconsistent with the
+   other tabs. */
+#content:has(> .chat-app) {
+  padding: 0;
+}
 
 .chat-app {
   display: flex;

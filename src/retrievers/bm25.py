@@ -281,8 +281,10 @@ class InMemoryBM25Temporal(BaseRetriever):
             "total_len": self.total_len,
         }
 
+        # No indent: file is gzipped anyway, and dropping pretty-printing
+        # roughly halves the encoder time on large checkpoints.
         with gzip.open(checkpoint_path, 'wt', encoding='utf-8') as f:
-            json.dump(checkpoint_data, f, indent=2)
+            json.dump(checkpoint_data, f)
 
     def load_checkpoint(self, checkpoint_path: str):
         checkpoint_path = Path(checkpoint_path)

@@ -1,12 +1,17 @@
 import base64
+import bisect
 import copy
 import io
 import json
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+_STATE_FILENAME = "state.json"
+_RETRIEVER_FILENAME = "retriever.json.gz"
 
 from PIL import Image
 
@@ -59,6 +64,12 @@ class PromptedPredictor(BasePredictor):
         self._indexed_context_count = 0
         self._caption_groups: dict[str, list[str]] = {}
         self._caption_ts: dict[str, int] = {}
+        # Watermark of the last buffer event we processed (event timestamp, not buffer index).
+        # Persisted across restarts so we can resume indexing from this point.
+        self._last_indexed_event_ts: float | None = None
+        # Guards mutations to retriever + bookkeeping so background saves don't race
+        # against prediction-time index_context() calls.
+        self._state_lock = threading.RLock()
 
         self._verifier_prompt_path = (
             Path(__file__).resolve().parents[1] / "powernap" / "longnap" / "verifiers" / "accuracy.txt"
@@ -209,28 +220,95 @@ class PromptedPredictor(BasePredictor):
         """
         if self.data_manager is None:
             return
-        new_events = self.data_manager.buffer[self._indexed_context_count:]
-        for event in new_events:
-            text = event.get("text", "")
-            dense_caption = event.get("dense_caption", "")
-            if dense_caption:
-                actions = self._caption_groups.setdefault(dense_caption, [])
-                if text:
-                    actions.append(text)
-                ts = self._caption_ts.setdefault(dense_caption, int(event["timestamp"]))
-                self.retriever.add(
-                    dense_caption,
-                    event_ts=ts,
-                    namespace="context",
-                    metadata={"actions": list(actions)},
-                )
-            elif text:
-                self.retriever.add(
-                    text,
-                    event_ts=int(event["timestamp"]),
-                    namespace="context",
-                )
-        self._indexed_context_count = len(self.data_manager.buffer)
+        with self._state_lock:
+            buffer = self.data_manager.buffer
+            new_events = buffer[self._indexed_context_count:]
+            for event in new_events:
+                text = event.get("text", "")
+                dense_caption = event.get("dense_caption", "")
+                if dense_caption:
+                    actions = self._caption_groups.setdefault(dense_caption, [])
+                    if text:
+                        actions.append(text)
+                    ts = self._caption_ts.setdefault(dense_caption, int(event["timestamp"]))
+                    self.retriever.add(
+                        dense_caption,
+                        event_ts=ts,
+                        namespace="context",
+                        metadata={"actions": list(actions)},
+                    )
+                elif text:
+                    self.retriever.add(
+                        text,
+                        event_ts=int(event["timestamp"]),
+                        namespace="context",
+                    )
+                self._last_indexed_event_ts = float(event["timestamp"])
+            self._indexed_context_count = len(buffer)
+
+    # ── Persistence ──────────────────────────────────────────────────────────
+
+    def save_state(self, state_dir) -> None:
+        """Persist retriever + caption bookkeeping so the next start skips re-indexing.
+
+        Safe to call from any thread; serializes against index_context().
+        """
+        if self.data_manager is None:
+            return
+        path = Path(state_dir)
+        path.mkdir(parents=True, exist_ok=True)
+        with self._state_lock:
+            self.retriever.save_checkpoint(str(path / _RETRIEVER_FILENAME))
+            sidecar = {
+                "version": 1,
+                "last_indexed_event_ts": self._last_indexed_event_ts,
+                "caption_groups": self._caption_groups,
+                "caption_ts": self._caption_ts,
+            }
+            tmp = path / (_STATE_FILENAME + ".tmp")
+            with open(tmp, "w") as f:
+                json.dump(sidecar, f)
+            tmp.replace(path / _STATE_FILENAME)
+        logger.info(
+            "Prompted predictor state saved (docs=%d, last_ts=%s) -> %s",
+            self.retriever.N, self._last_indexed_event_ts, path,
+        )
+
+    def load_state(self, state_dir) -> bool:
+        """Load retriever + caption bookkeeping if a checkpoint exists. Returns True on hit."""
+        path = Path(state_dir)
+        retriever_path = path / _RETRIEVER_FILENAME
+        sidecar_path = path / _STATE_FILENAME
+        if not retriever_path.exists() or not sidecar_path.exists():
+            return False
+        try:
+            with self._state_lock:
+                self.retriever.load_checkpoint(str(retriever_path))
+                with open(sidecar_path) as f:
+                    sidecar = json.load(f)
+                self._caption_groups = {k: list(v) for k, v in sidecar.get("caption_groups", {}).items()}
+                self._caption_ts = {k: int(v) for k, v in sidecar.get("caption_ts", {}).items()}
+                self._last_indexed_event_ts = sidecar.get("last_indexed_event_ts")
+                self._indexed_context_count = self._resume_indexed_count()
+            logger.info(
+                "Prompted predictor state loaded (docs=%d, resume_at=%d/%d)",
+                self.retriever.N, self._indexed_context_count,
+                len(self.data_manager.buffer) if self.data_manager else 0,
+            )
+            return True
+        except Exception:
+            logger.warning("Failed to load prompted predictor state from %s; starting cold", path, exc_info=True)
+            return False
+
+    def _resume_indexed_count(self) -> int:
+        """Find the buffer index of the first event past the persisted watermark."""
+        if self._last_indexed_event_ts is None or self.data_manager is None:
+            return 0
+        buf = self.data_manager.buffer
+        if not buf:
+            return 0
+        # Buffer is sorted by timestamp at load time; bisect to skip indexed events.
+        return bisect.bisect_right(buf, self._last_indexed_event_ts, key=lambda e: e["timestamp"])
 
     def predict_from_snapshot(self, past: list, future_len: int,
                               num_imgs_per_sample: int | None = None, **kwargs) -> dict:
