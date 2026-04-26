@@ -18,15 +18,6 @@ const AGENTS_FOR_VIEW: Partial<Record<ActiveView, string[]>> = {
 
 const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
   {
-    view: "activity",
-    label: "Activity",
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M3 3.5h10M3 8h10M3 12.5h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-      </svg>
-    ),
-  },
-  {
     view: "chat",
     label: "Assistant",
     icon: (
@@ -67,6 +58,15 @@ const navItems: { view: ActiveView; label: string; icon: JSX.Element }[] = [
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
         <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  {
+    view: "activity",
+    label: "Activity",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M3 3.5h10M3 8h10M3 12.5h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
       </svg>
     ),
   },

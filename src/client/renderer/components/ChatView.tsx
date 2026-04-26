@@ -37,9 +37,9 @@ export function ChatView({ messages, streaming, active, onSend, onEnd, placehold
     setInput(e.target.value);
     const el = e.target;
     el.style.height = "auto";
-    const clamped = Math.min(el.scrollHeight, 120);
+    const clamped = Math.min(el.scrollHeight, 200);
     el.style.height = clamped + "px";
-    el.style.overflowY = el.scrollHeight > 120 ? "auto" : "hidden";
+    el.style.overflowY = el.scrollHeight > 200 ? "auto" : "hidden";
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

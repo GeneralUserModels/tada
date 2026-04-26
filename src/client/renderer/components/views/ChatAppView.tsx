@@ -18,6 +18,12 @@ import { SimpleDropdown, type DropdownOption } from "../shared/SimpleDropdown";
 
 const EFFORT_LABELS: Record<string, string> = { low: "Low", medium: "Medium", high: "High" };
 
+const WELCOME_SUGGESTIONS = [
+  "Catch me up on my week",
+  "What's on my schedule today?",
+  "What have I been working on lately?",
+];
+
 function formatRelative(iso: string): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -101,9 +107,9 @@ export function ChatAppView() {
     setInput(e.target.value);
     const el = e.target;
     el.style.height = "auto";
-    const clamped = Math.min(el.scrollHeight, 160);
+    const clamped = Math.min(el.scrollHeight, 200);
     el.style.height = clamped + "px";
-    el.style.overflowY = el.scrollHeight > 160 ? "auto" : "hidden";
+    el.style.overflowY = el.scrollHeight > 200 ? "auto" : "hidden";
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -184,9 +190,40 @@ export function ChatAppView() {
           {loadingSession && <div className="chat-app-loading">Loading…</div>}
           {!loadingSession && items.length === 0 && (
             <div className="chat-welcome-thread">
-              <h2>Ask me anything.</h2>
-              <p>I'll personalize answers using your activity logs and the live web.</p>
-              <p>Tell me about yourself any time and I'll use it to be more helpful.</p>
+              <div className="chat-welcome-glow" aria-hidden="true" />
+              <div className="chat-welcome-icon" aria-hidden="true">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                  <path
+                    d="M5 9a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-7l-5 4v-4H8a3 3 0 0 1-3-3V9z"
+                    stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"
+                  />
+                  <circle cx="11" cy="13" r="1.2" fill="currentColor" />
+                  <circle cx="15" cy="13" r="1.2" fill="currentColor" />
+                  <circle cx="19" cy="13" r="1.2" fill="currentColor" />
+                </svg>
+              </div>
+              <h2 className="chat-welcome-title">Ask me anything.</h2>
+              <p className="chat-welcome-sub">
+                I'll personalize answers using your activity logs and the live web.
+              </p>
+              <p className="chat-welcome-sub chat-welcome-sub--muted">
+                Tell me about yourself any time and I'll use it to be more helpful.
+              </p>
+              <div className="chat-welcome-suggestions">
+                {WELCOME_SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className="chat-welcome-chip"
+                    onClick={() => {
+                      setInput(s);
+                      textareaRef.current?.focus();
+                    }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {items.map((item, i) => (
