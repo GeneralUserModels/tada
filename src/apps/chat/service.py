@@ -226,6 +226,19 @@ def _flatten_text(content) -> str:
     return ""
 
 
+_COMPACT_MARKER = "[Compressed. Transcript:"
+
+
+def _is_compaction_artifact(text: str) -> bool:
+    """Detect the synthetic message that CompactTool.auto_compact injects.
+
+    auto_compact replaces the message list with [original_first_user, "[Compressed.
+    Transcript: <path>]\\n<summary>"]. The model sometimes echoes that summary
+    in its next response; either way we must hide it from the rendered chat.
+    """
+    return text.lstrip().startswith(_COMPACT_MARKER)
+
+
 def visible_messages(messages: list[dict]) -> list[dict]:
     """Flatten the raw litellm message list into chat bubbles for the UI.
 
@@ -233,20 +246,25 @@ def visible_messages(messages: list[dict]) -> list[dict]:
     with no `tool_calls`). Prelude prose — assistant messages that came with
     tool calls — is the agent's between-tool narration; it surfaces live in the
     progress preamble area, not as a persisted bubble. Tool-result messages
-    are dropped entirely.
+    and synthetic compaction wrappers are dropped entirely.
     """
     out: list[dict] = []
     for msg in messages:
         role = msg.get("role")
         if role == "user":
             text = _flatten_text(msg.get("content"))
+            if _is_compaction_artifact(text):
+                continue
             out.append({"role": "user", "content": text})
         elif role == "assistant":
             if msg.get("tool_calls"):
                 continue
             content = _flatten_text(msg.get("content"))
-            if content.strip():
-                out.append({"role": "assistant", "content": content})
+            if not content.strip():
+                continue
+            if _is_compaction_artifact(content):
+                continue
+            out.append({"role": "assistant", "content": content})
     return out
 
 

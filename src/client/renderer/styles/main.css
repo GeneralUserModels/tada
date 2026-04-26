@@ -2888,14 +2888,28 @@ button, input, select, textarea, canvas, a, label,
   background: rgba(var(--sage-rgb), 0.12);
 }
 
+.chat-app-session-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 18px;
+  min-width: 0;
+}
+
 .chat-app-session-title {
+  flex: 1;
   font-size: 12.5px;
   color: var(--text);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-right: 18px;
+  min-width: 0;
+}
+
+.chat-app-session-indicator {
+  flex-shrink: 0;
+  margin-left: 0;
 }
 
 .chat-app-session-meta {
