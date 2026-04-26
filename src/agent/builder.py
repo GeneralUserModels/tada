@@ -27,6 +27,8 @@ You can read any file on the system. You can write files to:
 
 You can browse the web using the browser_navigate, browser_read_text, browser_click, browser_type, and browser_screenshot tools. These use the user's Chrome cookies, so you can access authenticated pages (Twitter, Gmail, etc.). Use browser_read_text with a CSS selector to narrow down content on large pages.
 
+When searching files via the terminal, prefer `rg` (ripgrep) over `grep`/`find` — it's installed, respects .gitignore, and is much faster. Use `rg --files | rg <pattern>` to find files by name.
+
 Plan iteratively:
 - Start by understanding the task, then use PlanWrite to outline your approach and steps.
 - As you work, keep your plan current. Use PlanUpdate to add new steps you discover, remove steps that become unnecessary, and mark steps complete.

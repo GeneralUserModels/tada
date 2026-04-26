@@ -27,6 +27,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   { id: "google_signin", type: "config" },
   { id: "connectors",    type: "config" },
   { id: "models_keys",   type: "config" },
+  { id: "getting_ready", type: "config" },
   { id: "tabracadabra",  type: "intro" },
   { id: "chat",          type: "intro" },
   { id: "tadas",         type: "intro", flag: "moments" },
@@ -40,6 +41,7 @@ export type OnboardingState = {
   enabledConnectors: string[];
   hasLlmApiKey: boolean;
   onboardingComplete: boolean;
+  servicesReady: boolean;
 };
 
 export function isStepEnabled(
@@ -66,6 +68,10 @@ export function isStepDone(step: OnboardingStep, state: OnboardingState): boolea
       );
     case "models_keys":
       return state.hasLlmApiKey;
+    case "getting_ready":
+      // Returning users (services already booted by the lifespan) skip the
+      // spool-up wait and go straight to the live tutorial.
+      return state.servicesReady;
     default:
       return false;
   }

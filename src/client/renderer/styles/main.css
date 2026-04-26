@@ -109,6 +109,114 @@ body {
   min-height: 0;
 }
 
+/* ── Boot gate (full-screen "Getting ready" while services warm up) ── */
+
+.boot-gate {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.boot-gate-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--glass);
+  backdrop-filter: blur(30px) saturate(1.3);
+  -webkit-backdrop-filter: blur(30px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-lg);
+  padding: 24px 24px 22px;
+  box-shadow:
+    0 1px 3px var(--glass-shadow),
+    0 8px 24px rgba(var(--sage-rgb), 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.boot-gate-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.boot-gate-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+}
+
+/* ── Boot progress (shared between BootGate and onboarding) ── */
+
+.boot-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.boot-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(var(--sage-rgb), 0.18);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.boot-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--sage);
+  border-radius: 999px;
+  transition: width 220ms linear;
+}
+
+.boot-progress-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.boot-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  transition: opacity 0.2s, color 0.2s;
+}
+
+.boot-progress-item.done {
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+.boot-progress-marker {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sage);
+}
+
+.boot-progress-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(var(--sage-rgb), 0.18);
+  border-top-color: var(--sage);
+  border-radius: 50%;
+  animation: boot-progress-spin 0.8s linear infinite;
+}
+
+@keyframes boot-progress-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Sidebar ──────────────────────────────────────────────── */
 
 #sidebar {
@@ -762,7 +870,7 @@ body {
 /* ── No-drag on interactive elements ─────────────────────── */
 
 button, input, select, textarea, canvas, a, label,
-.pill-btn, .nav-item, .history-feed, .prediction-body,
+.pill-btn, .nav-item, .prediction-body,
 #reward-chart, #history-list, #dashboard-connectors,
 .chat-container, .chat-messages, .chat-input {
   -webkit-app-region: no-drag;
@@ -2544,7 +2652,15 @@ button, input, select, textarea, canvas, a, label,
   padding-top: 12px;
   border-top: 1px solid var(--glass-border);
   margin-top: 8px;
-  align-items: center;
+  align-items: stretch;
+}
+
+/* Match the Send/Stop button height to the (auto-resizing) textarea so
+   the input row reads as a single bar instead of a button floating
+   inside a taller field. */
+.chat-input-area .pill-btn {
+  align-self: stretch;
+  min-height: 56px;
 }
 
 .chat-input {
@@ -2707,6 +2823,15 @@ button, input, select, textarea, canvas, a, label,
 }
 
 /* ── Chat App ─────────────────────────────────────────────── */
+
+/* The chat view is full-bleed (sidebar + main pane) and handles its own
+   internal padding, so cancel #content's default 24px padding. Without
+   this the chat header / "+ New chat" button sit double-padded (24px from
+   #content + 12px from the inner panes) and feel inconsistent with the
+   other tabs. */
+#content:has(> .chat-app) {
+  padding: 0;
+}
 
 .chat-app {
   display: flex;

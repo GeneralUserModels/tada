@@ -2,23 +2,27 @@
 
 import asyncio
 import os
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from server.services import start_services, _log_startup_failure
+from connectors.screen.napsack.recorder import TABRACADABRA_LATEST_FRAME_PNG
 
 router = APIRouter(prefix="/api", tags=["onboarding"])
 
 
 class OnboardingComplete(BaseModel):
-    enabled_connectors: list[str] = []
     seen_steps: list[str] = []
 
 _NOTIFICATIONS_DB = str(
     Path.home() / "Library" / "Group Containers"
     / "group.com.apple.usernoted" / "db2" / "db"
 )
+
+# Stale-frame threshold mirrors the limit baked into capture_active_monitor_as_data_url.
+_FRAME_FRESH_S = 5.0
 
 
 @router.get("/onboarding/status")
@@ -31,21 +35,50 @@ async def onboarding_status(request: Request):
     }
 
 
-@router.post("/onboarding/complete")
-async def onboarding_complete(body: OnboardingComplete, request: Request):
+@router.post("/onboarding/finalize")
+async def onboarding_finalize(request: Request):
+    """Mark onboarding complete and ensure background services are running.
+
+    Idempotent: calling this when services are already up (e.g. returning users
+    whose lifespan auto-started everything) is a no-op via start_services'
+    internal guard. The connector selection is persisted earlier via
+    PUT /api/settings during the connectors step.
+    """
     state = request.app.state.server
     state.config.onboarding_complete = True
-    state.config.enabled_connectors = body.enabled_connectors
-    # Union-merge seen step IDs while preserving first-seen order.
+    state.config.save()
+    task = asyncio.create_task(start_services(state))
+    task.add_done_callback(_log_startup_failure)
+    return {"ok": True}
+
+
+@router.post("/onboarding/complete")
+async def onboarding_complete(body: OnboardingComplete, request: Request):
+    """Record which intro pages the user has seen. Services were started by /finalize."""
+    state = request.app.state.server
     merged = list(state.config.onboarding_steps_seen)
     for step_id in body.seen_steps:
         if step_id not in merged:
             merged.append(step_id)
     state.config.onboarding_steps_seen = merged
     state.config.save()
-    task = asyncio.create_task(start_services(state))
-    task.add_done_callback(_log_startup_failure)
     return {"ok": True}
+
+
+@router.get("/services/status")
+async def services_status(request: Request):
+    """Readiness probe for the getting_ready step's polling loop."""
+    state = request.app.state.server
+    try:
+        st = os.stat(TABRACADABRA_LATEST_FRAME_PNG)
+        screen_frame_fresh = (time.time() - st.st_mtime) < _FRAME_FRESH_S
+    except OSError:
+        screen_frame_fresh = False
+    return {
+        "services_started": bool(state.services_started),
+        "tabracadabra_ready": state.tabracadabra_service is not None,
+        "screen_frame_fresh": screen_frame_fresh,
+    }
 
 
 @router.get("/permissions/notifications")

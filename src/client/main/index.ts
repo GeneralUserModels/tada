@@ -55,13 +55,23 @@ function readOnboardingState(): { needed: boolean; mode: "first" | "returning" }
   } catch {
     return { needed: true, mode: "first" };
   }
+  // Match the server's definition of "signed in" (see /api/auth/google/user):
+  // having google_user_email persisted is the source of truth, not the on-disk
+  // token. Otherwise the main process disagrees with the renderer about what's
+  // pending — the window opens, the renderer immediately decides nothing is
+  // pending, and we flash the empty "What's New" loading shell on every launch.
+  const googleEmail = typeof cfg.google_user_email === "string" ? cfg.google_user_email as string : "";
   const state: OnboardingState = {
     seenSteps: Array.isArray(cfg.onboarding_steps_seen) ? cfg.onboarding_steps_seen as string[] : [],
     featureFlags: (cfg.feature_flags as Record<string, boolean> | undefined),
-    googleConnected: fs.existsSync(getGoogleTokenPath()),
+    googleConnected: googleEmail.length > 0 || fs.existsSync(getGoogleTokenPath()),
     enabledConnectors: Array.isArray(cfg.enabled_connectors) ? cfg.enabled_connectors as string[] : [],
     hasLlmApiKey: typeof cfg.default_llm_api_key === "string" && cfg.default_llm_api_key.length > 0,
     onboardingComplete: cfg.onboarding_complete === true,
+    // The main process can't probe live service status; treat onboardingComplete
+    // as a good proxy here (the lifespan auto-starts services on next boot).
+    // The renderer re-evaluates with a real /api/services/status call.
+    servicesReady: cfg.onboarding_complete === true,
   };
   return {
     needed: pendingSteps(state).length > 0,

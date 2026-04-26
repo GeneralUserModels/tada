@@ -76,9 +76,15 @@ async def start_services(state: ServerState) -> None:
     state.model.training_task = asyncio.create_task(run_training_service(state))
     logger.info("Training service started (%s mode)", state.config.model_type)
 
-    # Tabracadabra event tap service (macOS only)
+    # Tabracadabra event tap + prediction loop go up together, AFTER init_model.
+    # The event tap itself doesn't depend on the predictor, but installing it
+    # earlier lets the user fire Option+Tab while init_model is still hammering
+    # the GIL — which makes Quartz event posts (CGEventPost / unicode insert)
+    # crawl, so the spinner redraws take 250+ms instead of 2ms. Holding the tap
+    # until init_model is done means the first Option+Tab is also the first
+    # snappy one, and the "Getting ready" checklist in onboarding stays honest:
+    # the box ticks when the system is actually calm.
     if sys.platform == "darwin" and is_enabled(state.config, "tabracadabra") and state.config.tabracadabra_enabled:
-        state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
         try:
             from apps.tabracadabra.main import TabracadabraService, load_prompt
 
@@ -90,6 +96,7 @@ async def start_services(state: ServerState) -> None:
             service = TabracadabraService(config=config, prompt_text=load_prompt())
             service.start()
             state.tabracadabra_service = service
+            state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
         except Exception:
             logger.warning("Tabracadabra service failed to start", exc_info=True)
 

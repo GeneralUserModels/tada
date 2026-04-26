@@ -118,11 +118,16 @@ export const getOnboardingStatus = () =>
     seen_steps: string[];
     enabled_connectors: string[];
   }>;
-export const completeOnboarding = (enabledConnectors: string[], seenSteps: string[]) =>
-  request("POST", "/api/onboarding/complete", {
-    enabled_connectors: enabledConnectors,
-    seen_steps: seenSteps,
-  });
+export const finalizeOnboarding = () =>
+  request("POST", "/api/onboarding/finalize");
+export const completeOnboarding = (seenSteps: string[]) =>
+  request("POST", "/api/onboarding/complete", { seen_steps: seenSteps });
+export const getServicesStatus = () =>
+  request("GET", "/api/services/status") as Promise<{
+    services_started: boolean;
+    tabracadabra_ready: boolean;
+    screen_frame_fresh: boolean;
+  }>;
 export const checkNotificationsPermission = () =>
   request("GET", "/api/permissions/notifications") as Promise<{ granted: boolean }>;
 export const checkFilesystemPermission = () =>
