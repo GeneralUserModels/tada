@@ -30,6 +30,8 @@ export function App() {
         activeView={state.activeView}
         connected={state.connected}
         agentActivities={state.agentActivities}
+        tadaHasNew={state.tadaHasNew}
+        seekerHasQuestions={state.seekerHasQuestions}
         onNavigate={navigate}
       />
       <main id="content">

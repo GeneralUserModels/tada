@@ -10,7 +10,6 @@ from server.feature_flags import is_enabled
 from server.routes.auth import refresh_expired_tokens
 from connectors.service import run_context_logging_service
 from user_models.training import init_model, run_training_service
-from apps.tabracadabra.prediction_loop import run_prediction_loop
 from server.cost_tracker import init_cost_tracking, run_cost_logger
 from user_models.data_manager import DataManager
 
@@ -76,14 +75,13 @@ async def start_services(state: ServerState) -> None:
     state.model.training_task = asyncio.create_task(run_training_service(state))
     logger.info("Training service started (%s mode)", state.config.model_type)
 
-    # Tabracadabra event tap + prediction loop go up together, AFTER init_model.
-    # The event tap itself doesn't depend on the predictor, but installing it
-    # earlier lets the user fire Option+Tab while init_model is still hammering
-    # the GIL — which makes Quartz event posts (CGEventPost / unicode insert)
-    # crawl, so the spinner redraws take 250+ms instead of 2ms. Holding the tap
-    # until init_model is done means the first Option+Tab is also the first
-    # snappy one, and the "Getting ready" checklist in onboarding stays honest:
-    # the box ticks when the system is actually calm.
+    # Tabracadabra event tap goes up AFTER init_model. Installing the tap earlier
+    # lets the user fire Option+Tab while init_model is still hammering the GIL —
+    # which makes Quartz event posts (CGEventPost / unicode insert) crawl, so the
+    # spinner redraws take 250+ms instead of 2ms. Holding the tap until init_model
+    # is done means the first Option+Tab is also the first snappy one, and the
+    # "Getting ready" checklist in onboarding stays honest: the box ticks when the
+    # system is actually calm.
     if sys.platform == "darwin" and is_enabled(state.config, "tabracadabra") and state.config.tabracadabra_enabled:
         try:
             from apps.tabracadabra.main import TabracadabraService, load_prompt
@@ -93,10 +91,9 @@ async def start_services(state: ServerState) -> None:
                 "api_key": state.config.resolve_api_key("tabracadabra_api_key"),
                 "tada_base_url": f"http://localhost:{os.environ.get('TADA_PORT', '8000')}",
             }
-            service = TabracadabraService(config=config, prompt_text=load_prompt())
+            service = TabracadabraService(config=config, prompt_text=load_prompt(state.config.log_dir))
             service.start()
             state.tabracadabra_service = service
-            state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
         except Exception:
             logger.warning("Tabracadabra service failed to start", exc_info=True)
 

@@ -13,7 +13,20 @@ import urllib.error
 from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
-from apps.tabracadabra.llm import completion_with_retry, load_prompt
+
+import litellm
+
+from agent.agent import Agent
+from agent.tools import ALL_TOOLS
+from agent.tools.read import ReadTool
+from agent.tools.skill import SkillTool
+from agent.tools.task_manager import (
+    TaskCreateTool,
+    TaskGetTool,
+    TaskListTool,
+    TaskUpdateTool,
+)
+from agent.tools.terminal_readonly import ReadOnlyTerminalTool
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +40,38 @@ from connectors.screen.napsack.recorder import (
     TABRACADABRA_LATEST_FRAME_PNG,
 )
 
+
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
+
+
+def load_prompt(logs_dir: str | None = None) -> str:
+    """Load the tabracadabra system prompt and substitute the user's logs directory."""
+    text = (_PROMPTS_DIR / "tab.txt").read_text()
+    resolved = logs_dir or os.getenv("TADA_LOG_DIR", "./logs")
+    return text.replace("{logs_dir}", str(Path(resolved).expanduser().resolve()))
+
+
+_TABRA_TOOL_CLASSES = (
+    ReadTool,
+    SkillTool,
+    TaskCreateTool,
+    TaskGetTool,
+    TaskUpdateTool,
+    TaskListTool,
+)
+_MEDIUM_EFFORT_OUTPUT_TOKENS = 20_000
+_TABRA_MAX_ROUNDS = 40
+_PHASE2_USER_PROMPT = (
+    "Now write the completion. Output only the text to type — "
+    "no preamble, no formatting, no quotes."
+)
+
 load_dotenv()
 
 # ------------- Constants -------------
 # Keep spinner ASCII + fixed-width to avoid editor normalization drift that can
 # make backspace-based redraws delete earlier user text in rich editors.
 SPINNER_FRAMES_HOLDING = ["|", "/", "-", "\\"]
-SPINNER_PROGRESS_DURATION_S = 9.0
 SPINNER_TICK_INTERVAL_S = 0.12
 # Give macOS a brief chance to apply posted backspaces before first content.
 POST_SPINNER_DRAIN_S = 0.04
@@ -221,6 +259,11 @@ class TabracadabraService:
         # Thread & lifecycle
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        # Set once the event tap is registered with the run loop and enabled.
+        # Settings/status code waits on this so "tabracadabra on" only goes
+        # true once Option+Tab will actually fire — not just when the service
+        # object is constructed.
+        self._ready_event = threading.Event()
         self._run_loop_ref = None  # CFRunLoop reference for stopping
 
         # Event tap reference
@@ -243,19 +286,36 @@ class TabracadabraService:
         self._spinner_active = False
         self._watching = False  # True while generation is active (any key/click cancels)
 
+        # Phase-1 round counters powering the spinner % (num_turns/max_turns).
+        # Written by the agent's on_round callback on the stream-worker thread,
+        # read by the spinner thread. Plain int writes are atomic under the
+        # GIL; no lock needed for this single-writer/single-reader pattern.
+        self._round_num = 0
+        self._round_max = _TABRA_MAX_ROUNDS
+
     # ------------- Lifecycle -------------
     def start(self):
         """Spawn a daemon thread that creates the event tap and runs the CFRunLoop."""
         if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
+        self._ready_event.clear()
         self._thread = threading.Thread(target=self._run_event_tap, daemon=True, name="tabracadabra")
         self._thread.start()
         print(f"[tabracadabra] Service started | model={self._model} | trigger=Option+Tab")
 
+    def is_ready(self) -> bool:
+        """True once the event tap is live and Option+Tab will fire."""
+        return self._ready_event.is_set()
+
+    def wait_until_ready(self, timeout: float | None = None) -> bool:
+        """Block until the event tap is live, or the timeout elapses."""
+        return self._ready_event.wait(timeout=timeout)
+
     def stop(self, timeout: float = 2.0):
         """Stop the event tap and join the thread."""
         self._stop_event.set()
+        self._ready_event.clear()
         self._clear_suppress_flag()
 
         # Cancel any active streaming
@@ -300,7 +360,11 @@ class TabracadabraService:
         Quartz.CGEventTapEnable(self._tap_ref, True)
 
         print("[tabracadabra] Event tap active. Press Option+Tab to generate.")
-        Quartz.CFRunLoopRun()
+        self._ready_event.set()
+        try:
+            Quartz.CFRunLoopRun()
+        finally:
+            self._ready_event.clear()
 
     # ------------- Event posting helpers -------------
     def _post_event(self, ev):
@@ -345,34 +409,18 @@ class TabracadabraService:
         self._inserted_len += len(piece)
         self._last_char_space = (piece[-1] == " ")
 
-    # ------------- Tada prediction context -------------
-    def _fetch_predictor_messages(self) -> list | None:
-        """Fetch the predictor's full conversation to use as cached prefix."""
-        try:
-            req = urllib.request.Request(
-                f"{self._tada_base_url}/api/user_models/latest_prediction",
-                headers={"Accept": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=2) as resp:
-                data = json.loads(resp.read().decode())
-            if not data.get("available") or not data.get("messages"):
-                return None
-            return data["messages"]
-        except Exception as e:
-            print(f"[tabracadabra] Could not fetch predictor messages ({e})")
-            return None
-
-    def _build_messages(self):
+    # ------------- Message + agent construction -------------
+    def _build_user_message(self) -> dict:
+        """Build the multimodal user turn (screenshot + cursor metadata) used in both phases."""
         t_build = time.perf_counter()
         t_cap = time.perf_counter()
         data_url, cursor_info = capture_active_monitor_as_data_url()
         screenshot_ms = (time.perf_counter() - t_cap) * 1000
 
-        t_fetch = time.perf_counter()
-        predictor_messages = self._fetch_predictor_messages()
-        predictor_fetch_ms = (time.perf_counter() - t_fetch) * 1000
-
-        prompt_text = self._prompt_text
+        prompt_text = (
+            "The screenshot below shows the user's screen. "
+            "Use it (with the red-dot cursor) as context for the response."
+        )
         if cursor_info is None:
             prompt_text += (
                 "\n\nCursor metadata: cursor position was unavailable for this frame; "
@@ -391,24 +439,32 @@ class TabracadabraService:
                 "do not assume a red dot is visible."
             )
 
-        tabracadabra_turn = {"role": "user", "content": [
+        user_msg = {"role": "user", "content": [
             {"type": "image_url", "image_url": {"url": data_url}},
             {"type": "text", "text": prompt_text},
         ]}
 
         build_total_ms = (time.perf_counter() - t_build) * 1000
-        ctx = "yes" if predictor_messages else "no"
-        n_msg = len(predictor_messages) if predictor_messages else 0
         print(
             f"[tabracadabra] timing build_messages screenshot_ms={screenshot_ms:.1f} "
-            f"predictor_fetch_ms={predictor_fetch_ms:.1f} total_ms={build_total_ms:.1f} "
-            f"predictor_ctx={ctx} n_prefix_msgs={n_msg}",
+            f"total_ms={build_total_ms:.1f}",
             flush=True,
         )
+        return user_msg
 
-        if predictor_messages:
-            return predictor_messages + [tabracadabra_turn]
-        return [tabracadabra_turn]
+    def _build_agent(self, on_round=None) -> Agent:
+        """Construct a fresh agent for one tabracadabra session — read-only tools, low effort."""
+        tools = [t for t in ALL_TOOLS if isinstance(t, _TABRA_TOOL_CLASSES)]
+        tools.append(ReadOnlyTerminalTool())
+        return Agent(
+            model=self._model,
+            system_prompt=self._prompt_text,
+            tools=tools,
+            max_rounds=_TABRA_MAX_ROUNDS,
+            max_output_tokens=_MEDIUM_EFFORT_OUTPUT_TOKENS,
+            api_key=self._api_key or None,
+            on_round=on_round,
+        )
 
     # ------------- Loading animation (spinner) -------------
     def _loading_spinner(self, first_piece_event: threading.Event, cancel_event: threading.Event):
@@ -419,7 +475,6 @@ class TabracadabraService:
             self._inserted_len += len(display_text)
             self._spinner_count = len(display_text)
             self._last_char_space = False
-            activated_t0 = time.monotonic()
 
             while not first_piece_event.is_set() and not cancel_event.is_set():
                 # OS-level block — zero CPU while waiting
@@ -427,8 +482,9 @@ class TabracadabraService:
                 if first_piece_event.is_set() or cancel_event.is_set():
                     break
 
-                elapsed = time.monotonic() - activated_t0
-                pct = min(100, int((elapsed / SPINNER_PROGRESS_DURATION_S) * 100))
+                # Turn-based percentage: matches chat's pattern (round/max_rounds).
+                round_max = self._round_max or 1
+                pct = min(100, int((self._round_num / round_max) * 100))
                 idx = (idx + 1) % len(SPINNER_FRAMES_HOLDING)
                 next_display = _format_spinner_display(SPINNER_FRAMES_HOLDING[idx], pct)
 
@@ -472,31 +528,59 @@ class TabracadabraService:
             self._placeholder_worker(cancel_event, first_piece_event)
             return
         try:
-            messages = self._build_messages()
+            user_msg = self._build_user_message()
         except Exception as e:
             print(f"[tabracadabra] {e}", flush=True)
             first_piece_event.set()
             t = self._spinner_thread
             if t and t.is_alive():
-                # Wait until spinner thread fully exits so it cannot emit
-                # late backspaces that clip the first completion characters.
                 t.join()
             self._cleanup_spinner_if_present()
             self._clear_suppress_flag()
             self._finish_session()
             return
+
         first_piece_seen_local = False
         logger.info("[llm] tabracadabra")
-        t_llm = time.perf_counter()
+        t_total = time.perf_counter()
         try:
-            stream = completion_with_retry(
+            # Phase 1: silent reasoning + (optional) read-only tool use.
+            def _on_round(num_turns: int, max_turns: int):
+                self._round_num = num_turns
+                self._round_max = max_turns
+
+            t_phase1 = time.perf_counter()
+            try:
+                phase1_text = self._build_agent(on_round=_on_round).run([user_msg])
+            except Exception as e:
+                print(f"[tabracadabra] phase 1 agent.run failed: {e}", flush=True)
+                phase1_text = ""
+            phase1_ms = (time.perf_counter() - t_phase1) * 1000
+            print(
+                f"[tabracadabra] timing phase1 total_ms={phase1_ms:.1f} text_len={len(phase1_text)}",
+                flush=True,
+            )
+            if cancel_event.is_set():
+                return
+
+            # Phase 2: streamed completion typed to the keyboard.
+            phase2_messages = [
+                {"role": "system", "content": self._prompt_text},
+                user_msg,
+                {"role": "assistant", "content": phase1_text or "(no plan)"},
+                {"role": "user", "content": _PHASE2_USER_PROMPT},
+            ]
+            t_phase2 = time.perf_counter()
+            kwargs = dict(
                 model=self._model,
-                messages=messages,
+                messages=phase2_messages,
                 stream=True,
                 stream_options={"include_usage": True},
-                api_key=self._api_key or None,
                 metadata={"app": "tabracadabra"},
             )
+            if self._api_key:
+                kwargs["api_key"] = self._api_key
+            stream = litellm.completion(**kwargs)
             for chunk in stream:
                 if cancel_event.is_set():
                     break
@@ -509,12 +593,12 @@ class TabracadabraService:
                 if not first_piece_seen_local:
                     first_piece_seen_local = True
                     print(
-                        f"[tabracadabra] timing llm ttft_ms={(time.perf_counter() - t_llm) * 1000:.1f}",
+                        f"[tabracadabra] timing phase2 ttft_ms={(time.perf_counter() - t_phase2) * 1000:.1f}",
                         flush=True,
                     )
                     first_piece_event.set()
-                    # Wait for spinner thread to fully stop before cleaning up,
-                    # otherwise spinner can backspace between our count read and delete
+                    # Spinner thread must fully stop before backspacing — otherwise its
+                    # next tick can backspace between our count read and delete.
                     t = self._spinner_thread
                     if t and t.is_alive():
                         t.join()
@@ -524,7 +608,7 @@ class TabracadabraService:
                 self._safe_type_piece(piece)
         finally:
             print(
-                f"[tabracadabra] timing llm stream_total_ms={(time.perf_counter() - t_llm) * 1000:.1f}",
+                f"[tabracadabra] timing total stream_total_ms={(time.perf_counter() - t_total) * 1000:.1f}",
                 flush=True,
             )
             if not first_piece_seen_local:
@@ -603,6 +687,8 @@ class TabracadabraService:
         self._spinner_count = 0
         self._last_char_space = False
         self._content_started = False
+        self._round_num = 0
+        self._round_max = _TABRA_MAX_ROUNDS
 
         cancel = threading.Event()
         self._cancel_event = cancel

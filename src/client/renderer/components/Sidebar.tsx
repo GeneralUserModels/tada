@@ -7,6 +7,8 @@ interface Props {
   activeView: ActiveView;
   connected: boolean;
   agentActivities: Record<string, AgentActivityInfo>;
+  tadaHasNew: boolean;
+  seekerHasQuestions: boolean;
   onNavigate: (view: ActiveView) => void;
 }
 
@@ -100,7 +102,7 @@ const FLAG_FOR_VIEW: Partial<Record<ActiveView, string>> = {
   chat: "chat",
 };
 
-export function Sidebar({ activeView, connected, agentActivities, onNavigate }: Props) {
+export function Sidebar({ activeView, connected, agentActivities, tadaHasNew, seekerHasQuestions, onNavigate }: Props) {
   const featureFlags = useFeatureFlags();
   const { pendingSessions, unreadSessions } = useChat();
   const chatPending = pendingSessions.size > 0;
@@ -120,7 +122,11 @@ export function Sidebar({ activeView, connected, agentActivities, onNavigate }: 
 
   const showUnreadDot = (view: ActiveView) => {
     // Show only when not actively running and the user is not on this view.
-    return view === "chat" && !chatPending && chatUnread && activeView !== "chat";
+    if (activeView === view || isViewActive(view)) return false;
+    if (view === "chat") return chatUnread;
+    if (view === "tada") return tadaHasNew;
+    if (view === "seeker") return seekerHasQuestions;
+    return false;
   };
 
   return (
@@ -143,7 +149,7 @@ export function Sidebar({ activeView, connected, agentActivities, onNavigate }: 
             {icon}
             {label}
             {isViewActive(view) && <span className="nav-activity-spinner" />}
-            {showUnreadDot(view) && <span className="tada-unread-dot" />}
+            {showUnreadDot(view) && <span className="nav-unread-dot" />}
           </button>
         ))}
       </div>

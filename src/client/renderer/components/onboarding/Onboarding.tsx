@@ -162,6 +162,13 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
       setFf(flags);
       if (user) setGoogleUser(user);
 
+      // Tabracadabra readiness only matters when the feature flag is on AND
+      // the user hasn't disabled it in settings. Otherwise the backend never
+      // starts the event tap, and gating on `tabracadabra_ready` would hang.
+      const tabracadabraExpected =
+        Boolean(flags?.tabracadabra) &&
+        (settings as Record<string, unknown>).tabracadabra_enabled !== false;
+
       const state: OnboardingState = {
         seenSteps: status.seen_steps ?? [],
         featureFlags: flags,
@@ -175,7 +182,7 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
         // advance condition so returning users skip the spool wait entirely.
         servicesReady:
           services.services_started &&
-          services.tabracadabra_ready &&
+          (!tabracadabraExpected || services.tabracadabra_ready) &&
           services.screen_frame_fresh,
       };
       const pending = pendingSteps(state);
@@ -528,7 +535,11 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
       )}
 
       {currentId === "getting_ready" && (
-        <GettingReadyStep onContinue={() => advance(step)} />
+        <GettingReadyStep
+          onContinue={() => advance(step)}
+          requireTabracadabra={flag("tabracadabra")}
+          requireScreen={screenGranted}
+        />
       )}
 
       {currentId === "tabracadabra" && (

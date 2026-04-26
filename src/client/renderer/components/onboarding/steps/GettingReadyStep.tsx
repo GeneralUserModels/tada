@@ -4,15 +4,25 @@ import { BootProgress } from "../../BootProgress";
 
 type Props = {
   onContinue: () => void;
+  // True when the user has tabracadabra on — gates whether we wait for the
+  // event tap to come up. Passed through from Onboarding so the wait matches
+  // what the backend actually starts.
+  requireTabracadabra?: boolean;
+  // True when the user granted screen recording permission and the screen
+  // connector will be in `enabled_connectors`. When false, no frame ever
+  // lands so we'd hang on `screen_frame_fresh`.
+  requireScreen?: boolean;
 };
 
-export function GettingReadyStep({ onContinue }: Props) {
+export function GettingReadyStep({ onContinue, requireTabracadabra = true, requireScreen = true }: Props) {
   // Onboarding is the only place that calls finalize — it flips
   // onboarding_complete=true and kicks start_services. The dashboard's
   // BootGate uses the same hook with finalize=false (lifespan already did it).
   const { status, ready } = useWaitForServices({
     enabled: true,
     finalize: true,
+    requireTabracadabra,
+    requireScreen,
   });
 
   const advancedRef = useRef(false);
@@ -54,7 +64,12 @@ export function GettingReadyStep({ onContinue }: Props) {
       </p>
 
       <div className="glass-card">
-        <BootProgress status={status} ready={ready} />
+        <BootProgress
+          status={status}
+          ready={ready}
+          requireTabracadabra={requireTabracadabra}
+          requireScreen={requireScreen}
+        />
       </div>
     </div>
   );

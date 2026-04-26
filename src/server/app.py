@@ -67,7 +67,6 @@ async def lifespan(app: FastAPI):
         state.moments_scheduler_task,
         state.moments_discovery_task,
         state.seeker_scheduler_task,
-        state.prediction_loop_task,
         state.cost_logger_task,
     ]
     for task in all_tasks:

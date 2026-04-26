@@ -51,20 +51,21 @@ async def update_settings(update: SettingsUpdate, request: Request):
             if state.tabracadabra_service is None:
                 try:
                     from apps.tabracadabra.main import TabracadabraService, load_prompt
-                    from apps.tabracadabra.prediction_loop import run_prediction_loop
-
-                    if state.prediction_loop_task is None or state.prediction_loop_task.done():
-                        state.prediction_loop_task = asyncio.create_task(run_prediction_loop(state))
 
                     tab_config = {
                         "model": cfg.tabracadabra_model,
                         "api_key": cfg.resolve_api_key("tabracadabra_api_key"),
                         "tada_base_url": f"http://localhost:{os.environ.get('TADA_PORT', '8000')}",
                     }
-                    service = TabracadabraService(config=tab_config, prompt_text=load_prompt())
+                    service = TabracadabraService(config=tab_config, prompt_text=load_prompt(cfg.log_dir))
                     service.start()
+                    # Block until the event tap is registered with the run loop
+                    # so the response only goes back once Option+Tab actually fires.
+                    ready = await asyncio.to_thread(service.wait_until_ready, 5.0)
+                    if not ready:
+                        logger.warning("Tabracadabra event tap not ready within 5s")
                     state.tabracadabra_service = service
-                    logger.info("Tabracadabra service started via settings")
+                    logger.info("Tabracadabra service started via settings (ready=%s)", ready)
                 except Exception:
                     logger.warning("Failed to start Tabracadabra service", exc_info=True)
         else:
@@ -76,8 +77,5 @@ async def update_settings(update: SettingsUpdate, request: Request):
                 except Exception:
                     logger.warning("Error stopping Tabracadabra service", exc_info=True)
                 state.tabracadabra_service = None
-            if state.prediction_loop_task is not None and not state.prediction_loop_task.done():
-                state.prediction_loop_task.cancel()
-                state.prediction_loop_task = None
 
     return {"status": "ok", "updated": updated}

@@ -1,5 +1,6 @@
 import React from "react";
 import { useAppContext } from "../context/AppContext";
+import { useFeatureFlag } from "../featureFlags";
 import { useWaitForServices } from "../hooks/useWaitForServices";
 import { BootProgress } from "./BootProgress";
 
@@ -15,11 +16,25 @@ import { BootProgress } from "./BootProgress";
  */
 export function BootGate({ children }: { children: React.ReactNode }) {
   const { state: app } = useAppContext();
+  // Tabracadabra readiness is only meaningful when the user has it on. The
+  // backend won't start the event tap when the feature flag is off or the
+  // user has disabled it in settings, so waiting for `tabracadabra_ready`
+  // would hang forever.
+  const tabracadabraFlag = useFeatureFlag("tabracadabra");
+  const tabracadabraSettingOff = app.settings.tabracadabra_enabled === false;
+  const requireTabracadabra = tabracadabraFlag && !tabracadabraSettingOff;
+  // Same logic for the screen recorder: when the user hasn't enabled the
+  // screen connector (no permission, or disabled in settings), the recorder
+  // never publishes a frame so we'd wait forever for `screen_frame_fresh`.
+  const enabledConnectors = (app.settings.enabled_connectors as string[] | undefined) ?? [];
+  const requireScreen = enabledConnectors.includes("screen");
   // Only start polling once the renderer is wired up to the server. Before
   // SERVER_READY fires the api client has no URL and getServicesStatus would
   // just throw on every poll.
   const { status, ready } = useWaitForServices({
     enabled: app.connected,
+    requireTabracadabra,
+    requireScreen,
   });
 
   if (ready) return <>{children}</>;
@@ -33,7 +48,12 @@ export function BootGate({ children }: { children: React.ReactNode }) {
           <p className="boot-gate-desc">
             Spinning up Tada. This usually takes about a minute.
           </p>
-          <BootProgress status={status} ready={ready} />
+          <BootProgress
+            status={status}
+            ready={ready}
+            requireTabracadabra={requireTabracadabra}
+            requireScreen={requireScreen}
+          />
         </div>
       </div>
     </>
