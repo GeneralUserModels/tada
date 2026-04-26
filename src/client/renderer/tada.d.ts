@@ -124,6 +124,32 @@ interface ChatMessage {
   content: string;
 }
 
+interface ChatBubbleItem {
+  role: "assistant" | "user";
+  content: string;
+  round?: number;
+}
+
+type ChatItem = ChatBubbleItem;
+
+interface ChatSessionMeta {
+  id: string;
+  title: string;
+  model: string;
+  effort: "low" | "medium" | "high";
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+interface ChatOptions {
+  models: string[];
+  efforts: ("low" | "medium" | "high")[];
+  default_model: string;
+  default_effort: "low" | "medium" | "high";
+  effort_max_tokens: Record<string, number>;
+}
+
 interface TadaAPI {
   // App lifecycle
   onServerReady: (cb: (data: { url: string }) => void) => void;
