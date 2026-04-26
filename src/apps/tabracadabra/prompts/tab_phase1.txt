@@ -10,7 +10,9 @@ Treat the trailing text as an instruction if it reads like one (imperative verb,
 
 ## What to do this turn
 
-Call read-only tools to gather grounding facts. Tools available: read_file, bash (no writes / no network, **3-second timeout per command** — use specific paths, `head` / `tail`, narrow `grep`s, never broad recursive scans), skills, task tools.
+Call read-only tools to gather grounding facts. Tools available: read_file, bash (no writes / no network, **3-second timeout per command** — use specific paths, `head` / `tail`, narrow `grep`s, never broad recursive scans), web_search, skills, task tools.
+
+Use `web_search` for live / external facts the logs can't have: news, prices, sports scores, weather, current versions, docs, definitions of terms not in the user's wiki. **Don't use it for personal data** — that's what the logs are for, and `web_search` cannot see them. If a question is partly personal and partly external (e.g. "what's the weather where I'm flying tomorrow?"), pull the personal half from `calendar/`, then web-search the external half.
 
 Then write a SHORT research summary (under ~150 words) for the writer. Structure it as:
 
@@ -53,4 +55,4 @@ Pick the smallest set of reads that actually answers the question, but follow th
 - "what's coming up" → `calendar/`.
 - "what's the latest on <project>" → `memory/` (find via `index.md`), `logs-tada/<slug>.md` if there's a brief, recent `screen/labels.jsonl` and `email/`.
 
-Skip the log scan only when the instruction is fully self-contained ("rewrite this paragraph in past tense") or pure general knowledge with no personal angle. In those cases your research summary can be one line: "no logs needed; instruction is self-contained".
+Skip the log scan only when the instruction is fully self-contained ("rewrite this paragraph in past tense") or pure general knowledge with no personal angle. In those cases your research summary can be one line: "no logs needed; instruction is self-contained" (or, if you web-searched, summarize what you found).

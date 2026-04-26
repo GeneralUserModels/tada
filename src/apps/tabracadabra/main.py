@@ -514,6 +514,7 @@ class TabracadabraService:
             max_output_tokens=_MEDIUM_EFFORT_OUTPUT_TOKENS,
             api_key=self._api_key or None,
             on_round=on_round,
+            web_search=True,
         )
 
     # ------------- Loading animation (spinner) -------------
