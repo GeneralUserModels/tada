@@ -17,6 +17,7 @@ from .agent import Agent
 from .tools import ALL_TOOLS, _bg_manager
 from .tools.compact import CompactTool
 from .tools.subagent import SubAgentTool
+from .tools.todo import PlanState, PlanWriteTool, PlanUpdateTool
 
 _SYSTEM_PROMPT_TEMPLATE = """\
 You are an agent with tools to read, write, edit files, run shell commands, search the web, and browse websites.
@@ -92,15 +93,32 @@ def _make_child_agent(model: str, system_prompt: str, api_key: str | None = None
 
 
 def build_agent(model: str, data_dir: str, extra_write_dirs: list[str] | None = None, api_key: str | None = None):
-    """Build a fully configured Agent with all tools. Initializes sandbox on first call."""
+    """Build a fully configured Agent with all tools. Initializes sandbox on first call.
+
+    Each agent gets its own PlanState so concurrent runs (e.g. multiple
+    moments executing in parallel) don't clobber each other's plans. Other
+    module-level managers (background processes, task store, browser, skills)
+    remain shared — see notes in `agent/tools/__init__.py`.
+    """
     data_dir = str(Path(data_dir).resolve())
     write_dirs = [data_dir] + [str(Path(d).resolve()) for d in (extra_write_dirs or [])]
     _ensure_sandbox(write_dirs)
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(data_dir=data_dir, tmp_dir=tempfile.gettempdir())
     transcript_dir = Path(data_dir) / "transcripts"
     compact_tool = CompactTool(transcript_dir, _make_summarizer(model, api_key), model=model)
-    subagent_tool = SubAgentTool(_make_child_agent(model, system_prompt, api_key), ALL_TOOLS)
-    all_tools = ALL_TOOLS + [compact_tool, subagent_tool]
+
+    # Per-agent plan state: substitute fresh PlanWrite/PlanUpdate tools so each
+    # agent sees its own plan. The other tools in ALL_TOOLS are stateless or
+    # safely shared.
+    plan_state = PlanState()
+    base_tools = [
+        PlanWriteTool(plan_state) if isinstance(t, PlanWriteTool)
+        else PlanUpdateTool(plan_state) if isinstance(t, PlanUpdateTool)
+        else t
+        for t in ALL_TOOLS
+    ]
+    subagent_tool = SubAgentTool(_make_child_agent(model, system_prompt, api_key), base_tools)
+    all_tools = base_tools + [compact_tool, subagent_tool]
     agent = Agent(
         model=model,
         system_prompt=system_prompt,

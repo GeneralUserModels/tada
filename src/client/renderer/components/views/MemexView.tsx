@@ -69,6 +69,10 @@ export function MemexView() {
     if (state.connected) load();
   }, [state.connected, load]);
 
+  useEffect(() => {
+    if (state.memexHasNew) load();
+  }, [state.memexHasNew, load]);
+
   const openPage = useCallback(async (path: string) => {
     setSelectedPath(path);
     setEditing(false);

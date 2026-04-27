@@ -149,8 +149,92 @@ def should_run(slug: str, frequency: str, schedule: str, run_history: dict[str, 
     return now >= due_time
 
 
+async def _execute_one_moment(
+    state,
+    md_file: Path,
+    slug: str,
+    fm: dict,
+    slug_state: dict,
+    effective_frequency: str,
+    effective_schedule: str,
+    logs_dir: str,
+    results_dir: Path,
+    model: str,
+    api_key: str | None,
+    last_run_at: float | None,
+) -> None:
+    """Run a single tada inside the executor semaphore.
+
+    Each instance contends for a slot in `state.moments_executor_sem`; up to
+    `config.moments_executor_concurrency` of these run concurrently. Activity
+    broadcasts are slug-keyed so multiple concurrent runs don't clobber one
+    another's banner.
+    """
+    output_dir = str(results_dir / slug)
+    freq_override = slug_state.get("frequency_override") or None
+    sched_override = slug_state.get("schedule_override") or None
+    moment_title = fm.get("title", slug)
+    run_msg = f"Running: {moment_title}"
+    activity_key = f"moment_run:{slug}"
+    sem = state.moments_executor_sem
+
+    async with sem:
+        started_at = _time.time()
+        logger.info(f"Executing moment: {slug}")
+        await state.broadcast_activity(
+            activity_key, run_msg, slug=slug, frequency=effective_frequency,
+        )
+        on_round = state.make_round_callback(
+            activity_key, run_msg, slug=slug, frequency=effective_frequency,
+        )
+        try:
+            success = await asyncio.to_thread(
+                execute_moment, str(md_file), output_dir, logs_dir, model,
+                frequency_override=freq_override, schedule_override=sched_override,
+                api_key=api_key,
+                last_run_at=last_run_at,
+                on_round=on_round,
+            )
+        finally:
+            await state.broadcast_activity(activity_key)
+        completed_at = _time.time()
+
+        async with state.moments_runs_lock:
+            save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")
+
+        if success:
+            meta_path = Path(output_dir) / "meta.json"
+            meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+            result_dir = Path(output_dir)
+            output_files = [
+                f for f in result_dir.iterdir()
+                if f.is_file() and not f.name.startswith("feedback_")
+            ] if result_dir.exists() else []
+            true_updated = (
+                datetime.fromtimestamp(max(f.stat().st_mtime for f in output_files), tz=timezone.utc).isoformat()
+                if output_files else datetime.now().isoformat()
+            )
+            await state.broadcast("moment_completed", {
+                "slug": slug,
+                "title": meta.get("title", fm.get("title", slug)),
+                "description": meta.get("description", fm.get("description", "")),
+                "completed_at": true_updated,
+                "frequency": effective_frequency,
+                "schedule": effective_schedule,
+            })
+            logger.info(f"Moment completed: {slug}")
+        else:
+            logger.warning(f"Moment failed: {slug}")
+
+
 async def run_moments_scheduler(state) -> None:
-    """Background task: scan logs-tada/ and execute due moments."""
+    """Background task: scan logs-tada/ and execute due moments concurrently.
+
+    Up to `config.moments_executor_concurrency` tadas execute in parallel
+    (via `state.moments_executor_sem`); per-slug deduplication via
+    `state.moments_in_flight_slugs` prevents the same slug from being
+    dispatched twice while a prior task is still queued/running.
+    """
     logger.info("Moments scheduler started")
 
     # Initialize sandbox in the event loop (signal handlers require main thread)
@@ -158,8 +242,6 @@ async def run_moments_scheduler(state) -> None:
     logs_dir = str(Path(state.config.log_dir).resolve())
     tada_dir = str(Path(state.config.tada_dir).resolve())
     await _ensure_sandbox_async([logs_dir, tada_dir])
-
-    executor_lock = state.moments_executor_lock
 
     while True:
         try:
@@ -189,6 +271,8 @@ async def run_moments_scheduler(state) -> None:
                     continue
 
                 slug = md_file.stem
+                if slug in state.moments_in_flight_slugs:
+                    continue
                 slug_state = moment_state.get(slug, {})
                 if slug_state.get("dismissed"):
                     continue
@@ -196,64 +280,34 @@ async def run_moments_scheduler(state) -> None:
                 effective_schedule = slug_state.get("schedule_override") or schedule
                 if not should_run(slug, effective_frequency, effective_schedule, run_history):
                     continue
-                if executor_lock.locked():
-                    logger.debug(f"Executor busy, skipping {slug} this cycle")
-                    continue
 
-                async with executor_lock:
-                    started_at = _time.time()
-                    output_dir = str(results_dir / slug)
-                    logger.info(f"Executing moment: {slug}")
-                    freq_override = slug_state.get("frequency_override") or None
-                    sched_override = slug_state.get("schedule_override") or None
-                    moment_title = fm.get("title", slug)
-                    run_msg = f"Running: {moment_title}"
-                    await state.broadcast_activity(
-                        "moment_run", run_msg, slug=slug, frequency=effective_frequency,
-                    )
-                    on_round = state.make_round_callback(
-                        "moment_run", run_msg, slug=slug, frequency=effective_frequency,
-                    )
-                    try:
-                        success = await asyncio.to_thread(
-                            execute_moment, str(md_file), output_dir, logs_dir, model,
-                            frequency_override=freq_override, schedule_override=sched_override,
-                            api_key=api_key,
-                            last_run_at=run_history.get(slug),
-                            on_round=on_round,
-                        )
-                    finally:
-                        await state.broadcast_activity("moment_run")
-                    completed_at = _time.time()
-                    save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")
-                    run_history[slug] = completed_at
+                state.moments_in_flight_slugs.add(slug)
+                task = asyncio.create_task(_execute_one_moment(
+                    state, md_file, slug, fm, slug_state,
+                    effective_frequency, effective_schedule,
+                    logs_dir, results_dir, model, api_key,
+                    run_history.get(slug),
+                ))
+                state.moments_execution_tasks.add(task)
 
-                    if success:
-                        meta_path = Path(output_dir) / "meta.json"
-                        meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-                        result_dir = Path(output_dir)
-                        output_files = [
-                            f for f in result_dir.iterdir()
-                            if f.is_file() and not f.name.startswith("feedback_")
-                        ] if result_dir.exists() else []
-                        true_updated = (
-                            datetime.fromtimestamp(max(f.stat().st_mtime for f in output_files), tz=timezone.utc).isoformat()
-                            if output_files else datetime.now().isoformat()
-                        )
-                        await state.broadcast("moment_completed", {
-                            "slug": slug,
-                            "title": meta.get("title", fm.get("title", slug)),
-                            "description": meta.get("description", fm.get("description", "")),
-                            "completed_at": true_updated,
-                            "frequency": effective_frequency,
-                            "schedule": effective_schedule,
-                        })
-                        logger.info(f"Moment completed: {slug}")
-                    else:
-                        logger.warning(f"Moment failed: {slug}")
+                def _cleanup(t: asyncio.Task, s: str = slug) -> None:
+                    state.moments_in_flight_slugs.discard(s)
+                    state.moments_execution_tasks.discard(t)
+                    if t.cancelled():
+                        return
+                    exc = t.exception()
+                    if exc is not None:
+                        logger.exception("Moment execution task crashed", exc_info=exc)
+
+                task.add_done_callback(_cleanup)
 
         except asyncio.CancelledError:
             logger.info("Moments scheduler stopped")
+            in_flight = list(state.moments_execution_tasks)
+            for t in in_flight:
+                t.cancel()
+            if in_flight:
+                await asyncio.gather(*in_flight, return_exceptions=True)
             return
         except Exception:
             logger.exception("Moments scheduler error")

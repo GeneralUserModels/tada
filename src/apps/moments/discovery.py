@@ -101,17 +101,25 @@ async def run_moments_discovery(state) -> None:
             api_key = cfg.resolve_api_key("moments_agent_api_key")
 
             try:
-                discover_msg = "Discovering recurring Tadas…"
+                discover_msg = "Discovering Tadas…"
                 await state.broadcast_activity("moments_discovery", discover_msg)
                 discover_cb = state.make_round_callback("moments_discovery", discover_msg)
-                logger.info("Discovery: finding recurring moments")
-                await asyncio.to_thread(MomentsDiscovery(logs_dir, model, api_key).run, on_round=discover_cb)
+                logger.info("Discovery: finding recurring + one-off moments in parallel")
+                results = await asyncio.gather(
+                    asyncio.to_thread(MomentsDiscovery(logs_dir, model, api_key).run, on_round=discover_cb),
+                    asyncio.to_thread(OneoffsDiscovery(logs_dir, model, api_key).run, on_round=discover_cb),
+                    return_exceptions=True,
+                )
+                recurring_ok = not isinstance(results[0], Exception)
+                oneoffs_ok = not isinstance(results[1], Exception)
+                if not recurring_ok:
+                    logger.exception("Recurring discovery failed", exc_info=results[0])
+                if not oneoffs_ok:
+                    logger.exception("One-offs discovery failed", exc_info=results[1])
 
-                oneoffs_msg = "Discovering one-off Tadas…"
-                await state.broadcast_activity("moments_discovery", oneoffs_msg)
-                oneoffs_cb = state.make_round_callback("moments_discovery", oneoffs_msg)
-                logger.info("Discovery: finding one-off moments")
-                await asyncio.to_thread(OneoffsDiscovery(logs_dir, model, api_key).run, on_round=oneoffs_cb)
+                if not (recurring_ok or oneoffs_ok):
+                    logger.warning("Both discovery stages failed; skipping filter and last_run update")
+                    continue
 
                 filter_msg = "Filtering Tadas…"
                 await state.broadcast_activity("moments_discovery", filter_msg)
@@ -151,16 +159,29 @@ def main():
     logs_dir = str(Path(args.logs_dir).resolve())
     api_key = args.api_key or None
 
-    logger.info("Discovery: finding recurring moments in %s", logs_dir)
-    MomentsDiscovery(logs_dir, args.model, api_key).run()
+    async def _run_pipeline() -> None:
+        logger.info("Discovery: finding recurring + one-off moments in parallel in %s", logs_dir)
+        results = await asyncio.gather(
+            asyncio.to_thread(MomentsDiscovery(logs_dir, args.model, api_key).run),
+            asyncio.to_thread(OneoffsDiscovery(logs_dir, args.model, api_key).run),
+            return_exceptions=True,
+        )
+        recurring_ok = not isinstance(results[0], Exception)
+        oneoffs_ok = not isinstance(results[1], Exception)
+        if not recurring_ok:
+            logger.exception("Recurring discovery failed", exc_info=results[0])
+        if not oneoffs_ok:
+            logger.exception("One-offs discovery failed", exc_info=results[1])
+        if not (recurring_ok or oneoffs_ok):
+            logger.warning("Both discovery stages failed; skipping filter")
+            return
 
-    logger.info("Discovery: finding one-off moments")
-    OneoffsDiscovery(logs_dir, args.model, api_key).run()
+        logger.info("Discovery: filtering tasks")
+        await asyncio.to_thread(TaskFilter(logs_dir, args.model, api_key).run)
 
-    logger.info("Discovery: filtering tasks")
-    TaskFilter(logs_dir, args.model, api_key).run()
+        logger.info("Discovery pipeline complete")
 
-    logger.info("Discovery pipeline complete")
+    asyncio.run(_run_pipeline())
 
 
 if __name__ == "__main__":

@@ -231,8 +231,16 @@ async def rerun_moment(slug: str, request: Request):
     if not task_path.exists():
         return JSONResponse({"error": "Task not found"}, status_code=404)
 
-    if state.moments_executor_lock.locked():
-        return JSONResponse({"error": "Another moment is currently executing"}, status_code=409)
+    # Reject if this exact slug is already running/queued (via scheduler or
+    # a prior rerun) — re-firing the same tada concurrently would race on the
+    # shared output dir.
+    if slug in state.moments_in_flight_slugs:
+        return JSONResponse({"error": "This moment is already executing"}, status_code=409)
+
+    # Reject if the executor pool is fully booked. Non-blocking: we don't
+    # want the HTTP request to hang waiting for a slot. The user can retry.
+    if state.moments_executor_sem.locked():
+        return JSONResponse({"error": "All execution slots are busy"}, status_code=409)
 
     cfg = state.config
     model = cfg.moments_agent_model
@@ -248,63 +256,70 @@ async def rerun_moment(slug: str, request: Request):
     sched_override = slug_state.get("schedule_override") or None
     run_history = load_run_history(results_dir)
 
+    state.moments_in_flight_slugs.add(slug)
+
     async def _run_rerun():
-        async with state.moments_executor_lock:
-            await state.broadcast("moment_rerun_started", {"slug": slug})
-            started_at = _time.time()
-            logger.info(f"Re-executing moment: {slug}")
+        try:
+            async with state.moments_executor_sem:
+                await state.broadcast("moment_rerun_started", {"slug": slug})
+                started_at = _time.time()
+                logger.info(f"Re-executing moment: {slug}")
 
-            # Signal handlers require main thread — pre-init before to_thread.
-            from agent.builder import _ensure_sandbox_async
-            await _ensure_sandbox_async([logs_dir, str(tada_dir.resolve())])
+                # Signal handlers require main thread — pre-init before to_thread.
+                from agent.builder import _ensure_sandbox_async
+                await _ensure_sandbox_async([logs_dir, str(tada_dir.resolve())])
 
-            moment_title = fm.get("title", slug)
-            run_msg = f"Running: {moment_title}"
-            effective_frequency = freq_override or fm.get("frequency", "")
-            await state.broadcast_activity(
-                "moment_run", run_msg, slug=slug, frequency=effective_frequency,
-            )
-            on_round = state.make_round_callback(
-                "moment_run", run_msg, slug=slug, frequency=effective_frequency,
-            )
-            try:
-                success = await asyncio.to_thread(
-                    execute_moment, str(task_path), output_dir, logs_dir, model,
-                    frequency_override=freq_override, schedule_override=sched_override,
-                    api_key=api_key,
-                    last_run_at=run_history.get(slug),
-                    on_round=on_round,
+                moment_title = fm.get("title", slug)
+                run_msg = f"Running: {moment_title}"
+                effective_frequency = freq_override or fm.get("frequency", "")
+                activity_key = f"moment_run:{slug}"
+                await state.broadcast_activity(
+                    activity_key, run_msg, slug=slug, frequency=effective_frequency,
                 )
-            finally:
-                await state.broadcast_activity("moment_run")
-            completed_at = _time.time()
-            save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")
-
-            if success:
-                effective_schedule = sched_override or fm.get("schedule", "")
-                meta_path = Path(output_dir) / "meta.json"
-                meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-                result_dir = Path(output_dir)
-                output_files = [
-                    f for f in result_dir.iterdir()
-                    if f.is_file() and not f.name.startswith("feedback_")
-                ] if result_dir.exists() else []
-                true_updated = (
-                    datetime.fromtimestamp(max(f.stat().st_mtime for f in output_files), tz=timezone.utc).isoformat()
-                    if output_files else datetime.now().isoformat()
+                on_round = state.make_round_callback(
+                    activity_key, run_msg, slug=slug, frequency=effective_frequency,
                 )
-                await state.broadcast("moment_completed", {
-                    "slug": slug,
-                    "title": meta.get("title", fm.get("title", slug)),
-                    "description": meta.get("description", fm.get("description", "")),
-                    "completed_at": true_updated,
-                    "frequency": effective_frequency,
-                    "schedule": effective_schedule,
-                })
-                logger.info(f"Moment re-executed: {slug}")
-            else:
-                await state.broadcast("moment_rerun_failed", {"slug": slug})
-                logger.warning(f"Moment rerun failed: {slug}")
+                try:
+                    success = await asyncio.to_thread(
+                        execute_moment, str(task_path), output_dir, logs_dir, model,
+                        frequency_override=freq_override, schedule_override=sched_override,
+                        api_key=api_key,
+                        last_run_at=run_history.get(slug),
+                        on_round=on_round,
+                    )
+                finally:
+                    await state.broadcast_activity(activity_key)
+                completed_at = _time.time()
+                async with state.moments_runs_lock:
+                    save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")
+
+                if success:
+                    effective_schedule = sched_override or fm.get("schedule", "")
+                    meta_path = Path(output_dir) / "meta.json"
+                    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+                    result_dir = Path(output_dir)
+                    output_files = [
+                        f for f in result_dir.iterdir()
+                        if f.is_file() and not f.name.startswith("feedback_")
+                    ] if result_dir.exists() else []
+                    true_updated = (
+                        datetime.fromtimestamp(max(f.stat().st_mtime for f in output_files), tz=timezone.utc).isoformat()
+                        if output_files else datetime.now().isoformat()
+                    )
+                    await state.broadcast("moment_completed", {
+                        "slug": slug,
+                        "title": meta.get("title", fm.get("title", slug)),
+                        "description": meta.get("description", fm.get("description", "")),
+                        "completed_at": true_updated,
+                        "frequency": effective_frequency,
+                        "schedule": effective_schedule,
+                    })
+                    logger.info(f"Moment re-executed: {slug}")
+                else:
+                    await state.broadcast("moment_rerun_failed", {"slug": slug})
+                    logger.warning(f"Moment rerun failed: {slug}")
+        finally:
+            state.moments_in_flight_slugs.discard(slug)
 
     asyncio.create_task(_run_rerun())
     return JSONResponse({"status": "started"}, status_code=202)
