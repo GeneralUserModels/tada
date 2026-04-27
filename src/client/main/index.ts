@@ -32,12 +32,21 @@ let serverProc: ChildProcess | null = null;
 let logStream: fs.WriteStream | null = null;
 let serverReady = false;
 
+const LOG_ROTATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
+
+function openLogStream(logPath: string, banner: string): void {
+  try { logStream?.end(); } catch {}
+  // "w" truncates on open, so the file resets every rotation/launch and can't
+  // grow indefinitely on a long-running process.
+  logStream = fs.createWriteStream(logPath, { flags: "w" });
+  logStream.write(`\n=== ${banner} ${new Date().toISOString()} pid=${process.pid} packaged=${!isDev()} ===\n`);
+}
+
 function initFileLogging(): void {
   const dir = getLogDir();
   fs.mkdirSync(dir, { recursive: true });
   const logPath = path.join(dir, "electron.log");
-  logStream = fs.createWriteStream(logPath, { flags: "a" });
-  logStream.write(`\n=== launch ${new Date().toISOString()} pid=${process.pid} packaged=${!isDev()} ===\n`);
+  openLogStream(logPath, "launch");
 
   const tee = (orig: NodeJS.WriteStream["write"], stream: NodeJS.WriteStream) =>
     ((chunk: string | Uint8Array, ...rest: unknown[]) => {
@@ -54,6 +63,8 @@ function initFileLogging(): void {
   process.on("unhandledRejection", (reason) => {
     console.error("[unhandledRejection]", reason);
   });
+
+  setInterval(() => openLogStream(logPath, "rotate"), LOG_ROTATE_INTERVAL_MS).unref();
 }
 
 // ── Config seeding ───────────────────────────────────────────
