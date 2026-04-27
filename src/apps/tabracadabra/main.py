@@ -122,6 +122,8 @@ load_dotenv()
 # make backspace-based redraws delete earlier user text in rich editors.
 SPINNER_FRAMES_HOLDING = ["|", "/", "-", "\\"]
 SPINNER_TICK_INTERVAL_S = 0.12
+# Linear 0->100% ramp over this many seconds. Caps at 100 if generation runs longer.
+SPINNER_DURATION_S = 60.0
 # Give macOS a brief chance to apply posted backspaces before first content.
 POST_SPINNER_DRAIN_S = 0.04
 
@@ -336,12 +338,6 @@ class TabracadabraService:
         self._spinner_active = False
         self._watching = False  # True while generation is active (any key/click cancels)
 
-        # Phase-1 round counters powering the spinner % (num_turns/max_turns).
-        # Written by the agent's on_round callback on the stream-worker thread,
-        # read by the spinner thread. Plain int writes are atomic under the
-        # GIL; no lock needed for this single-writer/single-reader pattern.
-        self._round_num = 0
-        self._round_max = _TABRA_MAX_ROUNDS
 
     # ------------- Lifecycle -------------
     def start(self):
@@ -502,7 +498,7 @@ class TabracadabraService:
         )
         return user_msg
 
-    def _build_agent(self, on_round=None) -> Agent:
+    def _build_agent(self) -> Agent:
         """Construct a fresh agent for one tabracadabra session — read-only tools, low effort."""
         tools = [t for t in ALL_TOOLS if isinstance(t, _TABRA_TOOL_CLASSES)]
         tools.append(ReadOnlyTerminalTool())
@@ -513,7 +509,6 @@ class TabracadabraService:
             max_rounds=_TABRA_MAX_ROUNDS,
             max_output_tokens=_MEDIUM_EFFORT_OUTPUT_TOKENS,
             api_key=self._api_key or None,
-            on_round=on_round,
             web_search=True,
         )
 
@@ -521,6 +516,7 @@ class TabracadabraService:
     def _loading_spinner(self, first_piece_event: threading.Event, cancel_event: threading.Event):
         try:
             idx = 0
+            start_time = time.monotonic()
             display_text = _format_spinner_display(SPINNER_FRAMES_HOLDING[idx], 0)
             self._type_text(display_text)
             self._inserted_len += len(display_text)
@@ -533,9 +529,9 @@ class TabracadabraService:
                 if first_piece_event.is_set() or cancel_event.is_set():
                     break
 
-                # Turn-based percentage: matches chat's pattern (round/max_rounds).
-                round_max = self._round_max or 1
-                pct = min(100, int((self._round_num / round_max) * 100))
+                # Linear time-based ramp: 0 -> 100% over SPINNER_DURATION_S, capped at 100.
+                elapsed = time.monotonic() - start_time
+                pct = min(100, int((elapsed / SPINNER_DURATION_S) * 100))
                 idx = (idx + 1) % len(SPINNER_FRAMES_HOLDING)
                 next_display = _format_spinner_display(SPINNER_FRAMES_HOLDING[idx], pct)
 
@@ -596,10 +592,6 @@ class TabracadabraService:
         t_total = time.perf_counter()
         try:
             # Phase 1: silent reasoning + (optional) read-only tool use.
-            def _on_round(num_turns: int, max_turns: int):
-                self._round_num = num_turns
-                self._round_max = max_turns
-
             # Pass a list we keep a handle to so we can read the full mutated
             # conversation (tool calls + tool outputs + assistant turns) after
             # the agent finishes. .run() returns only the final summary string;
@@ -607,7 +599,7 @@ class TabracadabraService:
             phase1_messages = [user_msg]
             t_phase1 = time.perf_counter()
             try:
-                phase1_text = self._build_agent(on_round=_on_round).run(phase1_messages)
+                phase1_text = self._build_agent().run(phase1_messages)
             except Exception as e:
                 print(f"[tabracadabra] phase 1 agent.run failed: {e}", flush=True)
                 phase1_text = ""
@@ -627,11 +619,30 @@ class TabracadabraService:
             # message carries phase 1's full transcript (tool calls + outputs +
             # final summary) so phase 2 can ground its answer in the raw
             # evidence, not just the summary.
+            #
+            # The screenshot + cursor metadata go on the FINAL user turn,
+            # immediately before generation, so the writer's last input is the
+            # red-dot image rather than something buried above a long phase-1
+            # transcript. An early text-only user stub preserves the standard
+            # user/assistant/user shape for providers that require it.
             phase2_messages = [
                 {"role": "system", "content": self._phase2_prompt},
-                user_msg,
+                {
+                    "role": "user",
+                    "content": (
+                        "The user pressed Option+Tab in a text field. Their "
+                        "current screen and cursor (red dot) are attached in "
+                        "the final user turn."
+                    ),
+                },
                 {"role": "assistant", "content": phase1_transcript},
-                {"role": "user", "content": _PHASE2_USER_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        *user_msg["content"],
+                        {"type": "text", "text": _PHASE2_USER_PROMPT},
+                    ],
+                },
             ]
             t_phase2 = time.perf_counter()
             kwargs = dict(
@@ -750,8 +761,6 @@ class TabracadabraService:
         self._spinner_count = 0
         self._last_char_space = False
         self._content_started = False
-        self._round_num = 0
-        self._round_max = _TABRA_MAX_ROUNDS
 
         cancel = threading.Event()
         self._cancel_event = cancel
