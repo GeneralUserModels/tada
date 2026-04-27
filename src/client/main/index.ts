@@ -23,6 +23,39 @@ import { pendingSteps, type OnboardingState } from "../shared/onboardingSteps";
 
 let serverProc: ChildProcess | null = null;
 
+// ── File logging ─────────────────────────────────────────────
+// When launched from Finder/Spotlight, Electron's stdout/stderr go nowhere
+// visible — silent failures (missing API keys, server crashes) are then
+// invisible to users. Mirror everything to a file in the data dir so we have
+// something to point users at.
+
+let logStream: fs.WriteStream | null = null;
+let serverReady = false;
+
+function initFileLogging(): void {
+  const dir = getLogDir();
+  fs.mkdirSync(dir, { recursive: true });
+  const logPath = path.join(dir, "electron.log");
+  logStream = fs.createWriteStream(logPath, { flags: "a" });
+  logStream.write(`\n=== launch ${new Date().toISOString()} pid=${process.pid} packaged=${!isDev()} ===\n`);
+
+  const tee = (orig: NodeJS.WriteStream["write"], stream: NodeJS.WriteStream) =>
+    ((chunk: string | Uint8Array, ...rest: unknown[]) => {
+      try { logStream?.write(chunk as Buffer | string); } catch {}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (orig as any).call(stream, chunk, ...rest);
+    }) as NodeJS.WriteStream["write"];
+  process.stdout.write = tee(process.stdout.write.bind(process.stdout), process.stdout);
+  process.stderr.write = tee(process.stderr.write.bind(process.stderr), process.stderr);
+
+  process.on("uncaughtException", (err) => {
+    console.error("[uncaughtException]", err?.stack ?? err);
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error("[unhandledRejection]", reason);
+  });
+}
+
 // ── Config seeding ───────────────────────────────────────────
 
 function ensureConfigDefaults(): void {
@@ -116,7 +149,15 @@ function startServer(port: number): void {
       "--log-to-wandb",
     ], { cwd: projectRoot, env: { ...process.env, TADA_CONFIG_PATH: configPath } });
   } else {
-    // Packaged mode: use venv python directly
+    // Packaged mode: use venv python directly.
+    // Finder/Spotlight launches inherit a minimal PATH (`/usr/bin:/bin:/...`),
+    // which doesn't contain the bundled `rg` we drop into the data dir during
+    // bootstrap. sandbox_runtime resolves `rg` via shutil.which, so without
+    // this prepend it raises "Sandbox dependencies not available" the first
+    // time the chat agent tries to start. Terminal launches happen to work
+    // only because the user's shell PATH usually has Homebrew's `rg`.
+    const dataDir = getDataDir();
+    const existingPath = process.env.PATH ?? "/usr/bin:/bin:/usr/sbin:/sbin";
     serverProc = spawn(pythonPath, [
       "-m", "server",
       "--port", String(port),
@@ -127,9 +168,10 @@ function startServer(port: number): void {
       "--resume-from-checkpoint", "auto",
       "--log-to-wandb",
     ], {
-      cwd: getDataDir(),
+      cwd: dataDir,
       env: {
         ...process.env,
+        PATH: `${dataDir}:${existingPath}`,
         PYTHONPATH: pythonSrcDir,
         TADA_CONFIG_PATH: configPath,
         // Never write .pyc files into the signed .app bundle — that breaks
@@ -151,9 +193,18 @@ function startServer(port: number): void {
   serverProc.stderr?.on("data", (chunk: Buffer) => {
     process.stderr.write(`[server] ${chunk}`);
   });
-  serverProc.on("exit", (code) => {
-    console.log(`[server] exited with code ${code}`);
+  serverProc.on("exit", (code, signal) => {
+    console.log(`[server] exited with code ${code} signal ${signal}`);
+    const wasUnexpected = !isQuitting && !serverReady;
     serverProc = null;
+    if (wasUnexpected) {
+      const logPath = path.join(getLogDir(), "electron.log");
+      dialog.showErrorBox(
+        "Tada server failed to start",
+        `The Python server exited with code ${code} before becoming ready.\n\n` +
+        `Logs: ${logPath}`,
+      );
+    }
   });
 
   console.log(`[server] spawned on port ${port}, log-dir ${logDirPath}`);
@@ -339,6 +390,7 @@ async function runBootstrap(): Promise<void> {
 // ── App lifecycle ────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  initFileLogging();
   app.dock?.show();
   ensureConfigDefaults();
   setupIpc();
@@ -368,16 +420,18 @@ app.whenReady().then(async () => {
   createDashboard({ show: !showOnboarding });
   setupSseForwarding();
 
-  const serverReady = waitForServer(`${api.getServerUrl()}/api/status`);
+  const serverReadyPromise = waitForServer(`${api.getServerUrl()}/api/status`).then(() => {
+    serverReady = true;
+  });
 
   if (showOnboarding) {
     // Open onboarding immediately so there's no windowless gap after
     // setup closes. The server boots in parallel; onboarding defers
     // its SERVER_READY IPC until the promise resolves.
-    await runOnboarding(serverReady, onboardingMode);
+    await runOnboarding(serverReadyPromise, onboardingMode);
     dashboardWindow?.show();
   } else {
-    await serverReady;
+    await serverReadyPromise;
   }
 
   if (dashboardWindow) {
