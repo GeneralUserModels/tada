@@ -20,7 +20,7 @@ Read activity from these files in {logs_dir}/:
 
 **SECONDARY — use for additional context:**
 - email/filtered.jsonl — fields: subject, from, date, summary (nested under "source")
-- calendar/events.jsonl — fields: summary, start, end, location, description (nested under "source")
+- calendar/filtered.jsonl — fields: summary, start, end, location, description (nested under "source")
 - notifications/filtered.jsonl — fields: app, subtitle, body, summary (nested under "source")
 - filesys/filtered.jsonl — fields: type, path, summary (nested under "source")
 

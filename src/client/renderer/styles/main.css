@@ -2663,15 +2663,7 @@ button, input, select, textarea, canvas, a, label,
   padding-top: 12px;
   border-top: 1px solid var(--glass-border);
   margin-top: 8px;
-  align-items: stretch;
-}
-
-/* Match the Send/Stop button height to the (auto-resizing) textarea so
-   the input row reads as a single bar instead of a button floating
-   inside a taller field. */
-.chat-input-area .pill-btn {
-  align-self: stretch;
-  min-height: 56px;
+  align-items: center;
 }
 
 .chat-input {

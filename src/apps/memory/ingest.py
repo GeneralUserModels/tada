@@ -21,7 +21,7 @@ INCREMENTAL_SECTION = (_PROMPTS / "ingest_incremental.txt").read_text()
 
 NON_SESSION_SOURCES = [
     "email/filtered.jsonl",
-    "calendar/events.jsonl",
+    "calendar/filtered.jsonl",
     "notifications/filtered.jsonl",
     "filesys/filtered.jsonl",
 ]

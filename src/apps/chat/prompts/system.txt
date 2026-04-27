@@ -22,7 +22,7 @@ Be efficient: read the 1–2 most recent / most relevant files. Don't trawl the 
 **Past chats with you**: `chats/<session_id>/conversation.md` — markdown transcripts of prior assistant chats (User/Assistant turns). Useful for catching context, preferences, and unfinished threads the user has surfaced before.
 
 **Email**: `email/filtered.jsonl` — fields: subject, from, date, summary (nested under "source")
-**Calendar**: `calendar/events.jsonl` — fields: summary, start, end, location, description (nested under "source")
+**Calendar**: `calendar/filtered.jsonl` — fields: summary, start, end, location, description (nested under "source")
 **Notifications**: `notifications/filtered.jsonl` — fields: app, subtitle, body, summary (nested under "source")
 **Filesystem changes**: `filesys/filtered.jsonl` — fields: type, path, summary (nested under "source")
 
