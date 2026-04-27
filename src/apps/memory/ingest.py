@@ -39,19 +39,14 @@ def _modified_sources(logs_dir: str, since: datetime | None) -> list[str]:
     return result
 
 
-def _new_seeker_conversations(logs_dir: str, since: datetime | None) -> list[str]:
-    """Return seeker conversation files created after *since*."""
-    conv_dir = Path(logs_dir) / "active-conversations"
-    if not conv_dir.exists():
+def _new_files_in(base: Path, pattern: str, since: datetime | None) -> list[Path]:
+    """Return files matching *pattern* under *base* modified after *since*."""
+    if not base.exists():
         return []
-    files = sorted(conv_dir.glob("conversation_*.md"))
+    files = sorted(base.rglob(pattern))
     if since is None:
-        return [str(f.relative_to(logs_dir)) for f in files]
-    return [
-        str(f.relative_to(logs_dir))
-        for f in files
-        if datetime.fromtimestamp(f.stat().st_mtime) > since
-    ]
+        return files
+    return [f for f in files if datetime.fromtimestamp(f.stat().st_mtime) > since]
 
 
 def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) -> str:
@@ -63,9 +58,14 @@ def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) ->
     checkpoint_path = memory_dir / ".last_ingest"
     last_ingest = read_checkpoint(checkpoint_path)
 
+    tada_results = logs_path.parent / "logs-tada" / "results"
+
+    new_active_convos = _new_files_in(logs_path / "active-conversations", "conversation_*.md", last_ingest)
+    new_chats = _new_files_in(logs_path / "chats", "conversation.md", last_ingest)
+    new_audio = _new_files_in(logs_path / "audio", "*.md", last_ingest)
+    new_tada_feedback = _new_files_in(tada_results, "feedback_*.md", last_ingest)
     new_sessions = sessions_with_new_content(logs_dir, last_ingest)
-    modified_sources = _modified_sources(logs_dir, last_ingest)
-    new_convos = _new_seeker_conversations(logs_dir, last_ingest)
+    modified_streams = _modified_sources(logs_dir, last_ingest)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     instruction = f"Current date and time: **{now}**\n\n" + INGEST_TEMPLATE.format(
@@ -73,17 +73,31 @@ def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) ->
         logs_dir=logs_dir,
     )
 
-    if last_ingest is not None and (new_sessions or modified_sources or new_convos):
-        sessions_list = "\n".join(f"- {s}/labels.jsonl" for s in new_sessions) if new_sessions else "- (none)"
-        sources_list = "\n".join(f"- {s}" for s in modified_sources) if modified_sources else "- (none)"
-        convos_list = "\n".join(f"- {c}" for c in new_convos) if new_convos else "- (none)"
+    def _section(label: str, items: list, formatter) -> str | None:
+        if not items:
+            return None
+        body = "\n".join(f"- {formatter(item)}" for item in items)
+        return f"**{label}:**\n{body}"
+
+    rel = lambda f: os.path.relpath(f, logs_path)
+    sections = [
+        _section("Active conversations (user-answered Q&A)", new_active_convos, rel),
+        _section("Chats with assistant", new_chats, rel),
+        _section("Audio transcripts", new_audio, rel),
+        _section("Tada moment feedback", new_tada_feedback, rel),
+        _section("Sessions with new screen activity", new_sessions, lambda s: f"{s}/labels.jsonl"),
+        _section("Modified streams", modified_streams, str),
+    ]
+    new_inputs_list = "\n\n".join(s for s in sections if s)
+    has_new = bool(new_inputs_list)
+
+    if last_ingest is not None and has_new:
         instruction += INCREMENTAL_SECTION.format(
             last_ingest_date=last_ingest.strftime("%Y-%m-%d %H:%M"),
-            sessions_list=sessions_list,
-            other_sources_list=sources_list,
-            new_conversations_list=convos_list,
+            new_inputs_list=new_inputs_list,
+            logs_dir=logs_dir,
         )
-    elif last_ingest is not None and not new_sessions and not modified_sources and not new_convos:
+    elif last_ingest is not None and not has_new:
         instruction += (
             f"\n\n## Note\n\nThe last ingest was on "
             f"**{last_ingest.strftime('%Y-%m-%d %H:%M')}** and there is no new data "
@@ -92,7 +106,7 @@ def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) ->
         )
 
     agent, _ = build_agent(model, logs_dir, api_key=api_key)
-    agent.max_rounds = 200
+    agent.max_rounds = 100
     agent.on_round = on_round
     result = agent.run([{"role": "user", "content": instruction}])
 
