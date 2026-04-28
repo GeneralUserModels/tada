@@ -102,12 +102,17 @@ async def run_moments_discovery(state) -> None:
 
             try:
                 discover_msg = "Discovering Tadas…"
+                # Two parallel agents share the "moments_discovery" banner; we
+                # intentionally don't wire up an on_round callback here because
+                # both agents would broadcast their own progress to the same
+                # key, causing the bar to ping-pong between their counts. The
+                # static set+clear keeps the spinner up without a misleading
+                # progress number.
                 await state.broadcast_activity("moments_discovery", discover_msg)
-                discover_cb = state.make_round_callback("moments_discovery", discover_msg)
                 logger.info("Discovery: finding recurring + one-off moments in parallel")
                 results = await asyncio.gather(
-                    asyncio.to_thread(MomentsDiscovery(logs_dir, model, api_key).run, on_round=discover_cb),
-                    asyncio.to_thread(OneoffsDiscovery(logs_dir, model, api_key).run, on_round=discover_cb),
+                    asyncio.to_thread(MomentsDiscovery(logs_dir, model, api_key).run),
+                    asyncio.to_thread(OneoffsDiscovery(logs_dir, model, api_key).run),
                     return_exceptions=True,
                 )
                 recurring_ok = not isinstance(results[0], Exception)
