@@ -41,7 +41,7 @@ The user's data is in `{logs_dir}/`. Only use sources relevant to the task above
 **Past chats with assistant**: `chats/<session_id>/conversation.md` — markdown transcripts of the user's prior chats with the Tada assistant (User/Assistant turns). Useful for preferences, unfinished threads, and what the user has been thinking about.
 
 **Email**: `email/filtered.jsonl` — fields: subject, from, date, summary (nested under "source")
-**Calendar**: `calendar/events.jsonl` — fields: summary, start, end, location, description (nested under "source")
+**Calendar**: `calendar/filtered.jsonl` — fields: summary, start, end, location, description (nested under "source")
 **Notifications**: `notifications/filtered.jsonl` — fields: app, subtitle, body, summary (nested under "source")
 **Filesystem changes**: `filesys/filtered.jsonl` — fields: type, path, summary (nested under "source")
 

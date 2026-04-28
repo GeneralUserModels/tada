@@ -18,6 +18,7 @@ import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogle
 import * as bootstrap from "./features/bootstrap";
 import { runOnboarding, getOnboardingWindow } from "./features/onboarding";
 import { setupConnectorIpc } from "./connectors/manager";
+import { connectorPermissions } from "./connectors/permissions";
 import { initUpdateChecker, checkForUpdates, installUpdate } from "./features/updater";
 import { pendingSteps, type OnboardingState } from "../shared/onboardingSteps";
 
@@ -69,6 +70,33 @@ function initFileLogging(): void {
 
 // ── Config seeding ───────────────────────────────────────────
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// Recursively fill in keys present in `defaults` but missing from `target`.
+// Existing user values — including arrays, primitives, and explicit nulls —
+// are preserved. Only nested plain objects are recursed into. Returns true if
+// any keys were added so the caller can avoid unnecessary disk writes.
+function fillMissingDefaults(
+  target: Record<string, unknown>,
+  defaults: Record<string, unknown>,
+): boolean {
+  let changed = false;
+  for (const [key, defVal] of Object.entries(defaults)) {
+    if (!(key in target)) {
+      target[key] = structuredClone(defVal);
+      changed = true;
+      continue;
+    }
+    const cur = target[key];
+    if (isPlainObject(cur) && isPlainObject(defVal)) {
+      if (fillMissingDefaults(cur, defVal)) changed = true;
+    }
+  }
+  return changed;
+}
+
 function ensureConfigDefaults(): void {
   const configPath = path.join(getDataDir(), "tada-config.json");
   const defaultsPath = isDev()
@@ -81,10 +109,7 @@ function ensureConfigDefaults(): void {
   let cfg: Record<string, unknown> = {};
   try { cfg = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
 
-  let changed = false;
-  for (const [key, value] of Object.entries(defaults)) {
-    if (!(key in cfg)) { cfg[key] = value; changed = true; }
-  }
+  const changed = fillMissingDefaults(cfg, defaults);
   if (changed) {
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
@@ -121,6 +146,24 @@ function readOnboardingState(): { needed: boolean; mode: "first" | "returning" }
     needed: pendingSteps(state).length > 0,
     mode: state.onboardingComplete ? "returning" : "first",
   };
+}
+
+// macOS pins Accessibility entries to the binary's signature, so an in-place
+// app update can leave the previous Tada entry stale — CGEventTapCreate then
+// silently returns NULL inside the Python Tabracadabra service. Re-asking on
+// launch (re-)registers the binary in TCC and triggers the native prompt;
+// first-launch users hit this in onboarding instead.
+
+async function ensureAccessibilityForTabracadabra(): Promise<void> {
+  if (process.platform !== "darwin") return;
+  const configPath = path.join(getDataDir(), "tada-config.json");
+  if (!fs.existsSync(configPath)) return;
+  const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8")) as Record<string, unknown>;
+  if (cfg.onboarding_complete !== true) return;
+
+  const desc = connectorPermissions.accessibility;
+  if (!desc || await desc.check()) return;
+  await desc.request?.();
 }
 
 // ── Server management ─────────────────────────────────────────
@@ -411,6 +454,12 @@ app.whenReady().then(async () => {
   if (!isDev() && !bootstrap.isReady()) {
     await runBootstrap();
   }
+
+  // After bootstrap and before the Python server starts, re-check
+  // Accessibility for returning users — macOS can silently invalidate the
+  // grant after an app update and the Python Tabracadabra service has no
+  // way to surface that to the user.
+  await ensureAccessibilityForTabracadabra();
 
   // In dev, the supervisor starts the server and provides the URL.
   // In packaged mode, Electron owns server lifecycle directly.

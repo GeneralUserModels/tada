@@ -210,19 +210,14 @@ const folderDownloadsPermission = makeFolderPermission("downloads", "Downloads")
 // ── Accessibility ────────────────────────────────────────────────────────────
 
 const accessibilityPermission: PermissionDescriptor = {
-  check: () => systemPreferences.isTrustedAccessibilityClient(false),
+  check: () => mac()?.getAuthStatus("accessibility") === "authorized",
 
   request: async () => {
-    // Electron's isTrustedAccessibilityClient(true) wraps AXIsProcessTrusted-
-    // WithOptions and triggers the native prompt; node-mac-permissions only
-    // opens Settings for this permission, so we prefer Electron here.
-    const trusted = systemPreferences.isTrustedAccessibilityClient(true);
-    if (!trusted) {
-      shell.openExternal(
-        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-      );
-    }
-    return trusted;
+    // askForAccessibilityAccess wraps AXIsProcessTrustedWithOptions(prompt=YES) —
+    // (re-)registers the binary in TCC and triggers the native prompt.
+    mac()?.askForAccessibilityAccess();
+    await sleep(600);
+    return mac()?.getAuthStatus("accessibility") === "authorized";
   },
 
   fixUrl: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",

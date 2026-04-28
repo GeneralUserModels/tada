@@ -31,9 +31,8 @@ class ServerState:
     seeker_scheduler_task: asyncio.Task | None = None
     seeker_session: object | None = None  # ChatSession when active
 
-    # Moment feedback
-    feedback_session: object | None = None  # ChatSession when active
-    feedback_slug: str | None = None        # which moment is being given feedback
+    # Moment feedback — one ChatSession per slug, supports concurrent sessions
+    feedback_sessions: dict[str, object] = field(default_factory=dict)
     
     cost_logger_task: asyncio.Task | None = None
 

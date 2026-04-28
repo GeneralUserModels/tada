@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -333,11 +334,24 @@ def _resolve_feedback_api_key(config) -> str | None:
     return config.moments_agent_api_key or config.resolve_api_key("agent_api_key")
 
 
-async def _stream_feedback_response(state):
-    """Generator that streams LLM tokens as SSE data lines."""
-    session = state.feedback_session
-    async for token in session.respond_stream():
+@dataclass
+class _FeedbackEntry:
+    """In-memory feedback session bound to a stable on-disk transcript path."""
+    session: object  # ChatSession
+    path: Path
+
+
+def _persist_feedback(entry: _FeedbackEntry) -> None:
+    entry.session.save(entry.path, assistant_label="Tada")
+    logger.info(f"Feedback saved to {entry.path}")
+
+
+async def _stream_feedback_response(entry: _FeedbackEntry):
+    """Stream LLM tokens as SSE; persist transcript when the turn completes."""
+    async for token in entry.session.respond_stream():
         yield f"data: {json.dumps({'token': token})}\n\n"
+    # Save after every turn so transcripts survive the user closing the panel.
+    _persist_feedback(entry)
     yield f"data: {json.dumps({'done': True})}\n\n"
 
 
@@ -355,8 +369,11 @@ async def start_feedback(slug: str, body: FeedbackMessageBody, request: Request)
     if not (result_dir / "index.html").exists():
         return JSONResponse({"error": "Moment not found"}, status_code=404)
 
-    if state.feedback_session is not None:
-        return JSONResponse({"error": "Feedback conversation already active"}, status_code=409)
+    # If a session for this slug is already in memory (e.g. the user closed the
+    # panel without calling /end), flush it to its transcript before replacing.
+    existing = state.feedback_sessions.pop(slug, None)
+    if existing is not None:
+        _persist_feedback(existing)
 
     # Build system prompt with moment context
     meta_path = result_dir / "meta.json"
@@ -373,14 +390,18 @@ async def start_feedback(slug: str, body: FeedbackMessageBody, request: Request)
         system_prompt=system_prompt,
         api_key=_resolve_feedback_api_key(state.config),
     )
-    state.feedback_session = ChatSession(agent=agent, done_marker=None)
-    state.feedback_slug = slug
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    entry = _FeedbackEntry(
+        session=ChatSession(agent=agent, done_marker=None),
+        path=result_dir / f"feedback_{timestamp}.md",
+    )
+    state.feedback_sessions[slug] = entry
 
     # User sends the first message
-    state.feedback_session.add_user_message(body.content)
+    entry.session.add_user_message(body.content)
 
     return StreamingResponse(
-        _stream_feedback_response(state),
+        _stream_feedback_response(entry),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -391,16 +412,17 @@ async def send_feedback_message(slug: str, body: FeedbackMessageBody, request: R
     """Send a message in the active feedback conversation."""
     state = request.app.state.server
 
-    if state.feedback_session is None or state.feedback_slug != slug:
+    entry = state.feedback_sessions.get(slug)
+    if entry is None:
         return JSONResponse({"error": "No active feedback conversation for this moment"}, status_code=409)
 
     if not body.content.strip():
         return JSONResponse({"error": "Message cannot be empty"}, status_code=400)
 
-    state.feedback_session.add_user_message(body.content)
+    entry.session.add_user_message(body.content)
 
     return StreamingResponse(
-        _stream_feedback_response(state),
+        _stream_feedback_response(entry),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -411,22 +433,13 @@ async def end_feedback(slug: str, request: Request):
     """End the feedback conversation and save the transcript."""
     state = request.app.state.server
 
-    if state.feedback_session is None or state.feedback_slug != slug:
+    entry = state.feedback_sessions.pop(slug, None)
+    if entry is None:
         return JSONResponse({"error": "No active feedback conversation for this moment"}, status_code=409)
 
-    tada_dir = _get_tada_dir(request)
-    result_dir = tada_dir / "results" / slug
+    _persist_feedback(entry)
 
-    # Save feedback
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = result_dir / f"feedback_{timestamp}.md"
-    state.feedback_session.save(path, assistant_label="Tada")
-    logger.info(f"Feedback saved to {path}")
-
-    state.feedback_session = None
-    state.feedback_slug = None
-
-    return {"status": "ended", "filename": path.name}
+    return {"status": "ended", "filename": entry.path.name}
 
 
 @router.get("/{slug}/feedback/conversation")
@@ -434,7 +447,8 @@ async def get_feedback_conversation(slug: str, request: Request):
     """Get the current feedback conversation state."""
     state = request.app.state.server
 
-    if state.feedback_session is not None and state.feedback_slug == slug:
-        return {"active": True, "messages": state.feedback_session.visible_messages()}
+    entry = state.feedback_sessions.get(slug)
+    if entry is not None:
+        return {"active": True, "messages": entry.session.visible_messages()}
 
     return {"active": False, "messages": []}

@@ -34,6 +34,12 @@ import mss
 from PIL import Image, ImageDraw
 
 import Quartz
+from ApplicationServices import (
+    AXUIElementCreateSystemWide,
+    AXUIElementCopyAttributeValue,
+    AXUIElementGetPid,
+    kAXFocusedUIElementAttribute,
+)
 
 from connectors.screen.napsack.recorder import (
     DEFAULT_TARGET_DPI,
@@ -126,6 +132,9 @@ SPINNER_TICK_INTERVAL_S = 0.12
 SPINNER_DURATION_S = 60.0
 # Give macOS a brief chance to apply posted backspaces before first content.
 POST_SPINNER_DRAIN_S = 0.04
+
+# Poll interval for the AX focus watcher — sub-perceptible cancel latency.
+FOCUS_POLL_INTERVAL_S = 0.1
 
 # Keycodes
 KC_TAB = 48       # 0x30
@@ -275,6 +284,33 @@ def _format_spinner_display(frame: str, pct: int) -> str:
     return f"[{frame}] {pct}%"
 
 
+# ------------- AX focus tracking -------------
+def _get_focused_element():
+    """Return the systemwide focused AXUIElement, or None if AX is unavailable / no focus."""
+    systemwide = AXUIElementCreateSystemWide()
+    err, elem = AXUIElementCopyAttributeValue(systemwide, kAXFocusedUIElementAttribute, None)
+    if err != 0:
+        return None
+    return elem
+
+
+def _focused_element_identity(elem):
+    """Stable identity tuple for diffing focus across polls. AXUIElement wrappers
+    from separate copies don't compare equal even when they refer to the same UI
+    element, so we fingerprint by (pid, role, position, size). A window resize
+    during streaming will shift position/size and trigger a cancel — acceptable
+    since the user is interacting with the window they're typing in."""
+    if elem is None:
+        return None
+    err, pid = AXUIElementGetPid(elem, None)
+    if err != 0:
+        return None
+    _, role = AXUIElementCopyAttributeValue(elem, "AXRole", None)
+    _, pos = AXUIElementCopyAttributeValue(elem, "AXPosition", None)
+    _, size = AXUIElementCopyAttributeValue(elem, "AXSize", None)
+    return (pid, str(role) if role else None, str(pos) if pos else None, str(size) if size else None)
+
+
 # ------------- Config fetch for standalone use -------------
 def _fetch_tada_config(base_url: str = "http://localhost:8000") -> dict:
     """Fetch tabracadabra config from Tada settings. Falls back to env vars on error."""
@@ -337,6 +373,10 @@ class TabracadabraService:
         self._spinner_thread: threading.Thread | None = None
         self._spinner_active = False
         self._watching = False  # True while generation is active (any key/click cancels)
+
+        # Focus watcher
+        self._focus_watcher_thread: threading.Thread | None = None
+        self._captured_focus_identity = None
 
 
     # ------------- Lifecycle -------------
@@ -602,7 +642,7 @@ class TabracadabraService:
                 phase1_text = self._build_agent().run(phase1_messages)
             except Exception as e:
                 print(f"[tabracadabra] phase 1 agent.run failed: {e}", flush=True)
-                phase1_text = ""
+                return
             phase1_ms = (time.perf_counter() - t_phase1) * 1000
             phase1_transcript = _flatten_phase1_transcript(phase1_messages)
             print(
@@ -723,6 +763,8 @@ class TabracadabraService:
         self._inserted_len = 0
         self._last_char_space = False
         self._cancel_event = None
+        self._captured_focus_identity = None
+        self._focus_watcher_thread = None
 
     # ------------- Tab-based control -------------
     def _start_spinner(self, cancel_event: threading.Event, first_piece_event: threading.Event):
@@ -751,8 +793,41 @@ class TabracadabraService:
         self._stream_thread = t
         t.start()
 
+    def _focus_watcher(self, cancel_event: threading.Event, captured_identity):
+        """Poll the systemwide AX focused element; cancel if it shifts while watching.
+        Covers cases the event tap misses: trackpad app-switch gestures, dock clicks
+        that don't surface as cancel-eligible events, notification banners stealing
+        focus, programmatic focus changes."""
+        while not cancel_event.is_set() and self._watching:
+            cancel_event.wait(timeout=FOCUS_POLL_INTERVAL_S)
+            if cancel_event.is_set() or not self._watching:
+                return
+            current = _focused_element_identity(_get_focused_element())
+            if current is None:
+                continue
+            if current != captured_identity:
+                print("[tabracadabra] Focus shifted out of text box, cancelling", flush=True)
+                self._handle_cancel()
+                return
+
+    def _start_focus_watcher(self, cancel_event: threading.Event, captured_identity):
+        if captured_identity is None:
+            return
+        t = threading.Thread(
+            target=self._focus_watcher,
+            args=(cancel_event, captured_identity),
+            daemon=True,
+            name="tabracadabra-focus-watcher",
+        )
+        self._focus_watcher_thread = t
+        t.start()
+
     def _start_generation(self):
         """Option+Tab pressed — start spinner + LLM stream immediately."""
+        # Snapshot focus BEFORE any side effects (spinner typing into the field).
+        captured_identity = _focused_element_identity(_get_focused_element())
+        self._captured_focus_identity = captured_identity
+
         self._session_active = True
         self._watching = True
         self._keep_contents = False
@@ -769,6 +844,7 @@ class TabracadabraService:
 
         self._start_spinner(cancel, first_piece_event)
         self._start_stream()
+        self._start_focus_watcher(cancel, captured_identity)
         print("[tabracadabra] Option+Tab: generation started", flush=True)
 
     def _stop_stream(self, join: bool = True):
@@ -806,6 +882,8 @@ class TabracadabraService:
         self._inserted_len = 0
         self._last_char_space = False
         self._cancel_event = None
+        self._captured_focus_identity = None
+        self._focus_watcher_thread = None
 
     # ------------- Event Tap Callback -------------
     def _callback(self, proxy, event_type, event, refcon):

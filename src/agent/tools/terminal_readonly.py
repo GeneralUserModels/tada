@@ -4,6 +4,7 @@ import threading
 from sandbox_runtime import SandboxManager
 from sandbox_runtime.config import FilesystemConfig, NetworkConfig, SandboxRuntimeConfig
 
+from ..builder import DENY_READ_PATHS
 from .terminal import TerminalTool
 
 
@@ -12,7 +13,7 @@ _READ_ONLY_CONFIG = SandboxRuntimeConfig(
     filesystem=FilesystemConfig(
         allow_write=[],
         deny_write=[],
-        deny_read=["~/.ssh", "~/.gnupg", "~/.aws/credentials"],
+        deny_read=DENY_READ_PATHS,
     ),
 )
 
