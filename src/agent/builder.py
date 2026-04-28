@@ -18,10 +18,34 @@ from .tools import ALL_TOOLS, _bg_manager
 from .tools.compact import CompactTool
 from .tools.subagent import SubAgentTool
 
+# Sandbox read-deny list shared by every agent built here and by
+# ReadOnlyTerminalTool. Covers credentials plus macOS personal/app data the
+# agent has no business scanning (iCloud Drive, Photos, Apple Music, Mail,
+# Messages, sandboxed-app containers, etc.). Surgical rather than blanket
+# `~/Library` because the packaged app's own data_dir lives under
+# `~/Library/Application Support/tada`.
+DENY_READ_PATHS = [
+    "~/.ssh",
+    "~/.gnupg",
+    "~/.aws/credentials",
+    "~/Library/Keychains",
+    "~/Library/Cookies",
+    "~/Library/Mobile Documents",
+    "~/Library/CloudStorage",
+    "~/Library/Photos",
+    "~/Pictures",
+    "~/Music",
+    "~/Movies",
+    "~/Library/Application Support/AddressBook",
+    "~/Library/Safari",
+    "~/Library/Containers",
+    "~/Library/Group Containers",
+]
+
 _SYSTEM_PROMPT_TEMPLATE = """\
 You are an agent with tools to read, write, edit files, run shell commands, search the web, and browse websites.
 
-You can read any file on the system. You can write files to:
+You can read project files and files the user explicitly references. You can write files to:
 - {data_dir}/ (app data, logs, tasks)
 - {tmp_dir}/ (temporary files)
 
@@ -50,7 +74,7 @@ def _ensure_sandbox(write_dirs: list[str]):
         network={},
         filesystem={
             "allow_write": write_dirs + [tempfile.gettempdir()],
-            "deny_read": ["~/.ssh", "~/.gnupg", "~/.aws/credentials"],
+            "deny_read": DENY_READ_PATHS,
         },
     )))
     _sandbox_initialized = True
@@ -64,7 +88,7 @@ async def _ensure_sandbox_async(write_dirs: list[str]):
         network={},
         filesystem={
             "allow_write": write_dirs + [tempfile.gettempdir()],
-            "deny_read": ["~/.ssh", "~/.gnupg", "~/.aws/credentials"],
+            "deny_read": DENY_READ_PATHS,
         },
     ))
     _sandbox_initialized = True

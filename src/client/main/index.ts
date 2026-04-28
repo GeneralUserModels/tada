@@ -18,6 +18,7 @@ import { isDev, getDataDir, getPythonPath, getLogDir, getPythonSrcDir, getGoogle
 import * as bootstrap from "./features/bootstrap";
 import { runOnboarding, getOnboardingWindow } from "./features/onboarding";
 import { setupConnectorIpc } from "./connectors/manager";
+import { connectorPermissions } from "./connectors/permissions";
 import { initUpdateChecker, checkForUpdates, installUpdate } from "./features/updater";
 import { pendingSteps, type OnboardingState } from "../shared/onboardingSteps";
 
@@ -69,6 +70,33 @@ function initFileLogging(): void {
 
 // ── Config seeding ───────────────────────────────────────────
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// Recursively fill in keys present in `defaults` but missing from `target`.
+// Existing user values — including arrays, primitives, and explicit nulls —
+// are preserved. Only nested plain objects are recursed into. Returns true if
+// any keys were added so the caller can avoid unnecessary disk writes.
+function fillMissingDefaults(
+  target: Record<string, unknown>,
+  defaults: Record<string, unknown>,
+): boolean {
+  let changed = false;
+  for (const [key, defVal] of Object.entries(defaults)) {
+    if (!(key in target)) {
+      target[key] = structuredClone(defVal);
+      changed = true;
+      continue;
+    }
+    const cur = target[key];
+    if (isPlainObject(cur) && isPlainObject(defVal)) {
+      if (fillMissingDefaults(cur, defVal)) changed = true;
+    }
+  }
+  return changed;
+}
+
 function ensureConfigDefaults(): void {
   const configPath = path.join(getDataDir(), "tada-config.json");
   const defaultsPath = isDev()
@@ -81,10 +109,7 @@ function ensureConfigDefaults(): void {
   let cfg: Record<string, unknown> = {};
   try { cfg = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
 
-  let changed = false;
-  for (const [key, value] of Object.entries(defaults)) {
-    if (!(key in cfg)) { cfg[key] = value; changed = true; }
-  }
+  const changed = fillMissingDefaults(cfg, defaults);
   if (changed) {
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
@@ -121,6 +146,67 @@ function readOnboardingState(): { needed: boolean; mode: "first" | "returning" }
     needed: pendingSteps(state).length > 0,
     mode: state.onboardingComplete ? "returning" : "first",
   };
+}
+
+// ── Accessibility re-check (post-update upgrade path) ────────
+//
+// macOS pins Accessibility (and Input Monitoring) entries to the binary's
+// signature/identity. After an in-place app update, the previous Tada entry
+// can become stale even though it still appears toggled in System Settings —
+// `CGEventTapCreate` then silently returns NULL inside the Python
+// Tabracadabra service, leaving the user stuck on "waiting for Tabracadabra".
+//
+// First-launch users hit this in onboarding's permission step, so the gate
+// only runs for returning users (onboarding_complete=true) who have
+// Tabracadabra enabled.
+
+async function ensureAccessibilityForTabracadabra(): Promise<void> {
+  if (process.platform !== "darwin") return;
+
+  let cfg: Record<string, unknown> = {};
+  try {
+    const configPath = path.join(getDataDir(), "tada-config.json");
+    cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  } catch {
+    return;
+  }
+  if (cfg.onboarding_complete !== true) return;
+  if (cfg.tabracadabra_enabled === false) return;
+  const flags = (cfg.feature_flags as Record<string, boolean> | undefined) ?? {};
+  if (flags.tabracadabra === false) return;
+
+  const desc = connectorPermissions.accessibility;
+  if (!desc) return;
+
+  if (await desc.check()) return;
+
+  // First call to request() runs AXIsProcessTrustedWithOptions(prompt=true),
+  // which (re-)registers the binary in TCC so the user has something to
+  // toggle, then opens the Accessibility pane.
+  if (desc.request) {
+    try { await desc.request(); } catch { /* fall through to dialog */ }
+  }
+
+  while (!(await desc.check())) {
+    const { response } = await dialog.showMessageBox({
+      type: "warning",
+      title: "Accessibility access needed",
+      message: "Tabracadabra needs Accessibility permission",
+      detail:
+        "macOS may have reset this permission after the app update.\n\n" +
+        "1. Click 'Open Settings'\n" +
+        "2. Toggle 'Tada' on under Privacy & Security → Accessibility\n" +
+        "3. Click 'Recheck' to continue",
+      buttons: ["Recheck", "Open Settings", "Continue Without Tabracadabra"],
+      defaultId: 0,
+      cancelId: 2,
+    });
+    if (response === 1) {
+      shell.openExternal(desc.fixUrl);
+    } else if (response === 2) {
+      return;
+    }
+  }
 }
 
 // ── Server management ─────────────────────────────────────────
@@ -411,6 +497,12 @@ app.whenReady().then(async () => {
   if (!isDev() && !bootstrap.isReady()) {
     await runBootstrap();
   }
+
+  // After bootstrap and before the Python server starts, re-check
+  // Accessibility for returning users — macOS can silently invalidate the
+  // grant after an app update and the Python Tabracadabra service has no
+  // way to surface that to the user.
+  await ensureAccessibilityForTabracadabra();
 
   // In dev, the supervisor starts the server and provides the URL.
   // In packaged mode, Electron owns server lifecycle directly.
