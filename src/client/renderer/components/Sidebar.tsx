@@ -117,7 +117,14 @@ export function Sidebar({ activeView, connected, agentActivities, tadaHasNew, se
   const isViewActive = (view: ActiveView) => {
     if (view === "chat") return chatPending;
     const agents = AGENTS_FOR_VIEW[view];
-    return agents?.some((a) => agentActivities[a]) ?? false;
+    if (!agents) return false;
+    const activeKeys = Object.keys(agentActivities);
+    return agents.some((a) =>
+      // "moment_run" is broadcast as "moment_run:<slug>" (one entry per
+      // concurrent execution); match by prefix so any in-flight run lights up
+      // the sidebar.
+      activeKeys.some((k) => k === a || k.startsWith(`${a}:`)),
+    );
   };
 
   const showUnreadDot = (view: ActiveView) => {

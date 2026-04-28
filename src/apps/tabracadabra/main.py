@@ -129,7 +129,7 @@ load_dotenv()
 SPINNER_FRAMES_HOLDING = ["|", "/", "-", "\\"]
 SPINNER_TICK_INTERVAL_S = 0.12
 # Linear 0->100% ramp over this many seconds. Caps at 100 if generation runs longer.
-SPINNER_DURATION_S = 60.0
+SPINNER_DURATION_S = 40.0
 # Give macOS a brief chance to apply posted backspaces before first content.
 POST_SPINNER_DRAIN_S = 0.04
 

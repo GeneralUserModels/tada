@@ -4,6 +4,7 @@
   "alpha_supabase_url": "https://bnnatddodfgvmukmlcux.supabase.co",
   "alpha_supabase_anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJubmF0ZGRvZGZndm11a21sY3V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MDI0ODUsImV4cCI6MjA5MTM3ODQ4NX0.TekUaQ8njUHgAo04wAkGyiP1flY7LnwA9gHHNCxb9LU",
   "enabled_connectors": [],
+  "moments_executor_concurrency": 5,
   "feature_flags": {
     "moments": true,
     "memory": true,

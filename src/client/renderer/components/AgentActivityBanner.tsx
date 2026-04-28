@@ -15,7 +15,15 @@ const AGENT_LABELS: Record<string, string> = {
 };
 
 function prettyAgent(agent: string): string {
-  return AGENT_LABELS[agent] ?? agent.replace(/_/g, " ");
+  if (AGENT_LABELS[agent]) return AGENT_LABELS[agent];
+  // Per-slug moment runs are keyed as "moment_run:<slug>" — collapse to the
+  // generic label so the banner doesn't show the slug in the header.
+  const colonIdx = agent.indexOf(":");
+  if (colonIdx > 0) {
+    const base = agent.slice(0, colonIdx);
+    if (AGENT_LABELS[base]) return AGENT_LABELS[base];
+  }
+  return agent.replace(/_/g, " ");
 }
 
 export function AgentActivityBanner({ agent, message, numTurns, maxTurns }: Props) {

@@ -48,6 +48,7 @@ _PERSISTED_FIELDS = SETTINGS_API_FIELDS | {
     "onboarding_complete", "onboarding_steps_seen",
     "memory_enabled", "memory_agent_model", "memory_agent_api_key", "memory_schedule",
     "tada_dir", "moments_agent_model", "moments_agent_api_key", "moments_discovery_schedule", "moments_enabled",
+    "moments_executor_concurrency",
     "seeker_enabled", "seeker_model", "seeker_api_key",
     "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
     "agent_model", "agent_api_key",
@@ -185,6 +186,10 @@ class ServerConfig(BaseModel):
     moments_discovery_schedule: str = "daily at 2am"
     moments_agent_api_key: str = ""
     moments_enabled: bool = True
+    # Max number of tada executions running concurrently. Higher values reduce
+    # wall-clock latency for due tadas but multiply LLM spend and can hit
+    # provider rate limits — tune downward if you see 429s or cost spikes.
+    moments_executor_concurrency: int = 5
 
     # Connectors: names of connectors that are enabled (running)
     enabled_connectors: list[str] = Field(default_factory=list)

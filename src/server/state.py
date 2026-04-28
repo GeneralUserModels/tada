@@ -24,8 +24,25 @@ class ServerState:
     moments_discovery_task: asyncio.Task | None = None
     memory_task: asyncio.Task | None = None
 
-    # Moments executor lock (one at a time)
-    moments_executor_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    # Moments executor: BoundedSemaphore caps concurrent tada executions at
+    # config.moments_executor_concurrency. Created lazily so config.load_persisted()
+    # can override the default before the first acquisition.
+    _moments_executor_sem: object = None  # asyncio.BoundedSemaphore | None
+    # Serializes appends to logs-tada/results/_runs.jsonl across concurrent runs.
+    moments_runs_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    # In-flight execution tasks (so we can cancel them on shutdown).
+    moments_execution_tasks: set = field(default_factory=set)
+    # Slugs currently executing or queued on the semaphore — prevents the
+    # scheduler from re-dispatching the same slug while a prior task is still
+    # waiting to acquire a slot.
+    moments_in_flight_slugs: set = field(default_factory=set)
+
+    @property
+    def moments_executor_sem(self) -> asyncio.BoundedSemaphore:
+        if self._moments_executor_sem is None:
+            n = max(1, int(getattr(self.config, "moments_executor_concurrency", 1) or 1))
+            self._moments_executor_sem = asyncio.BoundedSemaphore(n)
+        return self._moments_executor_sem
 
     # Seeker
     seeker_scheduler_task: asyncio.Task | None = None

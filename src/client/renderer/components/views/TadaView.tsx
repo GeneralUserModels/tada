@@ -176,7 +176,18 @@ function RunningIndicator({ pct }: { pct: number }) {
 export function TadaView() {
   const { state } = useAppContext();
   const discoveryActivity = state.agentActivities["moments_discovery"];
-  const runActivity = state.agentActivities["moment_run"];
+  // Each concurrent execution is broadcast as "moment_run:<slug>". Build a
+  // per-slug map so we can light up multiple cards / spawn multiple
+  // placeholders simultaneously.
+  const runActivitiesBySlug = useMemo(() => {
+    const out: Record<string, typeof state.agentActivities[string]> = {};
+    for (const [k, v] of Object.entries(state.agentActivities)) {
+      if (!k.startsWith("moment_run:")) continue;
+      if (v.slug) out[v.slug] = v;
+    }
+    return out;
+  }, [state.agentActivities]);
+  const runActivities = useMemo(() => Object.values(runActivitiesBySlug), [runActivitiesBySlug]);
   const {
     results, loading, load, showDismissed, toggleShowDismissed,
     dismiss, restore, pin, unpin, thumbs, editSchedule, startView, endView, rerun,
@@ -203,23 +214,23 @@ export function TadaView() {
   const recurringUnread = useMemo(() => recurringResults.filter(isUnread).length, [recurringResults]);
   const tabResults = tab === "one-off" ? oneOffResults : recurringResults;
 
-  // Determine the running moment's frequency so we only show the placeholder card
-  // on the matching tab. Prefer the activity payload, fall back to looking up
-  // the slug in `results` for already-known moments.
-  const runFrequency = useMemo(() => {
-    if (!runActivity?.slug) return null;
-    if (runActivity.frequency) return runActivity.frequency;
-    const r = results.find((x) => x.slug === runActivity.slug);
-    return r ? (r.frequency_override || r.frequency) : null;
-  }, [runActivity?.slug, runActivity?.frequency, results]);
-  const runIsOneOff = runFrequency === "once";
-  const showRunPlaceholder =
-    !!runActivity?.slug
-    && !loading
-    && !results.some((r) => r.slug === runActivity.slug)
-    // If we know the frequency, only show on the matching tab. If unknown,
-    // show on the current tab so the user always sees that something is running.
-    && (runFrequency == null || (tab === "one-off") === runIsOneOff);
+  // Placeholder cards: for each in-flight slug whose result file isn't on disk
+  // yet, we render a placeholder on the matching tab (or the current tab if
+  // the frequency is unknown).
+  const placeholderActivities = useMemo(() => {
+    if (loading) return [];
+    return runActivities.filter((act) => {
+      if (!act.slug) return false;
+      if (results.some((r) => r.slug === act.slug)) return false;
+      const known = act.frequency
+        ?? results.find((x) => x.slug === act.slug)?.frequency_override
+        ?? results.find((x) => x.slug === act.slug)?.frequency
+        ?? null;
+      if (known == null) return true;
+      const isOneOffAct = known === "once";
+      return (tab === "one-off") === isOneOffAct;
+    });
+  }, [runActivities, results, loading, tab]);
 
   useEffect(() => {
     if (state.connected) load();
@@ -437,23 +448,23 @@ export function TadaView() {
         </button>
       </div>
 
-      {/* Placeholder card for a moment running on the current tab that doesn't
-          have a result on disk yet. Only shown on the tab matching its frequency. */}
-      {showRunPlaceholder && runActivity && (
-        <section className="glass-card tada-card tada-card--running">
+      {/* Placeholder cards: one per in-flight moment that doesn't have a
+          result on disk yet, scoped to the matching tab. */}
+      {placeholderActivities.map((act) => (
+        <section key={`placeholder-${act.slug}`} className="glass-card tada-card tada-card--running">
           <div className="tada-card-header">
-            <h3 className="tada-card-title">{runActivity.message.replace(/^Running:\s*/, "")}</h3>
+            <h3 className="tada-card-title">{act.message.replace(/^Running:\s*/, "")}</h3>
           </div>
-          <RunningIndicator pct={activityPercent(runActivity)} />
+          <RunningIndicator pct={activityPercent(act)} />
         </section>
-      )}
+      ))}
 
       {loading ? (
         <div className="tada-empty-state">
           <div className="tada-spinner" />
           <span>Loading moments...</span>
         </div>
-      ) : tabResults.length === 0 && !showRunPlaceholder ? (
+      ) : tabResults.length === 0 && placeholderActivities.length === 0 ? (
         <div className="tada-empty-state">
           <svg className="tada-empty-icon" width="32" height="32" viewBox="0 0 32 32" fill="none">
             <path d="M16 4l3.09 6.26L26 11.27l-5 4.87 1.18 6.88L16 19.77l-6.18 3.25L11 16.14l-5-4.87 6.91-1.01L16 4z"
@@ -464,14 +475,15 @@ export function TadaView() {
         </div>
       ) : (
         tabResults.filter((r) => showDismissed ? r.dismissed : !r.dismissed).sort((a, b) => {
-          const aRunning = runActivity?.slug === a.slug ? 1 : 0;
-          const bRunning = runActivity?.slug === b.slug ? 1 : 0;
+          const aRunning = runActivitiesBySlug[a.slug] ? 1 : 0;
+          const bRunning = runActivitiesBySlug[b.slug] ? 1 : 0;
           if (aRunning !== bRunning) return bRunning - aRunning;
           return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
         }).map((r, i) => {
-          const isRunning = runActivity?.slug === r.slug;
+          const slugActivity = runActivitiesBySlug[r.slug];
+          const isRunning = !!slugActivity;
           const cardUnread = isUnread(r);
-          const runPct = isRunning ? activityPercent(runActivity) : 0;
+          const runPct = isRunning ? activityPercent(slugActivity) : 0;
           return (
           <section
             key={r.slug}
