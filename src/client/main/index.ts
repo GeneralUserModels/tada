@@ -148,65 +148,22 @@ function readOnboardingState(): { needed: boolean; mode: "first" | "returning" }
   };
 }
 
-// ── Accessibility re-check (post-update upgrade path) ────────
-//
-// macOS pins Accessibility (and Input Monitoring) entries to the binary's
-// signature/identity. After an in-place app update, the previous Tada entry
-// can become stale even though it still appears toggled in System Settings —
-// `CGEventTapCreate` then silently returns NULL inside the Python
-// Tabracadabra service, leaving the user stuck on "waiting for Tabracadabra".
-//
-// First-launch users hit this in onboarding's permission step, so the gate
-// only runs for returning users (onboarding_complete=true) who have
-// Tabracadabra enabled.
+// macOS pins Accessibility entries to the binary's signature, so an in-place
+// app update can leave the previous Tada entry stale — CGEventTapCreate then
+// silently returns NULL inside the Python Tabracadabra service. Re-asking on
+// launch (re-)registers the binary in TCC and triggers the native prompt;
+// first-launch users hit this in onboarding instead.
 
 async function ensureAccessibilityForTabracadabra(): Promise<void> {
   if (process.platform !== "darwin") return;
-
-  let cfg: Record<string, unknown> = {};
-  try {
-    const configPath = path.join(getDataDir(), "tada-config.json");
-    cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  } catch {
-    return;
-  }
+  const configPath = path.join(getDataDir(), "tada-config.json");
+  if (!fs.existsSync(configPath)) return;
+  const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8")) as Record<string, unknown>;
   if (cfg.onboarding_complete !== true) return;
-  if (cfg.tabracadabra_enabled === false) return;
-  const flags = (cfg.feature_flags as Record<string, boolean> | undefined) ?? {};
-  if (flags.tabracadabra === false) return;
 
   const desc = connectorPermissions.accessibility;
-  if (!desc) return;
-
-  if (await desc.check()) return;
-
-  // First call to request() runs AXIsProcessTrustedWithOptions(prompt=true),
-  // which (re-)registers the binary in TCC so the user has something to
-  // toggle, then opens the Accessibility pane.
-  if (desc.request) {
-    try { await desc.request(); } catch { /* fall through to dialog */ }
-  }
-
-  while (!(await desc.check())) {
-    const { response } = await dialog.showMessageBox({
-      type: "warning",
-      title: "Accessibility access needed",
-      message: "Tabracadabra needs Accessibility permission",
-      detail:
-        "macOS may have reset this permission after the app update.\n\n" +
-        "1. Click 'Open Settings'\n" +
-        "2. Toggle 'Tada' on under Privacy & Security → Accessibility\n" +
-        "3. Click 'Recheck' to continue",
-      buttons: ["Recheck", "Open Settings", "Continue Without Tabracadabra"],
-      defaultId: 0,
-      cancelId: 2,
-    });
-    if (response === 1) {
-      shell.openExternal(desc.fixUrl);
-    } else if (response === 2) {
-      return;
-    }
-  }
+  if (!desc || await desc.check()) return;
+  await desc.request?.();
 }
 
 // ── Server management ─────────────────────────────────────────
