@@ -123,6 +123,7 @@ export function useMoments() {
     );
   }, []);
 
+
   const startView = useCallback((slug: string) => {
     viewStartRef.current = { slug, ts: Date.now() };
     setResults((prev) =>

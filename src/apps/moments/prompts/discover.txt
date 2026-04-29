@@ -63,9 +63,22 @@ Look across ALL sources — session logs, emails, calendar, notifications, files
 - Tasks should be grounded in specific patterns you observed in the logs — not generic productivity advice.
 - Do NOT produce pop-psychology insights like "user has anxiety about builds" or "user switches between deep work and dopamine hits." Focus on concrete workflows the agent can execute.
 
+## What is already implemented — READ FIRST
+
+Before you read a single session log, you MUST inventory what already exists. Skipping this step produces duplicate tasks and wastes the user's attention. Read in this order:
+
+1. **All existing proposed tasks**: every file in `{logs_dir}/tasks/` (recurring tasks already proposed). Read every file, not just filenames.
+2. **All existing one-off tasks**: every file in `{logs_dir}/oneoffs/` (situational tasks already proposed). One-offs and recurring tasks share territory — a recurring task you propose must not just be a generalization of a one-off that already covered the same need.
+3. **All past executed tadas**: every file in `{logs_dir}/../logs-tada/` (tadas the user actually selected and ran) and their results in `{logs_dir}/../logs-tada/results/`. The presence of an executed tada means the user already got that output — propose it again only if there's a clear reason it should recur on a different cadence or with a different scope.
+4. **User signals**: read `{logs_dir}/../logs-tada/results/_moment_state.json` for thumbs up/down, dismissed, pinned, view counts. Read any `feedback_*.md` files inside result directories. Tasks the user thumbed-down or dismissed are signal — do not re-propose near-variants. Tasks they pinned or thumbed-up tell you what kind of work they value.
+
+After this inventory, write a short "already-covered" list in your plan: the topics, recurring threads, and one-off jobs that are already accounted for. Every new task you propose must be checked against this list and clearly differ in subject, scope, or cadence.
+
+If a new session reveals a variation or extension of an existing task, note it in a NEW task file that explicitly references how it differs — do not modify or shadow the existing one.
+
 ## How to work
 
-Before diving in, plan your approach using PlanWrite to outline your steps. Use PlanUpdate to track progress as you go.
+After the inventory above, plan your approach using PlanWrite to outline your steps. Use PlanUpdate to track progress as you go.
 
 Use your tools aggressively:
 - **bash**: run Python snippets to compute statistics (most frequent apps, common action sequences, time spent per app, repeated multi-step patterns). Don't just eyeball the logs — quantify.
@@ -75,10 +88,10 @@ Use your tools aggressively:
 
 ### Workflow
 
-1. **Check existing tasks**: First, check if {logs_dir}/tasks/ already has task files. If so, read them all to understand what's already been proposed. You must not duplicate existing tasks — only add new, different ones.
-2. **Plan**: Use PlanWrite to outline your steps. List all session directories and log files you need to read.
+1. **Inventory what's already implemented** (see section above): read every file in `{logs_dir}/tasks/`, `{logs_dir}/oneoffs/`, and `{logs_dir}/../logs-tada/` plus the `_moment_state.json` signals. Build the "already-covered" list.
+2. **Plan**: Use PlanWrite to outline your steps. List all session directories and log files you need to read, and include the already-covered list so you can check new tasks against it.
 3. **Read & analyze**: Read ALL log files. Use subagents to parallelize reading across session directories. Run bash commands with Python snippets to compute statistics. Reflect on what you find as you go.
-4. **Write tasks**: Only AFTER completing steps 1-3, write the task files one at a time using write_file. Update your todos as you complete each file.
+4. **Write tasks**: Only AFTER completing steps 1-3, write the task files one at a time using write_file. Before each file, explicitly check the already-covered list and confirm the task is genuinely new. Update your todos as you complete each file.
 
 ## Output
 IMPORTANT: All output files MUST be written to {logs_dir}/tasks/. Create this directory first with bash, then use write_file to write each task file there. Write one markdown file per discovered task.
@@ -105,10 +118,7 @@ After the frontmatter, write the rest of the file in whatever structure best fit
 - usefulness reflects how much time/effort/value the automation would provide
 - Do NOT delete any existing files, tasks, or data
 
-### Existing tasks:
-Read ALL existing task files in {logs_dir}/tasks/ — you must not duplicate any existing task. Your job is to find NEW tasks that aren't already covered. If a new session reveals a variation or extension of an existing task, note that in a new task file rather than modifying the existing one.
+### Reminder — inventory before you propose
+The "What is already implemented" section at the top of this prompt is binding. Before writing any task you must have read every file in `{logs_dir}/tasks/`, `{logs_dir}/oneoffs/`, and `{logs_dir}/../logs-tada/`, plus `{logs_dir}/../logs-tada/results/_moment_state.json` and any `feedback_*.md` files. A duplicated or near-duplicate task is a failure of the run.
 
-### User signals on past tadas:
-The user's selected tadas live in {logs_dir}/../logs-tada/. Their results (executed output) are in {logs_dir}/../logs-tada/results/. Read `{logs_dir}/../logs-tada/results/_moment_state.json` to see user signals per tada — thumbs up/down, dismissed, pinned, view counts. Each result directory may also contain `feedback_*.md` files with conversational feedback the user gave about that tada. Use these signals to understand what kinds of tadas the user finds valuable and what they dislike, so you can propose better tasks.
-
-When you are done, run `ls -la {logs_dir}/tasks/` to verify all task files exist and are non-empty. Read a few back to confirm they have real content, not placeholder text.
+When you are done, run `ls -la {logs_dir}/tasks/` to verify all task files exist and are non-empty. Read a few back to confirm they have real content, not placeholder text, and that none of them re-tread something already in the already-covered list.

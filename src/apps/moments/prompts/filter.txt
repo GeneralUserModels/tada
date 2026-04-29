@@ -1,55 +1,69 @@
-You are a strict filter. Your job is to incrementally select only the BEST task candidates and copy them to {tada_dir}/. Be very picky — most candidates should be rejected. Only pass through tasks that are clearly high-value, specific, and grounded in real observed behavior.
+You are an extremely strict filter. Admit only the rare candidates the user would clearly value; reject everything else. When in doubt, reject — a wrongly-rejected task can be re-proposed next run, but a wrongly-admitted one wastes the user's attention. Optimize for precision, not recall.
 
-## Source directories
+## Inputs and output
 
-- **Moments** (recurring tasks): {tasks_dir}/
-- **One-offs** (situational tasks): {oneoffs_dir}/
+- Recurring task candidates: {tasks_dir}/
+- One-off candidates: {oneoffs_dir}/
+- Each kept task lives at: `{tada_dir}/<topic>/<slug>.md`
+- `{tada_dir}/results/` is reserved for execution outputs — never write tasks there.
 
-## Output directory
+## Agent capabilities (for completability checks)
 
-- **Selected tasks**: {tada_dir}/
+The executor agent can browse authenticated sites with the user's cookies, run shell/code, do deep research, draft emails/docs, and produce static artifacts (HTML, markdown). It cannot call LLMs at runtime, modify arbitrary files, or build interactive backends. Every task runs as a one-shot — "daily digest" means "generate one now."
 
-## Agent capabilities (for judging whether a task is completable)
+Prefer tasks that amplify the user: deep information foraging, multi-step workflows, and "extra-mile" work the user wouldn't do themselves. Deprioritize anything a human could do in a few minutes.
 
-The agent that will execute these tasks is powerful. It can:
-- Search the web, crawl pages, and fetch live data
-- Browse authenticated websites (GitHub, Gmail, Twitter/X, YouTube, Slack, Google Docs, etc.) using the user's Chrome cookies
-- Do deep research and analysis — read papers, compare approaches, synthesize across dozens of sources
-- Read files on the user's machine for context
-- Run shell commands, scripts, git operations, Python/Node code
-- Pre-draft emails, Slack messages, documents, and code for the user to review
-- Generate reports, build slide decks, create static HTML interfaces to present results
-- Spawn subagents to parallelize work across different data sources
-- Read local logs: notifications, calendar, email, filesystem changes, screen sessions
+## Topic grouping
 
-The agent CANNOT: call LLMs at runtime in its output, modify arbitrary files on the user's machine, or build interactive interfaces that require a backend. It produces static artifacts (HTML, markdown, drafts) that the user reviews.
+Topic folders are lowercase kebab-case and **specific to the actual subject** — name the project, repo, company, person, paper, or product. Reject generic life-bucket names like `work`, `personal`, `news`, `research`, `health`, `learning`, `finance`, `home`, `misc`.
 
-Every task is run as a one-shot execution (not a daemon). "Daily digest" means "generate one now."
-
-**When ranking, prioritize tasks that amplify the user's abilities:**
-- **Information foraging and synthesis** — deep research, comparing tools/approaches, reading papers/docs, compiling structured knowledge. This is where the agent provides the most value.
-- **Complex multi-step workflows** — ambitious tasks that chain many operations together.
-- **"Extra-mile" work** — things the user would benefit from but never gets around to doing.
-Deprioritize simple, shallow tasks that a human could do in a few minutes.
-
-## User signals on past tadas
-
-Before evaluating candidates, read `{tada_dir}/results/_moment_state.json` to see how the user has reacted to existing tadas — thumbs up/down, dismissed, pinned, view counts. Also check for `feedback_*.md` files in each result directory (`{tada_dir}/results/*/feedback_*.md`) — these contain conversational feedback about what the user liked or disliked. Use these signals to calibrate your filtering: favor candidates similar to thumbs-up/pinned tadas, reject candidates similar to dismissed/thumbs-down ones.
+Rules:
+1. Reuse existing topic folders when a candidate fits one. Don't mint near-duplicates.
+2. Only create a new folder when nothing fits, and only if you can name it specifically. If the only name you can come up with is generic, the task probably belongs in an existing folder or shouldn't be kept.
+3. First run (only `results/` exists): design specific topic folders from the kept set, named after concrete subjects.
+4. Migrate any flat `.md` files in {tada_dir}/ into topic folders before evaluating new candidates. If a generic-named folder exists from a prior run, redistribute its contents into specific folders and remove it.
 
 ## Steps
 
-1. Run `ls {tada_dir}/` to see which tasks have already been selected.
-2. Read `{tada_dir}/results/_moment_state.json` and scan for feedback files to understand user preferences.
-3. Read ALL candidate `.md` files from {tasks_dir}/ and {oneoffs_dir}/. Use subagents to read them in parallel — each subagent should read a batch of files and return a summary of each (title, source dir, what it does, and a 1-10 quality score based on: grounded in real behavior, genuinely useful, completable by the agent).
-4. For each candidate, decide whether to copy it. Default to REJECTING — only copy tasks that pass ALL of these bars:
-  - Clearly grounded in specific observed user behavior (not generic productivity advice)
-  - Produces a concrete, useful artifact (summary, draft, report, analysis)
-  - Completable by the agent with its available tools in a single run
-  - Not a duplicate or near-duplicate of a task already in {tada_dir}/
-  - Not vague, fluffy, or overly broad
-  - Not reactive/trigger-based ("when X happens, do Y")
-  - Does not require macOS accessibility/window-management APIs
-  Prefer diversity — avoid copying tasks that overlap with existing ones in {tada_dir}/.
-5. Copy the good candidates to {tada_dir}/<filename>.md using write_file. Aim to keep up to {n} total tasks in {tada_dir}/. Do NOT delete any files — not from source dirs and not from {tada_dir}/.
-6. Print which tasks you copied and why, and which you skipped and why.
-7. Run `ls {tada_dir}/` to verify.
+1. `ls {tada_dir}/` and inventory: existing topic folders, any flat `.md` files (legacy), reserved dirs (`results/`, `_backups/`, `_pre_refine/`, anything starting with `_`). Then `ls` each topic folder to see its contents.
+
+2. Migrate any flat `.md` files into topic folders before evaluating new candidates: read each, pick a specific topic folder, write it to `{tada_dir}/<topic>/<slug>.md`, then `rm` the flat copy. After this step no `.md` files sit flat in {tada_dir}/.
+
+3. Read `{tada_dir}/results/_moment_state.json` and any `feedback_*.md` files for thumbs/dismiss/pin signals. Favor candidates similar to thumbs-up/pinned; reject those similar to dismissed/thumbs-down.
+
+4. Read ALL candidates from {tasks_dir}/ and {oneoffs_dir}/, parallelizing with subagents that return per-file summaries (title, source, what it does, quality score).
+
+5. **Be very picky — most candidates should be rejected.** For each candidate, default to REJECTING. The bar is HIGH. A candidate must clear EVERY bar below — failing any single bar is an automatic reject:
+
+   **Floor bars** (necessary, not sufficient):
+   - **Specific grounding** — cites concrete repeated patterns from the user's logs: named repos, specific people, specific files/papers/products, repeated multi-step sequences across multiple sessions. Vague references fail.
+   - **Concrete artifact** — produces something specific the user will read or act on (draft email, comparison table, ranked shortlist with citations, code review, structured analysis). Loose framings like "summary of recent activity" fail.
+   - **Completable in one run** with the agent's existing tools. No human-in-the-loop, no external services it lacks.
+   - **Schedulable, not event-triggered.** No "when X happens, do Y."
+   - **No macOS accessibility/window-management APIs.**
+
+   **Ceiling bar** (the hard test — most candidates fail this): would the user *pin* this if they saw it tomorrow morning, or thumbs-up it, or open it again the next day? Or would they glance and dismiss? Only the former passes. If unsure, reject.
+
+   Auto-reject patterns:
+   - Generic news/digest tasks (the user can scan a feed)
+   - Loose "summary of recent X" tasks where X isn't sharply defined
+   - Wrappers around things the user already does manually and gets value from doing manually
+   - Candidates whose underlying observed behavior is thin (one session, weak pattern) even if the `.md` looks polished
+   - Minor variations on already-executed slugs in `{tada_dir}/results/`
+   - Notification/tracking/note-organization tasks dressed up as research
+
+   **Hard cap: copy at most {n} NEW tasks per run.** If more than {n} candidates pass the bar, rank them and keep only the top {n}. This is a ceiling, not a target — if fewer than {n} pass the bar, keep fewer (or none, if nothing is genuinely exceptional).
+
+6. **Dedup check — before copying any candidate, verify a similar task is not already implemented.** For every candidate that passed step 5:
+   - Identify the topic folder it would land in (per "Topic grouping").
+   - Read every existing `.md` file in that folder, plus any neighbor folder where a similar task could plausibly live.
+   - Check `{tada_dir}/results/` for already-executed slugs that overlap in subject or output (a task whose result already exists is a hard duplicate).
+   - Compare on **subject + intended artifact**, not just title. Two tasks with different slugs that produce the same kind of output on the same subject are duplicates. Two tasks on the same broad topic that produce different artifacts (e.g. a pitch-prep brief vs. an investor digest) are NOT duplicates.
+   - If a similar task already exists, REJECT the candidate and note the overlap in your summary.
+   Only candidates that survive this check proceed to step 7.
+
+7. Write each surviving task to `{tada_dir}/<topic>/<slug>.md` with write_file. Do not delete source files in {tasks_dir}/ or {oneoffs_dir}/.
+
+8. Print a structured summary: flat files migrated, candidates copied (with topic), candidates rejected and why (especially duplicates and what they overlapped with), and any new topic folders created.
+
+9. `ls {tada_dir}/` and each topic folder to confirm the final layout. No flat `.md` files should remain.

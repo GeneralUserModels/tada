@@ -17,6 +17,7 @@ import time as _time
 
 from apps.moments.execute import _parse_frontmatter as parse_frontmatter
 from apps.moments.execute import run as execute_moment
+from apps.moments.paths import find_task_md, get_topic, list_task_files
 from apps.moments.scheduler import save_run, load_run_history
 from apps.moments.state import (
     load_state,
@@ -51,12 +52,12 @@ def _get_tada_dir(request: Request) -> Path:
 
 @router.get("/tasks")
 async def list_tasks(request: Request):
-    """List all scheduled tasks from logs-tada/*.md (daily/weekly/once only)."""
+    """List all scheduled tasks from logs-tada/<topic>/*.md (daily/weekly/once only)."""
     tada_dir = _get_tada_dir(request)
     if not tada_dir.exists():
         return []
     tasks = []
-    for md_file in sorted(tada_dir.glob("*.md")):
+    for md_file in list_task_files(tada_dir):
         fm = parse_frontmatter(md_file.read_text())
         frequency = fm.get("frequency", "")
         if frequency not in ("daily", "weekly", "once"):
@@ -69,6 +70,7 @@ async def list_tasks(request: Request):
             "schedule": fm.get("schedule", ""),
             "confidence": float(fm.get("confidence", 0)),
             "usefulness": int(fm.get("usefulness", 0)),
+            "topic": get_topic(md_file, tada_dir),
         })
     return tasks
 
@@ -82,6 +84,11 @@ async def list_results(request: Request, include_dismissed: bool = False):
         return []
 
     all_state = load_state(tada_dir)
+    # Build slug -> topic map once so each result row can carry its topic
+    # without re-globbing per slug.
+    slug_topics: dict[str, str] = {
+        md.stem: get_topic(md, tada_dir) for md in list_task_files(tada_dir)
+    }
     results = []
     for meta_path in results_dir.glob("*/meta.json"):
         index_path = meta_path.parent / "index.html"
@@ -124,6 +131,7 @@ async def list_results(request: Request, include_dismissed: bool = False):
             "completed_at": completed_at,
             "frequency": meta.get("frequency", ""),
             "schedule": meta.get("schedule", ""),
+            "topic": slug_topics.get(slug, ""),
             "has_feedback": has_feedback,
             "feedback_incorporated": feedback_incorporated,
             **slug_state,
@@ -227,9 +235,9 @@ async def rerun_moment(slug: str, request: Request):
     """Trigger an immediate re-execution of a moment."""
     state = request.app.state.server
     tada_dir = _get_tada_dir(request)
-    task_path = tada_dir / f"{slug}.md"
+    task_path = find_task_md(tada_dir, slug)
 
-    if not task_path.exists():
+    if task_path is None:
         return JSONResponse({"error": "Task not found"}, status_code=404)
 
     # Reject if this exact slug is already running/queued (via scheduler or

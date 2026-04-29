@@ -62,9 +62,20 @@ Focus on what the user is CURRENTLY doing or interested in. Look across ALL sour
 - Do NOT produce fluffy or vague tasks. "Help user be more productive" is garbage. "Research the top 5 restaurants near [location from calendar event]" is good.
 - Do NOT produce tasks that are really recurring automations — those belong in discover.py.
 
+## What is already implemented — READ FIRST
+
+Before you read a single session log, you MUST inventory what already exists. Skipping this step produces duplicate one-offs and wastes the user's attention. Read in this order:
+
+1. **All existing one-off tasks**: every file in `{logs_dir}/oneoffs/`. Read every file, not just filenames. A one-off proposed yesterday on the same subject must not be re-proposed today.
+2. **All existing recurring tasks**: every file in `{logs_dir}/tasks/`. If a recurring task already covers a subject (e.g. "weekly arxiv digest"), don't propose a one-off that's just one instance of it — the recurring run will handle it.
+3. **All past executed tadas**: every file in `{logs_dir}/../logs-tada/` (tadas the user actually selected) and their results in `{logs_dir}/../logs-tada/results/`. If the user already got an artifact for a topic, propose a one-off on that topic only if the situation has materially changed (new info, new deadline, new scope).
+4. **User signals**: `{logs_dir}/../logs-tada/results/_moment_state.json` (thumbs up/down, dismissed, pinned, view counts) plus any `feedback_*.md` files inside result directories. Do not re-propose near-variants of dismissed or thumbed-down tadas.
+
+After this inventory, write a short "already-covered" list in your plan: the topics, ongoing threads, and prior artifacts that are already accounted for. Every new one-off you propose must be checked against this list and clearly differ in subject or scope.
+
 ## How to work
 
-Use your tools aggressively:
+After the inventory above, use your tools aggressively:
 - **subagent**: spawn subagents to read different session directories or log sources in parallel. This is essential — do not read all sessions yourself.
 - **read_file**: read log files directly when needed.
 - **bash**: run Python snippets to extract specific data points from logs.
@@ -72,10 +83,11 @@ Use your tools aggressively:
 
 ### Workflow
 
-1. **Plan**: Use PlanWrite to outline your approach and steps.
-2. **Read & analyze**: Use subagents to read ALL session_*/labels.jsonl files in parallel. Also read email, calendar, notifications, and filesys logs.
-3. **Identify opportunities**: Based on what you find, identify specific one-off tasks where the agent can help right now.
-4. **Write tasks**: Write each task file using write_file.
+1. **Inventory what's already implemented** (see section above): read every file in `{logs_dir}/oneoffs/`, `{logs_dir}/tasks/`, and `{logs_dir}/../logs-tada/` plus the `_moment_state.json` signals. Build the "already-covered" list.
+2. **Plan**: Use PlanWrite to outline your approach and steps, including the already-covered list so you can check new one-offs against it.
+3. **Read & analyze**: Use subagents to read ALL session_*/labels.jsonl files in parallel. Also read email, calendar, notifications, and filesys logs.
+4. **Identify opportunities**: Based on what you find, identify specific one-off tasks where the agent can help right now — only ones not already covered.
+5. **Write tasks**: Write each task file using write_file. Before each file, explicitly check the already-covered list and confirm the task is genuinely new.
 
 ## Output
 
@@ -104,10 +116,7 @@ After the frontmatter, include:
 - Focus on recency — what is the user doing NOW or in the last few sessions?
 - Do NOT delete any existing files, tasks, or data
 
-### Existing one-off tasks:
-Read files in {logs_dir}/oneoffs/ to see what was already proposed. Do not duplicate these — find NEW situational opportunities.
+### Reminder — inventory before you propose
+The "What is already implemented" section at the top of this prompt is binding. Before writing any task you must have read every file in `{logs_dir}/oneoffs/`, `{logs_dir}/tasks/`, and `{logs_dir}/../logs-tada/`, plus `{logs_dir}/../logs-tada/results/_moment_state.json` and any `feedback_*.md` files. A duplicated or near-duplicate one-off is a failure of the run.
 
-### User signals on past tadas:
-The user's selected tadas live in {logs_dir}/../logs-tada/. Their results (executed output) are in {logs_dir}/../logs-tada/results/. Read `{logs_dir}/../logs-tada/results/_moment_state.json` to see user signals per tada — thumbs up/down, dismissed, pinned, view counts. Each result directory may also contain `feedback_*.md` files with conversational feedback the user gave about that tada. Use these signals to understand what kinds of tadas the user finds valuable and what they dislike, so you can propose better one-off tasks.
-
-When you are done, run `ls -la {logs_dir}/oneoffs/` to verify all task files exist and are non-empty.
+When you are done, run `ls -la {logs_dir}/oneoffs/` to verify all task files exist and are non-empty, and that none of them re-tread something already in the already-covered list.

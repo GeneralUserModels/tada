@@ -1,4 +1,4 @@
-"""Filter task definitions: read all candidates, rank them, copy the best N to logs-tada/."""
+"""Filter task definitions: read all candidates, rank them, copy the ones that pass the bar to logs-tada/."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def _classify_candidates(dirs: list[str], since: datetime | None) -> tuple[list[
     return new, old
 
 
-def run(logs_dir: str, n: int = 10, model: str | None = None, api_key: str | None = None, on_round=None) -> str:
+def run(logs_dir: str, n: int = 8, model: str | None = None, api_key: str | None = None, on_round=None) -> str:
     logs_path = Path(logs_dir).resolve()
     tasks_dir = str(logs_path / "tasks")
     oneoffs_dir = str(logs_path / "oneoffs")
@@ -46,7 +46,7 @@ def run(logs_dir: str, n: int = 10, model: str | None = None, api_key: str | Non
     checkpoint_path = logs_path / "tasks" / ".last_filter"
     Path(tada_dir).mkdir(parents=True, exist_ok=True)
     model = model or resolve_moments_model()
-    agent, _ = build_agent(model, logs_dir, api_key=api_key)
+    agent, _ = build_agent(model, logs_dir, extra_write_dirs=[tada_dir], api_key=api_key)
     agent.max_rounds = 50
     agent.on_round = on_round
 
@@ -82,9 +82,9 @@ def run(logs_dir: str, n: int = 10, model: str | None = None, api_key: str | Non
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Filter tasks: rank all candidates and copy the best N to logs-tada/")
+    parser = argparse.ArgumentParser(description="Filter tasks: rank all candidates and copy up to N new ones to logs-tada/")
     parser.add_argument("logs_dir", help="Path to the logs directory (e.g., logs/)")
-    parser.add_argument("-n", "--num-tasks", type=int, default=10, help="Number of top tasks to keep (default: 10)")
+    parser.add_argument("-n", "--num-tasks", type=int, default=8, help="Max number of NEW tasks to add per run (default: 8)")
     parser.add_argument("-m", "--model", default=None)
     args = parser.parse_args()
     model = args.model or resolve_moments_model()

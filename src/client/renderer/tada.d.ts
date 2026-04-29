@@ -85,6 +85,7 @@ interface MomentTask {
   schedule: string;
   confidence: number;
   usefulness: number;
+  topic: string;
 }
 
 interface MomentResult {
@@ -94,6 +95,7 @@ interface MomentResult {
   completed_at: string;
   frequency: string;
   schedule: string;
+  topic: string;
   dismissed: boolean;
   pinned: boolean;
   view_count: number;

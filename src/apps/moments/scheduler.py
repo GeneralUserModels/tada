@@ -11,6 +11,7 @@ from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 
 from apps.moments.execute import run as execute_moment, _parse_frontmatter as parse_frontmatter
+from apps.moments.paths import list_task_files
 from apps.moments.state import load_state
 from server.feature_flags import is_enabled
 
@@ -263,7 +264,7 @@ async def run_moments_scheduler(state) -> None:
             run_history = load_run_history(results_dir)
             moment_state = load_state(tada_dir)
 
-            for md_file in sorted(tada_dir.glob("*.md")):
+            for md_file in list_task_files(tada_dir):
                 fm = parse_frontmatter(md_file.read_text())
                 frequency = fm.get("frequency", "")
                 schedule = fm.get("schedule", "")

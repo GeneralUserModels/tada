@@ -239,6 +239,33 @@ def _is_compaction_artifact(text: str) -> bool:
     return text.lstrip().startswith(_COMPACT_MARKER)
 
 
+_SYNTHETIC_USER_PREFIXES = (
+    "<background-results>",
+    "<system-reminder>",
+    "<error>",
+    "<warning>",
+    "<reminder>",
+)
+
+
+def _is_synthetic_user_message(text: str) -> bool:
+    """Detect harness-injected user messages that should not render as bubbles.
+
+    The agent loop appends user-role messages to feed the model state it needs
+    (background task notifications, system reminders, budget warnings, the
+    post-assistant "Continue." nudge). These are not things the human user
+    typed and must be filtered out of the visible transcript.
+    """
+    stripped = text.lstrip()
+    if not stripped:
+        return False
+    if stripped.startswith(_SYNTHETIC_USER_PREFIXES):
+        return True
+    if stripped == "Continue.":
+        return True
+    return False
+
+
 def visible_messages(messages: list[dict]) -> list[dict]:
     """Flatten the raw litellm message list into chat bubbles for the UI.
 
@@ -254,6 +281,8 @@ def visible_messages(messages: list[dict]) -> list[dict]:
         if role == "user":
             text = _flatten_text(msg.get("content"))
             if _is_compaction_artifact(text):
+                continue
+            if _is_synthetic_user_message(text):
                 continue
             out.append({"role": "user", "content": text})
         elif role == "assistant":

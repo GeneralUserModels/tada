@@ -44,7 +44,7 @@ const STEP_TITLES: Record<string, string> = {
   welcome: "Welcome to Tada",
   tabracadabra: "Tabracadabra",
   chat: "Chat",
-  tadas: "Moments",
+  tadas: "Tadas",
   memex: "Memex",
 };
 
