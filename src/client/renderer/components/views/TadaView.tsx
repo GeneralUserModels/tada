@@ -277,14 +277,15 @@ export function TadaView() {
   }, []);
 
   // Cross-category groupings: Pinned + Unread span all topics. They show
-  // above topic chapters as quick-access summaries. Items also remain in
-  // their topic chapters so the per-topic structure is preserved.
+  // above topic chapters as quick-access summaries. Items can appear in
+  // both (a pinned-and-unread tada surfaces in Pinned, Unread, and its
+  // topic chapter) so each cross-cut view is complete on its own.
   const pinnedItems = useMemo(
     () => visibleResults.filter((r) => r.pinned && !r.dismissed),
     [visibleResults],
   );
   const unreadItems = useMemo(
-    () => visibleResults.filter((r) => isUnread(r) && !r.pinned),
+    () => visibleResults.filter((r) => isUnread(r)),
     [visibleResults], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
@@ -491,7 +492,7 @@ export function TadaView() {
 
   // List view
   const totalTadas = visibleResults.length;
-  const totalUnread = visibleResults.filter(isUnread).length;
+  const totalUnread = unreadItems.length;
   const todayLabel = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 
   return (
