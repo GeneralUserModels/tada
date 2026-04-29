@@ -276,6 +276,18 @@ export function TadaView() {
     });
   }, []);
 
+  // Cross-category groupings: Pinned + Unread span all topics. They show
+  // above topic chapters as quick-access summaries. Items also remain in
+  // their topic chapters so the per-topic structure is preserved.
+  const pinnedItems = useMemo(
+    () => visibleResults.filter((r) => r.pinned && !r.dismissed),
+    [visibleResults],
+  );
+  const unreadItems = useMemo(
+    () => visibleResults.filter((r) => isUnread(r) && !r.pinned),
+    [visibleResults], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
   // Placeholder cards: in-flight slugs whose result file isn't on disk yet.
   // They have no topic until the result lands, so we render them above the
   // accordion as a transient "Running" strip.
@@ -481,18 +493,6 @@ export function TadaView() {
   const totalTadas = visibleResults.length;
   const totalUnread = visibleResults.filter(isUnread).length;
   const todayLabel = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-
-  // Cross-category groupings: Pinned + Unread span all topics. They show
-  // above topic chapters as quick-access summaries. Items also remain in
-  // their topic chapters so the per-topic structure is preserved.
-  const pinnedItems = useMemo(
-    () => visibleResults.filter((r) => r.pinned && !r.dismissed),
-    [visibleResults],
-  );
-  const unreadItems = useMemo(
-    () => visibleResults.filter((r) => isUnread(r) && !r.pinned),
-    [visibleResults],
-  );
 
   return (
     <div id="tada-view" className="view active tada-list">
