@@ -41,22 +41,33 @@ async def _process_chunk(
     from connectors.audio.transcriber import transcribe_audio, append_transcript_markdown
 
     streams: list = _leftover_streams.copy()
+    leftover_n = len(streams)
     _leftover_streams.clear()
+    mic_n = sys_n = 0
     if _mic_recorder is not None:
         data = _mic_recorder.read_and_clear()
         if data is not None:
             streams.append(data)
+            mic_n = 1
     if _sys_recorder is not None:
         data = _sys_recorder.read_and_clear()
         if data is not None:
             streams.append(data)
+            sys_n = 1
+    logger.info(
+        "audio: chunk window %.1fs — streams=%d (leftover=%d, mic=%d, sys=%d, mic_recorder=%s, sys_recorder=%s)",
+        chunk_end - chunk_start, len(streams), leftover_n, mic_n, sys_n,
+        _mic_recorder is not None, _sys_recorder is not None,
+    )
 
     if not streams:
+        logger.info("audio: chunk skipped — no active streams (recorders not enabled?)")
         return
 
     wav_bytes = mix_and_encode(streams)
     if wav_bytes is None:
-        return  # silence
+        logger.info("audio: chunk skipped — mix_and_encode returned None (silence)")
+        return
 
     logger.info("audio: transcribing %.1f KB chunk (%ds)", len(wav_bytes) / 1024, chunk_end - chunk_start)
 
@@ -76,14 +87,21 @@ async def _process_chunk(
         "timestamp": chunk_end,
     }
     await _transcribed_queue.put(item)
+    logger.info("audio: queued transcript (queue size now %d)", _transcribed_queue.qsize())
 
     if _session_file is not None:
         await asyncio.to_thread(
             append_transcript_markdown, _session_file, text, chunk_start, chunk_end,
         )
+        logger.info("audio: appended transcript to %s", _session_file)
+    else:
+        logger.warning("audio: no session file set — transcript not persisted to disk")
 
     if _active_session is not None:
         await _active_session.send_resource_updated("audio://activity")
+        logger.info("audio: notified subscriber via audio://activity")
+    else:
+        logger.warning("audio: no active MCP session — labeling pipeline will NOT be notified")
 
 
 async def _transcription_loop() -> None:
@@ -95,18 +113,26 @@ async def _transcription_loop() -> None:
 
     session_path = os.environ.get("TADA_SESSION_FILE", "")
     _session_file = Path(session_path) if session_path else None
-    logger.info("audio: session transcript → %s", _session_file)
+    logger.info(
+        "audio: transcription loop START — model=%s, api_key=%s, chunk=%ds, session=%s",
+        model, "set" if api_key else "missing", CHUNK_SECONDS, _session_file,
+    )
 
     chunk_start = time.time()
+    tick = 0
 
     while not _shutdown_event.is_set():
+        tick += 1
+        logger.info("audio: loop tick %d — sleeping up to %ds", tick, CHUNK_SECONDS)
         try:
             await asyncio.wait_for(_shutdown_event.wait(), timeout=CHUNK_SECONDS)
+            logger.info("audio: loop tick %d — woke early via shutdown_event", tick)
         except asyncio.TimeoutError:
-            pass  # normal: chunk interval elapsed
+            logger.info("audio: loop tick %d — woke via %ds timeout (normal)", tick, CHUNK_SECONDS)
 
         chunk_end = time.time()
         if chunk_end - chunk_start < 1:
+            logger.info("audio: loop tick %d — chunk window <1s, exiting loop", tick)
             break
         try:
             await _process_chunk(chunk_start, chunk_end, model, api_key)
@@ -114,6 +140,7 @@ async def _transcription_loop() -> None:
             logger.exception("audio: chunk processing failed")
         chunk_start = chunk_end
 
+    logger.info("audio: transcription loop EXIT after %d ticks", tick)
     if _flush_done_event is not None:
         _flush_done_event.set()
 
@@ -121,6 +148,13 @@ async def _transcription_loop() -> None:
 @asynccontextmanager
 async def lifespan(_server: FastMCP) -> AsyncIterator[None]:
     global _mic_recorder, _sys_recorder, _transcribed_queue
+
+    logger.info(
+        "audio: MCP server lifespan START — env: TADA_MIC_ENABLED=%s, TADA_SYS_ENABLED=%s, TADA_SESSION_FILE=%s",
+        os.environ.get("TADA_MIC_ENABLED", "<unset>"),
+        os.environ.get("TADA_SYS_ENABLED", "<unset>"),
+        os.environ.get("TADA_SESSION_FILE", "<unset>"),
+    )
 
     from server.cost_tracker import init_cost_tracking, run_cost_logger
     tracker = init_cost_tracking()
@@ -138,13 +172,16 @@ async def lifespan(_server: FastMCP) -> AsyncIterator[None]:
         from connectors.audio.mic_recorder import MicRecorder
         _mic_recorder = MicRecorder()
         _mic_recorder.start()
-        logger.info("audio: microphone source enabled")
+        logger.info("audio: microphone source enabled at boot")
 
     if sys_enabled:
         from connectors.audio.sys_recorder import SystemAudioRecorder
         _sys_recorder = SystemAudioRecorder()
         _sys_recorder.start()
-        logger.info("audio: system audio source enabled")
+        logger.info("audio: system audio source enabled at boot")
+
+    if not mic_enabled and not sys_enabled:
+        logger.info("audio: no recorders enabled at boot — waiting for configure_sources call")
 
     transcription_task = asyncio.create_task(_transcription_loop(), name="audio-transcriber")
     yield
@@ -162,15 +199,21 @@ mcp = FastMCP("tada-audio", lifespan=lifespan)
 
 
 @mcp._mcp_server.subscribe_resource()
-async def _on_subscribe(_uri: AnyUrl) -> None:
+async def _on_subscribe(uri: AnyUrl) -> None:
     global _active_session
     _active_session = mcp._mcp_server.request_context.session
+    logger.info("audio: subscriber attached for %s — _active_session set", uri)
 
 
 @mcp.tool()
 async def configure_sources(mic_enabled: bool | None = None, sys_enabled: bool | None = None, session_file: str | None = None) -> str:
     """Toggle mic/system audio recorders at runtime without restarting the server."""
     global _mic_recorder, _sys_recorder, _session_file
+
+    logger.info(
+        "audio: configure_sources called — mic_enabled=%s, sys_enabled=%s, session_file=%s",
+        mic_enabled, sys_enabled, session_file,
+    )
 
     if session_file is not None:
         _session_file = Path(session_file) if session_file else None
@@ -221,6 +264,7 @@ async def flush_audio() -> str:
 async def fetch_audio(since: float | None = None) -> str:  # noqa: ARG001
     """Drain all available transcribed audio segments."""
     if _transcribed_queue is None:
+        logger.warning("audio: fetch_audio called but queue is None")
         return json.dumps([])
     results = []
     while True:
@@ -228,6 +272,7 @@ async def fetch_audio(since: float | None = None) -> str:  # noqa: ARG001
             results.append(_transcribed_queue.get_nowait())
         except asyncio.QueueEmpty:
             break
+    logger.info("audio: fetch_audio drained %d items", len(results))
     return json.dumps(results)
 
 

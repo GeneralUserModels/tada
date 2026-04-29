@@ -209,16 +209,23 @@ export function TadaView() {
   const [editTime, setEditTime] = useState("");
   const [editDay, setEditDay] = useState("Monday");
   const [closedTopics, setClosedTopics] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
   const prevSlugRef = useRef<string | null>(null);
   const feedback = useMomentFeedback(selectedSlug ?? "");
 
   const isUnread = (r: MomentResult) =>
     !r.dismissed && (!r.last_viewed || new Date(r.completed_at) > new Date(r.last_viewed));
 
-  const visibleResults = useMemo(
-    () => results.filter((r) => (showDismissed ? r.dismissed : !r.dismissed)),
-    [results, showDismissed],
-  );
+  const visibleResults = useMemo(() => {
+    const filtered = results.filter((r) => (showDismissed ? r.dismissed : !r.dismissed));
+    const q = query.trim().toLowerCase();
+    if (!q) return filtered;
+    return filtered.filter((r) =>
+      r.title.toLowerCase().includes(q) ||
+      r.description.toLowerCase().includes(q) ||
+      (r.topic || "").toLowerCase().includes(q),
+    );
+  }, [results, showDismissed, query]);
 
   const groupedByTopic = useMemo(() => {
     const out: Record<string, MomentResult[]> = {};
@@ -253,6 +260,19 @@ export function TadaView() {
       if (next.has(t)) next.delete(t);
       else next.add(t);
       return next;
+    });
+  }, []);
+
+  const jumpToChapter = useCallback((key: string) => {
+    setClosedTopics((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`tada-chapter-${key}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }, []);
 
@@ -481,26 +501,49 @@ export function TadaView() {
       )}
 
       <header className="tada-masthead">
-        <div className="tada-masthead-lead">
-          <div className="tada-masthead-text">
-            <span className="tada-masthead-eyebrow">{todayLabel}</span>
-            <h1 className="tada-masthead-title">
-              {showDismissed ? "Dismissed" : "Tadas"}
-            </h1>
-            <div className="tada-masthead-meta">
-              <span className="tada-masthead-count">
-                {totalTadas} {totalTadas === 1 ? "tada" : "tadas"}
+        <div className="tada-masthead-meta">
+          <span className="tada-masthead-eyebrow">{todayLabel}</span>
+          <span className="tada-masthead-sep" aria-hidden="true">·</span>
+          <span className="tada-masthead-count">
+            {totalTadas} {totalTadas === 1 ? (showDismissed ? "dismissed" : "tada") : (showDismissed ? "dismissed" : "tadas")}
+          </span>
+          {!showDismissed && totalUnread > 0 && (
+            <>
+              <span className="tada-masthead-sep" aria-hidden="true">·</span>
+              <span className="tada-masthead-count tada-masthead-count--unread">
+                <span className="tada-unread-pip" />
+                {totalUnread} unread
               </span>
-              {!showDismissed && totalUnread > 0 && (
-                <>
-                  <span className="tada-masthead-sep" aria-hidden="true">·</span>
-                  <span className="tada-masthead-count tada-masthead-count--unread">
-                    <span className="tada-unread-pip" />
-                    {totalUnread} unread
-                  </span>
-                </>
-              )}
-            </div>
+            </>
+          )}
+        </div>
+        <div className="tada-masthead-lead">
+          <div className="tada-masthead-search">
+            <svg className="tada-masthead-search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <circle cx="6" cy="6" r="4.25" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M9.2 9.2L12 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
+            <input
+              type="text"
+              className="tada-masthead-search-input"
+              placeholder={showDismissed ? "Search dismissed tadas…" : "Search tadas…"}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              spellCheck={false}
+              autoCorrect="off"
+            />
+            {query && (
+              <button
+                type="button"
+                className="tada-masthead-search-clear"
+                onClick={() => setQuery("")}
+                title="Clear search"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
           </div>
           <button className="tada-masthead-link" onClick={toggleShowDismissed} type="button">
             {showDismissed ? "Show active" : "Show dismissed"}
@@ -508,84 +551,140 @@ export function TadaView() {
         </div>
       </header>
 
-      {/* Placeholder entries: one per in-flight moment that doesn't have a
-          result on disk yet. */}
-      {placeholderActivities.map((act) => (
-        <article key={`placeholder-${act.slug}`} className="glass-card tada-entry tada-entry--running">
-          <div className="tada-card-header">
-            <h3 className="tada-card-title">{act.message.replace(/^Running:\s*/, "")}</h3>
-          </div>
-          <RunningIndicator pct={activityPercent(act)} />
-        </article>
-      ))}
+      <div className="tada-list-body">
+        <main className="tada-list-main">
+          {/* Placeholder entries: one per in-flight moment that doesn't have
+              a result on disk yet. */}
+          {placeholderActivities.map((act) => (
+            <article key={`placeholder-${act.slug}`} className="glass-card tada-entry tada-entry--running">
+              <div className="tada-card-header">
+                <h3 className="tada-card-title">{act.message.replace(/^Running:\s*/, "")}</h3>
+              </div>
+              <RunningIndicator pct={activityPercent(act)} />
+            </article>
+          ))}
 
-      {loading ? (
-        <div className="tada-empty">
-          <div className="tada-spinner" />
-          <span className="tada-empty-line">Loading tadas…</span>
-        </div>
-      ) : topicOrder.length === 0 && placeholderActivities.length === 0 ? (
-        <div className="tada-empty">
-          <svg className="tada-empty-icon" width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <path d="M16 4l3.09 6.26L26 11.27l-5 4.87 1.18 6.88L16 19.77l-6.18 3.25L11 16.14l-5-4.87 6.91-1.01L16 4z"
-              stroke="var(--sage)" strokeWidth="1.5" strokeLinejoin="round" fill="rgba(var(--sage-rgb), 0.08)"/>
-          </svg>
-          <span className="tada-empty-line">
-            {showDismissed ? "No dismissed tadas" : "No tadas yet"}
-          </span>
-          <span className="tada-empty-hint">
-            {showDismissed
-              ? "Anything you set aside will rest here."
-              : "Completed tadas will arrive here as they run on schedule."}
-          </span>
-        </div>
-      ) : (
-        <>
-          {!showDismissed && pinnedItems.length > 0 && (
-            <ChapterSection
-              keyName="__pinned"
-              label="Pinned"
-              variant="pinned"
-              items={pinnedItems}
-              isOpen={!closedTopics.has("__pinned")}
-              onToggle={() => toggleTopic("__pinned")}
-              renderEntry={renderEntry}
-              isUnreadFn={isUnread}
-            />
+          {loading ? (
+            <div className="tada-empty">
+              <div className="tada-spinner" />
+              <span className="tada-empty-line">Loading tadas…</span>
+            </div>
+          ) : topicOrder.length === 0 && placeholderActivities.length === 0 ? (
+            query.trim() ? (
+              <div className="tada-empty">
+                <span className="tada-empty-line">No matches for "{query.trim()}"</span>
+                <span className="tada-empty-hint">Try a different search, or clear the field to see everything.</span>
+              </div>
+            ) : (
+              <div className="tada-empty">
+                <svg className="tada-empty-icon" width="32" height="32" viewBox="0 0 32 32" fill="none">
+                  <path d="M16 4l3.09 6.26L26 11.27l-5 4.87 1.18 6.88L16 19.77l-6.18 3.25L11 16.14l-5-4.87 6.91-1.01L16 4z"
+                    stroke="var(--sage)" strokeWidth="1.5" strokeLinejoin="round" fill="rgba(var(--sage-rgb), 0.08)"/>
+                </svg>
+                <span className="tada-empty-line">
+                  {showDismissed ? "No dismissed tadas" : "No tadas yet"}
+                </span>
+                <span className="tada-empty-hint">
+                  {showDismissed
+                    ? "Anything you set aside will rest here."
+                    : "Completed tadas will arrive here as they run on schedule."}
+                </span>
+              </div>
+            )
+          ) : (
+            <>
+              {!showDismissed && unreadItems.length > 0 && (
+                <ChapterSection
+                  keyName="__unread"
+                  label="Unread"
+                  variant="unread"
+                  items={unreadItems}
+                  isOpen={!closedTopics.has("__unread")}
+                  onToggle={() => toggleTopic("__unread")}
+                  renderEntry={renderEntry}
+                  isUnreadFn={isUnread}
+                />
+              )}
+              {!showDismissed && pinnedItems.length > 0 && (
+                <ChapterSection
+                  keyName="__pinned"
+                  label="Pinned"
+                  variant="pinned"
+                  items={pinnedItems}
+                  isOpen={!closedTopics.has("__pinned")}
+                  onToggle={() => toggleTopic("__pinned")}
+                  renderEntry={renderEntry}
+                  isUnreadFn={isUnread}
+                />
+              )}
+              {topicOrder.map((topic) => {
+                const items = groupedByTopic[topic];
+                const isOpen = !closedTopics.has(topic);
+                const unreadCount = items.filter(isUnread).length;
+                return (
+                  <ChapterSection
+                    key={topic}
+                    keyName={topic}
+                    label={titleizeTopic(topic)}
+                    items={items}
+                    isOpen={isOpen}
+                    unreadCount={unreadCount}
+                    onToggle={() => toggleTopic(topic)}
+                    renderEntry={renderEntry}
+                    isUnreadFn={isUnread}
+                  />
+                );
+              })}
+            </>
           )}
-          {!showDismissed && unreadItems.length > 0 && (
-            <ChapterSection
-              keyName="__unread"
-              label="Unread"
-              variant="unread"
-              items={unreadItems}
-              isOpen={!closedTopics.has("__unread")}
-              onToggle={() => toggleTopic("__unread")}
-              renderEntry={renderEntry}
-              isUnreadFn={isUnread}
-            />
-          )}
-          {topicOrder.map((topic) => {
-            const items = groupedByTopic[topic];
-            const isOpen = !closedTopics.has(topic);
-            const unreadCount = items.filter(isUnread).length;
-            return (
-              <ChapterSection
+          <div style={{ minHeight: 24, flexShrink: 0 }} />
+        </main>
+
+        {!loading && (topicOrder.length > 0 || (!showDismissed && (pinnedItems.length > 0 || unreadItems.length > 0))) && (
+          <aside className="tada-toc" aria-label="Jump to section">
+            <div className="tada-toc-label">Jump to</div>
+            {!showDismissed && unreadItems.length > 0 && (
+              <button
+                type="button"
+                className="tada-toc-item tada-toc-item--unread"
+                onClick={() => jumpToChapter("__unread")}
+              >
+                <span className="tada-toc-item-glyph tada-toc-item-glyph--dot" />
+                <span className="tada-toc-item-name">Unread</span>
+                <span className="tada-toc-item-count">{unreadItems.length}</span>
+              </button>
+            )}
+            {!showDismissed && pinnedItems.length > 0 && (
+              <button
+                type="button"
+                className="tada-toc-item tada-toc-item--pinned"
+                onClick={() => jumpToChapter("__pinned")}
+              >
+                <svg className="tada-toc-item-glyph" width="9" height="9" viewBox="0 0 14 14" fill="none">
+                  <path d="M7.5 1.5L10.5 4.5L9 8L10.5 12.5L7 9L3.5 12.5L5 8L3.5 4.5L6.5 1.5L7.5 1.5Z"
+                    stroke="currentColor" fill="currentColor" strokeWidth="1" strokeLinejoin="round"/>
+                </svg>
+                <span className="tada-toc-item-name">Pinned</span>
+                <span className="tada-toc-item-count">{pinnedItems.length}</span>
+              </button>
+            )}
+            {(unreadItems.length > 0 || pinnedItems.length > 0) && topicOrder.length > 0 && (
+              <div className="tada-toc-divider" aria-hidden="true" />
+            )}
+            {topicOrder.map((topic) => (
+              <button
                 key={topic}
-                keyName={topic}
-                label={titleizeTopic(topic)}
-                items={items}
-                isOpen={isOpen}
-                unreadCount={unreadCount}
-                onToggle={() => toggleTopic(topic)}
-                renderEntry={renderEntry}
-                isUnreadFn={isUnread}
-              />
-            );
-          })}
-        </>
-      )}
-      <div style={{ minHeight: 24, flexShrink: 0 }} />
+                type="button"
+                className="tada-toc-item"
+                onClick={() => jumpToChapter(topic)}
+              >
+                <span className="tada-toc-item-name">{titleizeTopic(topic)}</span>
+                <span className="tada-toc-item-count">{groupedByTopic[topic].length}</span>
+              </button>
+            ))}
+          </aside>
+        )}
+      </div>
     </div>
   );
 
@@ -614,82 +713,6 @@ export function TadaView() {
                 {r.dismissed && <span className="tada-dismissed-badge">Dismissed</span>}
                 {rerunFailed.has(r.slug) && <span className="tada-rerun-failed-badge">Rerun failed</span>}
               </h3>
-              <div className="tada-card-actions" onClick={(e) => e.stopPropagation()}>
-                <button
-                  className={`tada-card-action-btn${rerunning.has(r.slug) ? " rerunning" : ""}`}
-                  title={rerunning.has(r.slug) ? "Rerunning\u2026" : "Re-run"}
-                  onClick={() => rerun(r.slug)}
-                  disabled={rerunning.has(r.slug)}
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M2 8a6 6 0 0110.47-4M14 8a6 6 0 01-10.47 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                    <path d="M12 1v3.5h-3.5M4 15v-3.5h3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                <button
-                  className="tada-card-action-btn"
-                  title="Give feedback"
-                  onClick={() => handleCardClick(r.slug, true)}
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M2 3h12v8H5l-3 3V3z" stroke="currentColor" fill="none" strokeWidth="1.3" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                <button
-                  className={`tada-card-action-btn tada-thumbs-up${r.thumbs === "up" ? " active" : ""}`}
-                  title="Thumbs up"
-                  onClick={() => thumbs(r.slug, "up")}
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M5 14V7m0 7H3.5A1.5 1.5 0 012 12.5v-4A1.5 1.5 0 013.5 7H5m0 7h5.59a2 2 0 001.96-1.61l.86-4.28A1.5 1.5 0 0011.93 6H9V3.5A1.5 1.5 0 007.5 2L5 7"
-                      stroke="currentColor" fill={r.thumbs === "up" ? "currentColor" : "none"} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                <button
-                  className={`tada-card-action-btn tada-thumbs-down${r.thumbs === "down" ? " active" : ""}`}
-                  title="Thumbs down"
-                  onClick={() => thumbs(r.slug, "down")}
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M11 2v7m0-7h1.5A1.5 1.5 0 0114 3.5v4a1.5 1.5 0 01-1.5 1.5H11m0-7H5.41a2 2 0 00-1.96 1.61l-.86 4.28A1.5 1.5 0 004.07 10H7v2.5A1.5 1.5 0 008.5 14L11 9"
-                      stroke="currentColor" fill={r.thumbs === "down" ? "currentColor" : "none"} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                {r.dismissed ? (
-                  <button
-                    className="tada-card-action-btn"
-                    title="Restore"
-                    onClick={() => restore(r.slug)}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                      <path d="M3 8.5V11h2.5M3 11l3.5-3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M6.5 3H11v4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      className={`tada-card-action-btn${r.pinned ? " active" : ""}`}
-                      title={r.pinned ? "Unpin" : "Pin"}
-                      onClick={() => r.pinned ? unpin(r.slug) : pin(r.slug)}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                        <path d="M7.5 1.5L10.5 4.5L9 8L10.5 12.5L7 9L3.5 12.5L5 8L3.5 4.5L6.5 1.5L7.5 1.5Z"
-                          stroke="currentColor" fill={r.pinned ? "currentColor" : "none"} strokeWidth="1" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-                    <button
-                      className="tada-card-action-btn"
-                      title="Dismiss"
-                      onClick={() => dismiss(r.slug)}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                        <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                      </svg>
-                    </button>
-                  </>
-                )}
-              </div>
             </div>
             <div className="tada-card-schedule tada-card-schedule--clickable" onClick={(e) => openScheduleEditor(e, r)}>
               <span className="tada-card-frequency" data-freq={effectiveFrequency(r)}>
@@ -731,6 +754,85 @@ export function TadaView() {
             )}
 
             {isRunning && <RunningIndicator pct={runPct} />}
+
+            <div className="tada-card-footer" onClick={(e) => e.stopPropagation()}>
+              <div className="tada-card-actions">
+                <button
+                  className={`tada-card-action-btn${rerunning.has(r.slug) ? " rerunning" : ""}`}
+                  title={rerunning.has(r.slug) ? "Rerunning\u2026" : "Re-run"}
+                  onClick={() => rerun(r.slug)}
+                  disabled={rerunning.has(r.slug)}
+                >
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                    <path d="M2 8a6 6 0 0110.47-4M14 8a6 6 0 01-10.47 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                    <path d="M12 1v3.5h-3.5M4 15v-3.5h3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  className="tada-card-action-btn"
+                  title="Give feedback"
+                  onClick={() => handleCardClick(r.slug, true)}
+                >
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                    <path d="M2 3h12v8H5l-3 3V3z" stroke="currentColor" fill="none" strokeWidth="1.3" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  className={`tada-card-action-btn tada-thumbs-up${r.thumbs === "up" ? " active" : ""}`}
+                  title="Thumbs up"
+                  onClick={() => thumbs(r.slug, "up")}
+                >
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                    <path d="M5 14V7m0 7H3.5A1.5 1.5 0 012 12.5v-4A1.5 1.5 0 013.5 7H5m0 7h5.59a2 2 0 001.96-1.61l.86-4.28A1.5 1.5 0 0011.93 6H9V3.5A1.5 1.5 0 007.5 2L5 7"
+                      stroke="currentColor" fill={r.thumbs === "up" ? "currentColor" : "none"} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  className={`tada-card-action-btn tada-thumbs-down${r.thumbs === "down" ? " active" : ""}`}
+                  title="Thumbs down"
+                  onClick={() => thumbs(r.slug, "down")}
+                >
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                    <path d="M11 2v7m0-7h1.5A1.5 1.5 0 0114 3.5v4a1.5 1.5 0 01-1.5 1.5H11m0-7H5.41a2 2 0 00-1.96 1.61l-.86 4.28A1.5 1.5 0 004.07 10H7v2.5A1.5 1.5 0 008.5 14L11 9"
+                      stroke="currentColor" fill={r.thumbs === "down" ? "currentColor" : "none"} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                {r.dismissed ? (
+                  <button
+                    className="tada-card-action-btn"
+                    title="Restore"
+                    onClick={() => restore(r.slug)}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                      <path d="M3 8.5V11h2.5M3 11l3.5-3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M6.5 3H11v4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      className={`tada-card-action-btn${r.pinned ? " active" : ""}`}
+                      title={r.pinned ? "Unpin" : "Pin"}
+                      onClick={() => r.pinned ? unpin(r.slug) : pin(r.slug)}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                        <path d="M7.5 1.5L10.5 4.5L9 8L10.5 12.5L7 9L3.5 12.5L5 8L3.5 4.5L6.5 1.5L7.5 1.5Z"
+                          stroke="currentColor" fill={r.pinned ? "currentColor" : "none"} strokeWidth="1" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                    <button
+                      className="tada-card-action-btn"
+                      title="Dismiss"
+                      onClick={() => dismiss(r.slug)}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                        <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </article>
           );
   }
@@ -753,6 +855,7 @@ function ChapterSection({ keyName, label, items, isOpen, unreadCount, variant = 
   return (
     <section
       key={keyName}
+      id={`tada-chapter-${keyName}`}
       className={`tada-chapter tada-chapter--${variant}${isOpen ? " open" : ""}${computedUnread > 0 ? " has-unread" : ""}`}
     >
       <button className="tada-chapter-header" onClick={onToggle} type="button">
