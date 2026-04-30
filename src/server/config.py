@@ -32,6 +32,7 @@ SETTINGS_API_FIELDS: frozenset[str] = frozenset({
     "seeker_enabled", "seeker_model", "seeker_api_key",
     "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
     "agent_model", "agent_api_key",
+    "subagent_model", "subagent_api_key",
     "feature_flags",
     # Persisted directly via PUT /api/settings during onboarding (and by the
     # connector toggle UI later). The settings UI does not surface this field —
@@ -52,6 +53,7 @@ _PERSISTED_FIELDS = SETTINGS_API_FIELDS | {
     "seeker_enabled", "seeker_model", "seeker_api_key",
     "tabracadabra_enabled", "tabracadabra_model", "tabracadabra_api_key",
     "agent_model", "agent_api_key",
+    "subagent_model", "subagent_api_key",
     "feature_flags",
 }
 
@@ -144,6 +146,10 @@ class ServerConfig(BaseModel):
     # Agent
     agent_model: str = DEFAULT_AGENT_MODEL
     agent_api_key: str = ""
+
+    # Subagent (model used for spawned subagents; empty = inherit parent's model)
+    subagent_model: str = ""
+    subagent_api_key: str = ""
 
     # Logging
     log_dir: str = Field(default_factory=lambda: os.getenv("TADA_LOG_DIR", "./logs"))

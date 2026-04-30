@@ -43,7 +43,6 @@
   "build": {
     "appId": "com.generalusermodels.tada",
     "productName": "Tada",
-    "generateUpdatesFilesForAllChannels": true,
     "afterSign": "scripts/notarize.cjs",
     "directories": {
       "output": "release"

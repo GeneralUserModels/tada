@@ -116,7 +116,14 @@ def _make_child_agent(model: str, system_prompt: str, api_key: str | None = None
     return factory
 
 
-def build_agent(model: str, data_dir: str, extra_write_dirs: list[str] | None = None, api_key: str | None = None):
+def build_agent(
+    model: str,
+    data_dir: str,
+    extra_write_dirs: list[str] | None = None,
+    api_key: str | None = None,
+    subagent_model: str | None = None,
+    subagent_api_key: str | None = None,
+):
     """Build a fully configured Agent with all tools. Initializes sandbox on first call.
 
     Each agent gets its own PlanState so concurrent runs (e.g. multiple
@@ -141,7 +148,9 @@ def build_agent(model: str, data_dir: str, extra_write_dirs: list[str] | None = 
         else t
         for t in ALL_TOOLS
     ]
-    subagent_tool = SubAgentTool(_make_child_agent(model, system_prompt, api_key), base_tools)
+    child_model = subagent_model or model
+    child_api_key = subagent_api_key or api_key
+    subagent_tool = SubAgentTool(_make_child_agent(child_model, system_prompt, child_api_key), base_tools)
     all_tools = base_tools + [compact_tool, subagent_tool]
     agent = Agent(
         model=model,
