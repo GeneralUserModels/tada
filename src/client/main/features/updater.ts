@@ -26,6 +26,20 @@ const ourChannel = channelOfVersion(app.getVersion());
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
 autoUpdater.channel = ourChannel;
+// Setting `channel` flips this to true; we want strict forward-only updates.
+autoUpdater.allowDowngrade = false;
+
+// Local QA: point at a generic feed (e.g. `python -m http.server` over the
+// release/ dir) instead of GitHub. Set TADA_UPDATE_FEED_URL when launching the
+// installed binary to test updates end-to-end without publishing.
+if (process.env.TADA_UPDATE_FEED_URL) {
+  autoUpdater.setFeedURL({
+    provider: "generic",
+    url: process.env.TADA_UPDATE_FEED_URL,
+    channel: ourChannel,
+  });
+  console.log(`[updater] using local feed: ${process.env.TADA_UPDATE_FEED_URL}`);
+}
 
 autoUpdater.on("update-available", (info) => {
   const incomingChannel = channelOfVersion(info.version);
@@ -85,9 +99,6 @@ export function installUpdate(): void {
   // the Python server before we hand control to the native updater.
   beforeInstall();
   autoUpdater.quitAndInstall(false, true);
-  // Safety net: if the native quit path stalls, force-quit so the user is
-  // never stranded on "Installing…".
-  setTimeout(() => app.quit(), 5000);
 }
 
 export function initUpdateChecker(win: BrowserWindow, onBeforeInstall: () => void): void {

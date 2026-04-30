@@ -111,13 +111,23 @@ function ensureConfigDefaults(): void {
 
   let changed = fillMissingDefaults(cfg, defaults);
 
-  // feature_flags are deployment-level (see src/server/feature_flags.py): on
-  // version change, force-replace them with the defaults file so flags flipped
-  // in a release reach existing installs.
+  // Deployment-controlled keys: the defaults file is the source of truth, so
+  // on version change overwrite the user's local copy. Anything user-tunable
+  // (e.g. enabled_connectors, model selection, API keys) is intentionally
+  // absent from this list and stays put.
+  const DEPLOYMENT_KEYS = [
+    "supabase_url",
+    "supabase_anon_key",
+    "alpha_supabase_url",
+    "alpha_supabase_anon_key",
+    "feature_flags",
+  ];
   const currentVersion = app.getVersion();
   if (cfg._app_version !== currentVersion) {
-    if (isPlainObject(defaults.feature_flags)) {
-      cfg.feature_flags = structuredClone(defaults.feature_flags);
+    for (const key of DEPLOYMENT_KEYS) {
+      if (key in defaults) {
+        cfg[key] = structuredClone(defaults[key]);
+      }
     }
     cfg._app_version = currentVersion;
     changed = true;
