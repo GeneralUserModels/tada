@@ -164,6 +164,8 @@ async def _execute_one_moment(
     model: str,
     api_key: str | None,
     last_run_at: float | None,
+    subagent_model: str | None = None,
+    subagent_api_key: str | None = None,
 ) -> None:
     """Run a single tada inside the executor semaphore.
 
@@ -196,6 +198,8 @@ async def _execute_one_moment(
                 api_key=api_key,
                 last_run_at=last_run_at,
                 on_round=on_round,
+                subagent_model=subagent_model,
+                subagent_api_key=subagent_api_key,
             )
         finally:
             await state.broadcast_activity(activity_key)
@@ -256,6 +260,8 @@ async def run_moments_scheduler(state) -> None:
             cfg = state.config
             model = cfg.moments_agent_model
             api_key = cfg.resolve_api_key("moments_agent_api_key")
+            subagent_model = cfg.subagent_model or None
+            subagent_api_key = cfg.resolve_api_key("subagent_api_key") if cfg.subagent_model else None
 
             tada_dir = Path(state.config.tada_dir).resolve()
             if not tada_dir.exists():
@@ -291,6 +297,8 @@ async def run_moments_scheduler(state) -> None:
                     effective_frequency, effective_schedule,
                     logs_dir, results_dir, tada_dir, model, api_key,
                     run_history.get(slug),
+                    subagent_model=subagent_model,
+                    subagent_api_key=subagent_api_key,
                 ))
                 state.moments_execution_tasks.add(task)
 

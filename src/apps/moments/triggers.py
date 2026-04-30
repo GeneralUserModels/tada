@@ -33,7 +33,14 @@ def _parse_fired_slugs(result: str) -> list[str]:
     return list(payload.get("fired", []))
 
 
-def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) -> str:
+def run(
+    logs_dir: str,
+    model: str,
+    api_key: str | None = None,
+    on_round=None,
+    subagent_model: str | None = None,
+    subagent_api_key: str | None = None,
+) -> str:
     logs_path = Path(logs_dir).resolve()
     logs_dir = str(logs_path)
     tada_dir = logs_path.parent / "logs-tada"
@@ -59,7 +66,10 @@ def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) ->
         + INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir, triggered_tasks_list=listing)
     )
 
-    agent, _ = build_agent(model, logs_dir, extra_write_dirs=[str(tada_dir)], api_key=api_key)
+    agent, _ = build_agent(
+        model, logs_dir, extra_write_dirs=[str(tada_dir)], api_key=api_key,
+        subagent_model=subagent_model, subagent_api_key=subagent_api_key,
+    )
     agent.max_rounds = 50
     agent.on_round = on_round
     result = agent.run([{"role": "user", "content": instruction}])

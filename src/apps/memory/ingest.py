@@ -49,7 +49,14 @@ def _new_files_in(base: Path, pattern: str, since: datetime | None) -> list[Path
     return [f for f in files if datetime.fromtimestamp(f.stat().st_mtime) > since]
 
 
-def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) -> str:
+def run(
+    logs_dir: str,
+    model: str,
+    api_key: str | None = None,
+    on_round=None,
+    subagent_model: str | None = None,
+    subagent_api_key: str | None = None,
+) -> str:
     logs_path = Path(logs_dir).resolve()
     logs_dir = str(logs_path)
     memory_dir = logs_path / "memory"
@@ -105,7 +112,10 @@ def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) ->
             f"existing pages with web searches or cross-references."
         )
 
-    agent, _ = build_agent(model, logs_dir, api_key=api_key)
+    agent, _ = build_agent(
+        model, logs_dir, api_key=api_key,
+        subagent_model=subagent_model, subagent_api_key=subagent_api_key,
+    )
     agent.max_rounds = 100
     agent.on_round = on_round
     result = agent.run([{"role": "user", "content": instruction}])

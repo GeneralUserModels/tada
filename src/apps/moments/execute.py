@@ -86,6 +86,8 @@ def run(
     api_key: str | None = None,
     last_run_at: float | None = None,
     on_round=None,
+    subagent_model: str | None = None,
+    subagent_api_key: str | None = None,
 ) -> bool:
     """Execute a moment task. Returns True if index.html was produced."""
     task_content = Path(task_path).read_text()
@@ -150,7 +152,10 @@ def run(
             templates_dir=str(TEMPLATES_DIR),
         )
 
-    agent, _ = build_agent(model, logs_dir, extra_write_dirs=[output_dir], api_key=api_key)
+    agent, _ = build_agent(
+        model, logs_dir, extra_write_dirs=[output_dir], api_key=api_key,
+        subagent_model=subagent_model, subagent_api_key=subagent_api_key,
+    )
     agent.max_rounds = 200
     agent.on_round = on_round
     agent.run([{"role": "user", "content": instruction}])

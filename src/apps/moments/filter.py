@@ -38,7 +38,15 @@ def _classify_candidates(dirs: list[str], since: datetime | None) -> tuple[list[
     return new, old
 
 
-def run(logs_dir: str, n: int = 8, model: str | None = None, api_key: str | None = None, on_round=None) -> str:
+def run(
+    logs_dir: str,
+    n: int = 8,
+    model: str | None = None,
+    api_key: str | None = None,
+    on_round=None,
+    subagent_model: str | None = None,
+    subagent_api_key: str | None = None,
+) -> str:
     logs_path = Path(logs_dir).resolve()
     tasks_dir = str(logs_path / "tasks")
     oneoffs_dir = str(logs_path / "oneoffs")
@@ -46,7 +54,10 @@ def run(logs_dir: str, n: int = 8, model: str | None = None, api_key: str | None
     checkpoint_path = logs_path / "tasks" / ".last_filter"
     Path(tada_dir).mkdir(parents=True, exist_ok=True)
     model = model or resolve_moments_model()
-    agent, _ = build_agent(model, logs_dir, extra_write_dirs=[tada_dir], api_key=api_key)
+    agent, _ = build_agent(
+        model, logs_dir, extra_write_dirs=[tada_dir], api_key=api_key,
+        subagent_model=subagent_model, subagent_api_key=subagent_api_key,
+    )
     agent.max_rounds = 50
     agent.on_round = on_round
 

@@ -14,60 +14,68 @@ logger = logging.getLogger(__name__)
 SCAN_INTERVAL = 60  # seconds between schedule checks
 
 
-class MomentsDiscovery:
-    """Discovers recurring automation tasks from activity logs."""
-
-    def __init__(self, logs_dir: str, model: str, api_key: str | None = None):
+class _DiscoveryBase:
+    def __init__(
+        self,
+        logs_dir: str,
+        model: str,
+        api_key: str | None = None,
+        subagent_model: str | None = None,
+        subagent_api_key: str | None = None,
+    ):
         self.logs_dir = str(Path(logs_dir).resolve())
         self.model = model
         self.api_key = api_key
+        self.subagent_model = subagent_model
+        self.subagent_api_key = subagent_api_key
+
+
+class MomentsDiscovery(_DiscoveryBase):
+    """Discovers recurring automation tasks from activity logs."""
 
     def run(self, on_round=None) -> str:
         """Analyze logs and write task files. Blocking."""
         from apps.moments.discover import run as moments_run
-        return moments_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
+        return moments_run(
+            self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
+            subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
+        )
 
 
-class OneoffsDiscovery:
+class OneoffsDiscovery(_DiscoveryBase):
     """Discovers one-off situational tasks from activity logs."""
-
-    def __init__(self, logs_dir: str, model: str, api_key: str | None = None):
-        self.logs_dir = str(Path(logs_dir).resolve())
-        self.model = model
-        self.api_key = api_key
 
     def run(self, on_round=None) -> str:
         """Analyze logs and write one-off task files. Blocking."""
         from apps.moments.oneoffs import run as oneoffs_run
-        return oneoffs_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
+        return oneoffs_run(
+            self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
+            subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
+        )
 
 
-class TaskFilter:
+class TaskFilter(_DiscoveryBase):
     """Filters discovered tasks and copies completable ones to logs-tada/."""
-
-    def __init__(self, logs_dir: str, model: str, api_key: str | None = None):
-        self.logs_dir = str(Path(logs_dir).resolve())
-        self.model = model
-        self.api_key = api_key
 
     def run(self, on_round=None) -> str:
         """Filter tasks through tada. Blocking."""
         from apps.moments.filter import run as filter_run
-        return filter_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
+        return filter_run(
+            self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
+            subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
+        )
 
 
-class TriggersCheck:
+class TriggersCheck(_DiscoveryBase):
     """Evaluates trigger conditions on existing tada tasks and re-fires matches."""
-
-    def __init__(self, logs_dir: str, model: str, api_key: str | None = None):
-        self.logs_dir = str(Path(logs_dir).resolve())
-        self.model = model
-        self.api_key = api_key
 
     def run(self, on_round=None) -> str:
         """Check triggers and mark fired tasks for re-execution. Blocking."""
         from apps.moments.triggers import run as triggers_run
-        return triggers_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
+        return triggers_run(
+            self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
+            subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
+        )
 
 
 def _read_last_run(p: Path) -> datetime | None:
@@ -113,6 +121,8 @@ async def run_moments_discovery(state) -> None:
             cfg = state.config
             model = cfg.moments_agent_model
             api_key = cfg.resolve_api_key("moments_agent_api_key")
+            subagent_model = cfg.subagent_model or None
+            subagent_api_key = cfg.resolve_api_key("subagent_api_key") if cfg.subagent_model else None
 
             try:
                 discover_msg = "Discovering Tadas…"
@@ -125,8 +135,8 @@ async def run_moments_discovery(state) -> None:
                 await state.broadcast_activity("moments_discovery", discover_msg)
                 logger.info("Discovery: finding recurring + one-off moments in parallel")
                 results = await asyncio.gather(
-                    asyncio.to_thread(MomentsDiscovery(logs_dir, model, api_key).run),
-                    asyncio.to_thread(OneoffsDiscovery(logs_dir, model, api_key).run),
+                    asyncio.to_thread(MomentsDiscovery(logs_dir, model, api_key, subagent_model, subagent_api_key).run),
+                    asyncio.to_thread(OneoffsDiscovery(logs_dir, model, api_key, subagent_model, subagent_api_key).run),
                     return_exceptions=True,
                 )
                 recurring_ok = not isinstance(results[0], Exception)
@@ -144,13 +154,19 @@ async def run_moments_discovery(state) -> None:
                 await state.broadcast_activity("moments_discovery", filter_msg)
                 filter_cb = state.make_round_callback("moments_discovery", filter_msg)
                 logger.info("Discovery: filtering tasks")
-                await asyncio.to_thread(TaskFilter(logs_dir, model, api_key).run, on_round=filter_cb)
+                await asyncio.to_thread(
+                    TaskFilter(logs_dir, model, api_key, subagent_model, subagent_api_key).run,
+                    on_round=filter_cb,
+                )
 
                 triggers_msg = "Checking Triggers…"
                 await state.broadcast_activity("moments_discovery", triggers_msg)
                 triggers_cb = state.make_round_callback("moments_discovery", triggers_msg)
                 logger.info("Discovery: evaluating triggers")
-                await asyncio.to_thread(TriggersCheck(logs_dir, model, api_key).run, on_round=triggers_cb)
+                await asyncio.to_thread(
+                    TriggersCheck(logs_dir, model, api_key, subagent_model, subagent_api_key).run,
+                    on_round=triggers_cb,
+                )
 
                 last_run_file.write_text(datetime.now().isoformat())
                 logger.info("Discovery pipeline complete")

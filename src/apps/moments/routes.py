@@ -254,6 +254,8 @@ async def rerun_moment(slug: str, request: Request):
     cfg = state.config
     model = cfg.moments_agent_model
     api_key = cfg.resolve_api_key("moments_agent_api_key")
+    subagent_model = cfg.subagent_model or None
+    subagent_api_key = cfg.resolve_api_key("subagent_api_key") if cfg.subagent_model else None
     logs_dir = str(Path(cfg.log_dir).resolve())
     results_dir = tada_dir / "results"
     output_dir = str(results_dir / slug)
@@ -295,6 +297,8 @@ async def rerun_moment(slug: str, request: Request):
                         api_key=api_key,
                         last_run_at=run_history.get(slug),
                         on_round=on_round,
+                        subagent_model=subagent_model,
+                        subagent_api_key=subagent_api_key,
                     )
                 finally:
                     await state.broadcast_activity(activity_key)

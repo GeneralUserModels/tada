@@ -27,7 +27,14 @@ def _snapshot_tada_mtimes(tada_dir: Path) -> dict[str, float]:
     return {md.stem: md.stat().st_mtime for md in list_active_task_files(tada_dir)}
 
 
-def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) -> str:
+def run(
+    logs_dir: str,
+    model: str,
+    api_key: str | None = None,
+    on_round=None,
+    subagent_model: str | None = None,
+    subagent_api_key: str | None = None,
+) -> str:
     logs_path = Path(logs_dir).resolve()
     logs_dir = str(logs_path)
     Path(logs_dir, "oneoffs").mkdir(parents=True, exist_ok=True)
@@ -61,7 +68,10 @@ def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) ->
 
     pre_mtimes = _snapshot_tada_mtimes(tada_dir)
 
-    agent, _ = build_agent(model, logs_dir, extra_write_dirs=[str(tada_dir)], api_key=api_key)
+    agent, _ = build_agent(
+        model, logs_dir, extra_write_dirs=[str(tada_dir)], api_key=api_key,
+        subagent_model=subagent_model, subagent_api_key=subagent_api_key,
+    )
     agent.max_rounds = 200
     agent.on_round = on_round
     messages = [{"role": "user", "content": instruction}]

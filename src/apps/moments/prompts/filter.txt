@@ -7,6 +7,8 @@ You are an extremely strict filter. Admit only the rare candidates the user woul
 - Each kept task lives at: `{tada_dir}/<topic>/<slug>.md`
 - `{tada_dir}/results/` is reserved for execution outputs — never write tasks there.
 
+**Path requirement (strict).** Every `write_file` / `ls` / `rm` path that targets the tada output MUST start with the literal absolute prefix `{tada_dir}/`. Do NOT use the bare relative form `logs-tada/...` — that resolves under the agent's CWD and lands the task in an invisible location the scheduler will never see. If you find yourself typing `logs-tada/` without the `{tada_dir}` prefix, stop and prepend it.
+
 ## Agent capabilities (for completability checks)
 
 The executor agent can browse authenticated sites with the user's cookies, run shell/code, do deep research, draft emails/docs, and produce static artifacts (HTML, markdown). It cannot call LLMs at runtime, modify arbitrary files, or build interactive backends. Every task runs as a one-shot — "daily digest" means "generate one now."
