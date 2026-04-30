@@ -30,6 +30,8 @@ function allKeys(): string[] {
   keys.add("seeker_api_key");
   keys.add("agent_model");
   keys.add("agent_api_key");
+  keys.add("subagent_model");
+  keys.add("subagent_api_key");
   keys.add("tabracadabra_enabled");
   keys.add("moments_enabled");
   keys.add("memory_enabled");

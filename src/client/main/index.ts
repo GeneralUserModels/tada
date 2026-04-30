@@ -109,7 +109,20 @@ function ensureConfigDefaults(): void {
   let cfg: Record<string, unknown> = {};
   try { cfg = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
 
-  const changed = fillMissingDefaults(cfg, defaults);
+  let changed = fillMissingDefaults(cfg, defaults);
+
+  // feature_flags are deployment-level (see src/server/feature_flags.py): on
+  // version change, force-replace them with the defaults file so flags flipped
+  // in a release reach existing installs.
+  const currentVersion = app.getVersion();
+  if (cfg._app_version !== currentVersion) {
+    if (isPlainObject(defaults.feature_flags)) {
+      cfg.feature_flags = structuredClone(defaults.feature_flags);
+    }
+    cfg._app_version = currentVersion;
+    changed = true;
+  }
+
   if (changed) {
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
@@ -495,7 +508,10 @@ app.whenReady().then(async () => {
   }
 
   if (dashboardWindow) {
-    initUpdateChecker(dashboardWindow);
+    initUpdateChecker(dashboardWindow, () => {
+      isQuitting = true;
+      stopServer();
+    });
   }
 
   // Re-send SERVER_READY whenever the SSE (re)connects (covers sleep/wake).
