@@ -94,8 +94,8 @@ class OnlineRecorder(ScreenRecorder):
             tmp = TABRACADABRA_LATEST_FRAME_PNG + ".tmp"
             img.save(tmp, format="PNG")
             os.replace(tmp, TABRACADABRA_LATEST_FRAME_PNG)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[recorder] _publish_latest_frame_png failed: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
 
     def start(self):
         with redirect_stdout(sys.stderr):

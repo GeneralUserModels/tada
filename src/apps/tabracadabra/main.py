@@ -41,10 +41,9 @@ from ApplicationServices import (
     kAXFocusedUIElementAttribute,
 )
 
-from connectors.screen.napsack.recorder import (
-    DEFAULT_TARGET_DPI,
-    TABRACADABRA_LATEST_FRAME_PNG,
-)
+from connectors.screen.napsack.recorder import DEFAULT_TARGET_DPI
+from napsack.record.__main__ import get_monitor_dpis, calculate_monitor_scales
+from napsack.record.workers.screenshot import capture_screenshot
 
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
@@ -153,47 +152,44 @@ _DEBUG_RENDER_LATEST_PNG = os.path.join(_DEBUG_RENDER_DIR, "rendered_latest.png"
 
 
 
-# ------------- Screenshot (napsack shared frame only; screen MCP writes TABRACADABRA_LATEST_FRAME_PNG) -------------
+# ------------- Screenshot (on-demand mss capture; independent of recorder) -------------
 def capture_active_monitor_as_data_url(target_dpi=DEFAULT_TARGET_DPI):
-    """PNG data URL from napsack's latest shared frame. DPI scaling was applied when the frame was captured."""
-    del target_dpi  # unused; kept for call-site compatibility
+    """PNG data URL captured fresh via mss at call time. Independent of the recorder."""
     t0 = time.perf_counter()
     slow_ms = 500
-    max_age = float(os.getenv("TABRACADABRA_FRAME_MAX_AGE_S", "5"))
-    try:
-        st = os.stat(TABRACADABRA_LATEST_FRAME_PNG)
-    except OSError as e:
-        raise RuntimeError(
-            f"No shared frame at {TABRACADABRA_LATEST_FRAME_PNG}. "
-            "Run Tada with the screen connector (MCP) so the recorder can publish frames."
-        ) from e
-    age_s = time.time() - st.st_mtime
-    if age_s > max_age:
-        raise RuntimeError(
-            f"Shared frame is stale ({age_s:.1f}s old, max {max_age}s via TABRACADABRA_FRAME_MAX_AGE_S). "
-            "Screen recorder may be stopped or stuck."
-        )
+
+    monitor_dpis = get_monitor_dpis()
+    scale = calculate_monitor_scales(target_dpi, monitor_dpis) if monitor_dpis else None
+
+    cursor_pos = _get_cursor_position() or (0.0, 0.0)
+    cx, cy = cursor_pos
+
     t1 = time.perf_counter()
-    try:
-        with Image.open(TABRACADABRA_LATEST_FRAME_PNG) as im:
-            out_img = im.convert("RGB").copy()
-    except (OSError, ValueError) as e:
-        raise RuntimeError(f"Could not read shared frame at {TABRACADABRA_LATEST_FRAME_PNG}") from e
+    with mss.mss(with_cursor=True) as sct:
+        img_rgb, _, _, _, _ = capture_screenshot(sct, int(cx), int(cy), scale=scale)
+    t_grab = time.perf_counter()
+
+    if img_rgb is None:
+        raise RuntimeError("mss screenshot capture failed (capture_screenshot returned None)")
+
+    out_img = Image.fromarray(img_rgb).convert("RGB")
     cursor_info = _annotate_with_cursor_dot(out_img)
     _save_debug_rendered_frame(out_img)
-    t_load = time.perf_counter()
+
     buf = io.BytesIO()
     out_img.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
     data_url = f"data:image/png;base64,{b64}"
     t_end = time.perf_counter()
+
     total_ms = (t_end - t0) * 1000
     if total_ms >= slow_ms:
-        file_ms = (t_load - t1) * 1000
-        encode_ms = (t_end - t_load) * 1000
+        init_ms = (t1 - t0) * 1000
+        grab_ms = (t_grab - t1) * 1000
+        encode_ms = (t_end - t_grab) * 1000
         print(
-            f"[tabracadabra] timing screenshot_detail source=shared file_ms={file_ms:.1f} "
-            f"encode_ms={encode_ms:.1f} total_ms={total_ms:.1f}",
+            f"[tabracadabra] timing screenshot_detail source=mss init_ms={init_ms:.1f} "
+            f"grab_ms={grab_ms:.1f} encode_ms={encode_ms:.1f} total_ms={total_ms:.1f}",
             flush=True,
         )
     return data_url, cursor_info
