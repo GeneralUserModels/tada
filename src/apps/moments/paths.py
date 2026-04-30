@@ -51,3 +51,63 @@ def get_topic(md_file: Path, tada_dir: Path) -> str:
 def list_topics(tada_dir: Path) -> list[str]:
     """Return sorted list of topic folder names under tada_dir."""
     return sorted(p.name for p in tada_dir.iterdir() if _is_topic_dir(p))
+
+
+def list_active_task_files(tada_dir: Path) -> list[Path]:
+    """Task .md files that have been executed (have a results dir) and are not dismissed.
+
+    "Active" = the slug appears under `logs-tada/results/<slug>/` AND the slug's
+    state in `_moment_state.json` does not have `dismissed: true`. Used by
+    discovery/oneoffs/triggers — they should only consider tasks the user has
+    actually engaged with.
+    """
+    from apps.moments.state import load_state
+
+    if not tada_dir.exists():
+        return []
+    results_dir = tada_dir / "results"
+    if not results_dir.exists():
+        return []
+
+    moment_state = load_state(tada_dir)
+    active: list[Path] = []
+    for md in list_task_files(tada_dir):
+        slug = md.stem
+        if not (results_dir / slug).is_dir():
+            continue
+        if moment_state.get(slug, {}).get("dismissed"):
+            continue
+        active.append(md)
+    return active
+
+
+def summarize_tada_tasks(tada_dir: Path) -> str:
+    """Render active (executed and not dismissed) tada tasks as a markdown listing.
+
+    Each entry shows topic/slug, title, description, frequency, schedule, and trigger
+    so the discovery agent can decide whether a new candidate would duplicate an
+    existing task. Excludes tasks that have never been executed and tasks the user
+    dismissed — proposing variants of those would not be useful.
+    """
+    from apps.moments.execute import _parse_frontmatter
+
+    files = list_active_task_files(tada_dir)
+    if not files:
+        return "(no existing tasks yet)"
+
+    lines: list[str] = []
+    for md in files:
+        fm = _parse_frontmatter(md.read_text())
+        topic = get_topic(md, tada_dir) or "(flat)"
+        slug = md.stem
+        title = fm.get("title", slug)
+        description = fm.get("description", "")
+        frequency = fm.get("frequency", "?")
+        schedule = fm.get("schedule", "—")
+        trigger = fm.get("trigger") or "—"
+        lines.append(
+            f"- **{topic}/{slug}** — {title}\n"
+            f"  {description}\n"
+            f"  frequency: {frequency} | schedule: {schedule} | trigger: {trigger}"
+        )
+    return "\n".join(lines)

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from apps.moments.execute import run as execute_moment, _parse_frontmatter as parse_frontmatter
 from apps.moments.paths import list_task_files
-from apps.moments.state import load_state
+from apps.moments.state import clear_pending_update, load_state
 from server.feature_flags import is_enabled
 
 logger = logging.getLogger(__name__)
@@ -160,6 +160,7 @@ async def _execute_one_moment(
     effective_schedule: str,
     logs_dir: str,
     results_dir: Path,
+    tada_dir: Path,
     model: str,
     api_key: str | None,
     last_run_at: float | None,
@@ -204,6 +205,7 @@ async def _execute_one_moment(
             save_run(results_dir, slug, started_at, completed_at, "success" if success else "failed")
 
         if success:
+            clear_pending_update(tada_dir, slug)
             meta_path = Path(output_dir) / "meta.json"
             meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
             result_dir = Path(output_dir)
@@ -279,14 +281,15 @@ async def run_moments_scheduler(state) -> None:
                     continue
                 effective_frequency = slug_state.get("frequency_override") or frequency
                 effective_schedule = slug_state.get("schedule_override") or schedule
-                if not should_run(slug, effective_frequency, effective_schedule, run_history):
+                pending = bool(slug_state.get("pending_update"))
+                if not pending and not should_run(slug, effective_frequency, effective_schedule, run_history):
                     continue
 
                 state.moments_in_flight_slugs.add(slug)
                 task = asyncio.create_task(_execute_one_moment(
                     state, md_file, slug, fm, slug_state,
                     effective_frequency, effective_schedule,
-                    logs_dir, results_dir, model, api_key,
+                    logs_dir, results_dir, tada_dir, model, api_key,
                     run_history.get(slug),
                 ))
                 state.moments_execution_tasks.add(task)

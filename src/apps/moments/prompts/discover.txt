@@ -15,6 +15,25 @@ The agent CANNOT: call LLMs at runtime in its output, modify arbitrary files on 
 
 Your job is to predict WHAT to automate — not HOW. The executing agent is capable and will figure out implementation details on its own.
 
+## Existing tada tasks (already executed and not dismissed)
+
+These tasks live under `{logs_dir}/../logs-tada/`, have been executed at least once (results dir exists), and the user has not dismissed them. They are the only tasks eligible for update — dismissed and never-yet-run tasks are out of scope. **Read this list carefully before proposing anything new** — if your candidate substantially overlaps with one of these (same intent, same data sources, similar output), you must UPDATE that existing task in place rather than create a duplicate. See "Updating existing tasks" below.
+
+{existing_tasks}
+
+## Updating existing tasks
+
+When your analysis surfaces a task that substantially overlaps with one of the existing tada tasks above, do NOT write a new candidate to `{logs_dir}/tasks/`. Instead, edit the existing task file directly using `write_file` at:
+
+  `{logs_dir}/../logs-tada/<topic>/<slug>.md`
+
+You may change anything in that file — title, description, body, frequency, schedule, confidence, usefulness — but **keep the slug/filename the same** (slug is the task's identity across run history, results, and user state). Edits to existing tada files are auto-promoted: they bypass filter and re-execute on the next scheduler tick. Do not also write a candidate for the same idea — pick one path or the other.
+
+Rule of thumb for "substantially overlaps": same user intent + overlapping data sources + similar resulting artifact. Slight differences in cadence or framing are NOT enough to justify a new task; refine the existing one.
+
+If your candidate is genuinely distinct from every existing task, write it as a new candidate to `{logs_dir}/tasks/` per the normal flow.
+
+
 **Prioritize tasks that amplify the user's abilities:**
 - **Information foraging and synthesis** — the agent's biggest advantage is reading, comparing, and synthesizing across many sources faster than any human. Prioritize tasks where the agent does deep research the user wouldn't have time for: surveying a field, comparing tools/approaches, reading papers/docs, compiling structured knowledge.
 - **Complex multi-step workflows** — prefer ambitious tasks that chain together many operations. The agent thrives on tasks that are too tedious or time-consuming for a human to bother with.

@@ -35,4 +35,28 @@ DEFAULT_SLUG_STATE = {
     "schedule_override": None,
     "frequency_override": None,
     "last_feedback_incorporated_at": None,
+    "pending_update": False,
+    "pending_update_reason": None,
 }
+
+
+def set_pending_update(tada_dir: Path, slug: str, reason: str | None = None) -> None:
+    """Mark a slug as needing re-execution on the next scheduler tick."""
+    state = load_state(tada_dir)
+    entry = {**state.get(slug, {})}
+    entry["pending_update"] = True
+    entry["pending_update_reason"] = reason
+    state[slug] = entry
+    save_state(tada_dir, state)
+
+
+def clear_pending_update(tada_dir: Path, slug: str) -> None:
+    """Clear the pending_update flag after successful re-execution."""
+    state = load_state(tada_dir)
+    if slug not in state:
+        return
+    entry = {**state[slug]}
+    entry["pending_update"] = False
+    entry["pending_update_reason"] = None
+    state[slug] = entry
+    save_state(tada_dir, state)

@@ -55,10 +55,14 @@ export function useChatApp() {
   }, []);
 
   const newDraft = useCallback(() => {
+    if (activeMeta) {
+      setDraftModel(activeMeta.model);
+      setDraftEffort(activeMeta.effort);
+    }
     setActiveIdState(null);
     setActiveMeta(null);
     setItems([]);
-  }, []);
+  }, [activeMeta]);
 
   const selectSession = useCallback(async (id: string | null) => {
     setActiveIdState(id);

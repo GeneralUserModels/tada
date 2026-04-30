@@ -49,7 +49,7 @@ DEFAULT_EFFORT = "medium"
 # this just prevents pathological infinite-tool-call loops.
 SAFETY_MAX_ROUNDS = 40
 
-AVAILABLE_MODELS = ["anthropic/claude-sonnet-4-6"]
+AVAILABLE_MODELS = ["anthropic/claude-sonnet-4-6", "gemini/gemini-3-flash-preview"]
 DEFAULT_MODEL = AVAILABLE_MODELS[0]
 
 _PROMPTS = Path(__file__).parent / "prompts"

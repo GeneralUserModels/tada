@@ -11,6 +11,7 @@ export const LLM_MODELS: ModelOption[] = [
 
 export const AGENT_MODELS: ModelOption[] = [
   { value: "anthropic/claude-sonnet-4-6",            label: "Claude Sonnet 4.6" },
+  { value: "gemini/gemini-3-flash-preview",          label: "Gemini 3 Flash Preview" },
 ];
 
 export const TINKER_MODELS: ModelOption[] = [

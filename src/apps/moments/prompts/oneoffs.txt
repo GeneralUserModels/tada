@@ -4,6 +4,39 @@ Your job is to predict WHAT to automate — not HOW. The executing agent is capa
 
 Unlike recurring automation tasks, these are situational — things the user is currently working on, researching, or planning where the agent can jump in and produce something useful in a single run. Tasks should be informational only (research, summaries, drafts, context) — never instrumental actions that change the user's state.
 
+## Existing tada tasks (already executed and not dismissed)
+
+These tasks live under `{logs_dir}/../logs-tada/`, have been executed at least once, and the user has not dismissed them. They are the only tasks eligible for update — dismissed and never-yet-run tasks are out of scope. **Read this list carefully before proposing anything new** — if your candidate substantially overlaps with one of these (same intent, same data sources, similar output), you must UPDATE that existing task in place rather than create a duplicate.
+
+{existing_tasks}
+
+## Updating existing tasks
+
+When your analysis surfaces a task that substantially overlaps with one of the existing tada tasks above, do NOT write a new candidate to `{logs_dir}/oneoffs/`. Instead, edit the existing task file directly using `write_file` at:
+
+  `{logs_dir}/../logs-tada/<topic>/<slug>.md`
+
+You may change anything in that file — title, description, body, frequency, schedule, confidence, usefulness, trigger — but **keep the slug/filename the same** (slug is the task's identity across run history, results, and user state). Edits to existing tada files bypass the filter stage and re-execute on the next scheduler tick. Do not also write a candidate for the same idea — pick one path or the other.
+
+Rule of thumb for "substantially overlaps": same user intent + overlapping data sources + similar resulting artifact. Slight differences in framing are NOT enough to justify a new task; refine the existing one.
+
+If your candidate is genuinely distinct from every existing task, write it as a new candidate to `{logs_dir}/oneoffs/` per the normal flow.
+
+## Trigger-based one-offs
+
+Some one-offs are only useful once a particular condition becomes true (a new email from a sender appears, today is the day before a flight, a file matching a pattern arrives in a watched folder, a calendar event happens). For these, include an OPTIONAL `trigger:` field in the frontmatter with a single-sentence natural-language condition.
+
+Triggered one-offs are evaluated daily by a separate trigger-check stage; they re-fire each day the condition is currently true. Do **not** write a `trigger:` for one-offs that should fire as soon as discovered — leave the field off and the one-off will be filtered + executed normally.
+
+Examples of good triggers:
+- `trigger: a new email from stripe arrives in the user's inbox`
+- `trigger: today is within 48 hours of a calendar event whose location is outside the user's home city`
+- `trigger: a new pdf paper appears in ~/Downloads with "transformer" in the filename`
+
+Bad triggers (too vague to evaluate from logs):
+- `trigger: when the user is stressed`
+- `trigger: when the project is going badly`
+
 The AI agent that will execute these tasks is powerful. It can:
 - Search the web, crawl pages, and fetch live data
 - Browse authenticated websites (GitHub, Gmail, Twitter/X, YouTube, Slack, Google Docs, etc.) using the user's Chrome cookies
@@ -102,6 +135,7 @@ description: <one-line summary of what the agent should do>
 frequency: once
 confidence: <0.0-1.0, how strongly the logs support that the user needs this>
 usefulness: <1-10, how valuable the output would be>
+trigger: <OPTIONAL — single-sentence natural-language condition; omit entirely if the one-off should fire immediately>
 ---
 
 After the frontmatter, include:
