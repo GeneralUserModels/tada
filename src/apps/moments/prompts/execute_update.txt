@@ -75,7 +75,16 @@ You can read any file on the system, but writes elsewhere will fail. Do NOT writ
 ## How to work
 
 Before diving in, plan your approach using PlanWrite to outline your steps and track progress.
-Use subagents to parallelize and divide your work.
+
+**Lean heavily on subagents.** This task has a generous round budget — use it by spawning subagents aggressively rather than doing everything in the main loop. Each independent piece of work (reading a data source, browsing a site, fetching fresh items, diffing against the previous run) should generally go to a subagent. The main agent's job is to plan, dispatch, and integrate — not to do the work itself.
+
+Good subagent patterns:
+- **Fan out across data sources**: one subagent reads emails since the last run, another reads calendar, another reads screen activity, another browses the web. Run them in parallel.
+- **Fan out across topics**: split research into independent threads (e.g. one subagent per company, person, repo, or feed) and gather their outputs.
+- **Delegate the diff**: a subagent can read the existing `app.js` data and report what items were already shown, so the main agent knows what to exclude.
+- **Delegate verification**: a subagent can run `node --check` and report any failures while the main agent moves on.
+
+Spawn subagents whenever a step is independent of the next step. Default to dispatching rather than doing it yourself.
 
 Use your tools as needed:
 - **bash**: run shell commands to execute the task.
@@ -92,7 +101,7 @@ For user-specific data (emails, calendar, notifications), prefer the local log f
 ## Execution
 
 1. Plan with PlanWrite — note what data needs refreshing vs. what to keep.
-2. Read the fresh data sources relevant to this task. Use subagents to parallelize.
+2. Read the fresh data sources relevant to this task. **Dispatch subagents in parallel for each independent data source or research thread** — don't read sources serially in the main loop.
 3. Compare fresh data with what's already in the existing interface.
 4. Update the data/content while preserving the interface structure.
 5. Write the updated files to `{output_dir}/`.

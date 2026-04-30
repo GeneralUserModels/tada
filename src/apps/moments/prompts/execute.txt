@@ -106,7 +106,16 @@ You can read any file on the system, but writes elsewhere will fail. Do NOT writ
 ## How to work
 
 Before diving in, plan your approach using PlanWrite to outline your steps and track progress.
-Use subagents to parallelize and divide your work.
+
+**Lean heavily on subagents.** This task has a generous round budget — use it by spawning subagents aggressively rather than doing everything in the main loop. Each independent piece of work (reading a data source, browsing a site, summarizing a section, drafting a component) should generally go to a subagent. The main agent's job is to plan, dispatch, and integrate — not to do the work itself.
+
+Good subagent patterns:
+- **Fan out across data sources**: one subagent reads emails, another reads calendar, another reads screen activity, another browses the web. Run them in parallel.
+- **Fan out across topics**: split research into independent threads (e.g. one subagent per company, person, repo, or feed) and gather their outputs.
+- **Delegate component work**: a subagent can read a template README, read a sibling moment for reusable components, and report back what's available before you write code.
+- **Delegate verification**: a subagent can run `node --check` and report any failures while the main agent moves on.
+
+Spawn subagents whenever a step is independent of the next step. Default to dispatching rather than doing it yourself.
 
 Use your tools as needed:
 - **bash**: run shell commands to execute the task. **The shell has NO network access** (no curl, wget, pip install, git clone, etc.) — all network operations must go through browser or web_search tools.
@@ -124,7 +133,7 @@ For user-specific data (emails, calendar, notifications), prefer the local log f
 
 1. Plan with PlanWrite — break the task into steps.
 2. Read `{templates_dir}/shared/README.md` to understand the shared component API, then read the README.md of the template that best fits your task.
-3. Read the data sources relevant to this task, process them, and produce the result. Use subagents to parallelize.
+3. Read the data sources relevant to this task, process them, and produce the result. **Dispatch subagents in parallel for each independent data source or research thread** — don't read sources serially in the main loop.
 4. Build the interface by composing from shared `PN.*` components and template-specific components. Also browse `{output_dir}/../` for reusable components from other moments.
 5. Write your output files to `{output_dir}/` (including base.css and components.js).
 6. **Verify your JS**: run `node --check {output_dir}/app.js` (and any other .js files you wrote) to catch syntax errors. Fix any errors before finishing.

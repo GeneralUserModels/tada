@@ -112,7 +112,7 @@ def _make_summarizer(model: str, api_key: str | None = None):
 
 def _make_child_agent(model: str, system_prompt: str, api_key: str | None = None):
     def factory(tools):
-        return Agent(model=model, system_prompt=system_prompt, tools=tools, max_rounds=30, web_search=True, api_key=api_key)
+        return Agent(model=model, system_prompt=system_prompt, tools=tools, max_rounds=15, web_search=True, api_key=api_key)
     return factory
 
 
