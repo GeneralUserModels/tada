@@ -17,6 +17,12 @@ import {
 } from "../api/client";
 import { useAppContext } from "../context/AppContext";
 
+// Persist the last-chosen draft model/effort across app launches. Stored in
+// renderer localStorage so it survives quit; validated against the server's
+// option list on load in case a model is removed.
+const STORAGE_KEY_MODEL = "chat.draftModel";
+const STORAGE_KEY_EFFORT = "chat.draftEffort";
+
 export function useChatApp() {
   const { state: appState, dispatch } = useAppContext();
   const [sessions, setSessions] = useState<ChatSessionMeta[]>([]);
@@ -27,9 +33,14 @@ export function useChatApp() {
   const [unreadSessions, setUnreadSessions] = useState<Set<string>>(new Set());
   const [options, setOptions] = useState<ChatOptions | null>(null);
   const [loadingSession, setLoadingSession] = useState(false);
-  // Draft model+effort, used when no session is selected.
-  const [draftModel, setDraftModel] = useState<string>("");
-  const [draftEffort, setDraftEffort] = useState<string>("medium");
+  // Draft model+effort, used when no session is selected. Hydrated from
+  // localStorage so the user's last pick survives an app quit.
+  const [draftModel, setDraftModel] = useState<string>(
+    () => localStorage.getItem(STORAGE_KEY_MODEL) ?? "",
+  );
+  const [draftEffort, setDraftEffort] = useState<string>(
+    () => localStorage.getItem(STORAGE_KEY_EFFORT) ?? "medium",
+  );
 
   // Sync mirror of activeId for SSE handlers running outside the render cycle.
   const activeIdRef = useRef<string | null>(null);
@@ -45,9 +56,18 @@ export function useChatApp() {
   const loadOptions = useCallback(async () => {
     const o = await getChatOptions();
     setOptions(o);
-    setDraftModel((m) => m || o.default_model);
-    setDraftEffort((e) => e || o.default_effort);
+    // Drop any persisted value the server no longer offers.
+    setDraftModel((m) => (m && o.models.includes(m) ? m : o.default_model));
+    setDraftEffort((e) => (e && o.efforts.includes(e) ? e : o.default_effort));
   }, []);
+
+  // Persist draft model/effort so the last-chosen pair survives app quit.
+  useEffect(() => {
+    if (draftModel) localStorage.setItem(STORAGE_KEY_MODEL, draftModel);
+  }, [draftModel]);
+  useEffect(() => {
+    if (draftEffort) localStorage.setItem(STORAGE_KEY_EFFORT, draftEffort);
+  }, [draftEffort]);
 
   const loadSessions = useCallback(async () => {
     const list = await listChatSessions();
@@ -111,12 +131,12 @@ export function useChatApp() {
 
   const setEffort = useCallback(
     async (effort: string) => {
+      // Always update the draft so the next "+ New chat" remembers this pick.
+      setDraftEffort(effort);
       if (activeId && activeMeta) {
         const updated = await updateChatSession(activeId, { effort });
         setActiveMeta(updated);
         await loadSessions();
-      } else {
-        setDraftEffort(effort);
       }
     },
     [activeId, activeMeta, loadSessions],
