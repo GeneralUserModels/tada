@@ -5,12 +5,16 @@ export type ServicesStatus = {
   services_started: boolean;
   tabracadabra_ready: boolean;
   screen_frame_fresh: boolean;
+  screen_paused: boolean;
 };
 
 const EMPTY: ServicesStatus = {
   services_started: false,
   tabracadabra_ready: false,
   screen_frame_fresh: false,
+  // Default to paused until the server reports otherwise — avoids gating boot
+  // on a screen frame check before we've heard from the connector.
+  screen_paused: true,
 };
 
 const POLL_INTERVAL_MS = 500;
@@ -28,9 +32,11 @@ export type UseWaitForServicesOpts = {
   // never starts the event tap when the user has tabracadabra disabled (or
   // the feature flag is off), so waiting for it would hang forever.
   requireTabracadabra?: boolean;
-  // When false, don't gate readiness on `screen_frame_fresh`. The screen
-  // connector stays paused when the user hasn't enabled it (no permission
-  // granted, or toggled off in settings), so no fresh frame ever lands.
+  // When false, don't gate readiness on `screen_frame_fresh` regardless of
+  // backend pause state. Onboarding sets this from the granted permission.
+  // For the dashboard's BootGate this stays true and the hook defers to the
+  // runtime `screen_paused` flag in the status response: if the connector
+  // was paused on app close, no frame ever lands and we'd hang forever.
   requireScreen?: boolean;
 };
 
@@ -72,10 +78,17 @@ export function useWaitForServices({
           const next = await getServicesStatus();
           if (cancelled) return;
           setStatus(next);
+          // Skip the screen-frame check when the caller didn't ask for it OR
+          // when the backend reports the connector paused — a paused connector
+          // never publishes a frame, so requiring `screen_frame_fresh` would
+          // hang the boot gate indefinitely.
+          const screenOk = (
+            !requireScreen || next.screen_paused || next.screen_frame_fresh
+          );
           if (
             next.services_started &&
             (!requireTabracadabra || next.tabracadabra_ready) &&
-            (!requireScreen || next.screen_frame_fresh)
+            screenOk
           ) {
             setReady(true);
             return;

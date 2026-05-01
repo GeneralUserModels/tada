@@ -75,10 +75,17 @@ async def services_status(request: Request):
     except OSError:
         screen_frame_fresh = False
     service = state.tabracadabra_service
+    # screen_paused: true when the connector is paused (toggled off or
+    # error-paused). The boot gate uses this to skip the screen-frame check
+    # rather than relying on the persisted `enabled_connectors` setting (which
+    # loads async on the renderer and can be stale relative to runtime state).
+    screen_conn = state.connectors.get("screen")
+    screen_paused = screen_conn is None or screen_conn.paused
     return {
         "services_started": bool(state.services_started),
         "tabracadabra_ready": service is not None and service.is_ready(),
         "screen_frame_fresh": screen_frame_fresh,
+        "screen_paused": screen_paused,
     }
 
 

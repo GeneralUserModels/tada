@@ -46,7 +46,11 @@ async def _wait_for_boot_ready(state: ServerState) -> None:
         and is_enabled(state.config, "tabracadabra")
         and state.config.tabracadabra_enabled
     )
-    require_screen = "screen" in state.config.enabled_connectors
+    # Read the live connector state, not enabled_connectors: a connector that
+    # was paused on app close (toggled off, or error-paused) shouldn't gate boot
+    # readiness — no recorder is running, so no frame will ever land.
+    screen_conn = state.connectors.get("screen")
+    require_screen = screen_conn is not None and not screen_conn.paused
 
     while True:
         tabra_ok = (

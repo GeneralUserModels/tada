@@ -152,6 +152,7 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
           services_started: false,
           tabracadabra_ready: false,
           screen_frame_fresh: false,
+          screen_paused: true,
         })),
       ]);
       if (cancelled) return;
@@ -180,10 +181,12 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
         onboardingComplete: status.complete,
         // Treat "all three green" as "ready" — matches GettingReadyStep's
         // advance condition so returning users skip the spool wait entirely.
+        // A paused screen connector never publishes a frame, so don't gate
+        // readiness on `screen_frame_fresh` in that case.
         servicesReady:
           services.services_started &&
           (!tabracadabraExpected || services.tabracadabra_ready) &&
-          services.screen_frame_fresh,
+          (services.screen_paused || services.screen_frame_fresh),
       };
       const pending = pendingSteps(state);
 

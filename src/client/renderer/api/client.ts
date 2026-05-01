@@ -127,6 +127,7 @@ export const getServicesStatus = () =>
     services_started: boolean;
     tabracadabra_ready: boolean;
     screen_frame_fresh: boolean;
+    screen_paused: boolean;
   }>;
 export const checkNotificationsPermission = () =>
   request("GET", "/api/permissions/notifications") as Promise<{ granted: boolean }>;

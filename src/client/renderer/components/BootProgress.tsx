@@ -58,7 +58,7 @@ export function BootProgress({ status, ready, requireTabracadabra = true, requir
       <ul className="boot-progress-checklist">
         {BOOT_CHECKLIST.filter((item) => {
           if (!requireTabracadabra && item.key === "tabracadabra_ready") return false;
-          if (!requireScreen && item.key === "screen_frame_fresh") return false;
+          if (item.key === "screen_frame_fresh" && (!requireScreen || status.screen_paused)) return false;
           return true;
         }).map((item) => {
           const done = status[item.key];
