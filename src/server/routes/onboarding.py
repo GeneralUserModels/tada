@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from server.services import start_services, _log_startup_failure
-from connectors.screen.napsack.recorder import TABRACADABRA_LATEST_FRAME_PNG
+from connectors.screen.napsack.recorder import SCREEN_FRAME_HEARTBEAT
 
 router = APIRouter(prefix="/api", tags=["onboarding"])
 
@@ -70,7 +70,7 @@ async def services_status(request: Request):
     """Readiness probe for the getting_ready step's polling loop."""
     state = request.app.state.server
     try:
-        st = os.stat(TABRACADABRA_LATEST_FRAME_PNG)
+        st = os.stat(SCREEN_FRAME_HEARTBEAT)
         screen_frame_fresh = (time.time() - st.st_mtime) < _FRAME_FRESH_S
     except OSError:
         screen_frame_fresh = False

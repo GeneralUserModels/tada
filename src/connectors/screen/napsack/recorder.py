@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import tempfile
@@ -10,16 +11,20 @@ from typing import List, Optional
 from PIL import Image
 from napsack.record.__main__ import ScreenRecorder, get_monitor_dpis, calculate_monitor_scales
 
+logger = logging.getLogger(__name__)
+
 
 # Default DPI for screenshot rescaling (lower = smaller images, fewer tokens)
 DEFAULT_TARGET_DPI = 100
 
-## A bit unfortunate that we have some tabracadabra dependenceis here... 
+## A bit unfortunate that we have some tabracadabra dependenceis here...
 # Flag file created by tabracadabra to suppress aggregation during active streaming
 TABRACADABRA_SUPPRESS_FLAG = os.path.join(tempfile.gettempdir(), "tada_tab_active")
 
-# Latest frame from napsack screenshot loop (atomic PNG) for Tabracadabra — same process as screen MCP only
-TABRACADABRA_LATEST_FRAME_PNG = os.path.join(tempfile.gettempdir(), "tada_tab_latest.png")
+# Heartbeat: touched on every captured frame. Boot/onboarding readiness checks
+# read its mtime to confirm the screen connector is producing frames. The
+# bytes are intentionally empty — no consumer reads them.
+SCREEN_FRAME_HEARTBEAT = os.path.join(tempfile.gettempdir(), "tada_screen_heartbeat")
 
 # Default event types to disable for online recording (mouse move is too noisy)
 DEFAULT_DISABLE = ["move"]
@@ -82,20 +87,14 @@ class OnlineRecorder(ScreenRecorder):
         self.aggregation_worker.aggregations_file = self.session_dir / "raw_aggregations.jsonl"
         self.input_event_queue.session_dir = self.session_dir
 
-        self.image_queue.add_callback(self._publish_latest_frame_png)
+        self.image_queue.add_callback(self._touch_frame_heartbeat)
 
-    def _publish_latest_frame_png(self, buffer_image) -> None:
-        """Write each new frame to a temp path for Tabracadabra (main process reads; avoids second mss)."""
+    def _touch_frame_heartbeat(self, _buffer_image) -> None:
+        """Bump the heartbeat file's mtime so readiness probes can detect live frames."""
         try:
-            data = getattr(buffer_image, "data", None)
-            if data is None:
-                return
-            img = Image.fromarray(data)
-            tmp = TABRACADABRA_LATEST_FRAME_PNG + ".tmp"
-            img.save(tmp, format="PNG")
-            os.replace(tmp, TABRACADABRA_LATEST_FRAME_PNG)
-        except Exception as e:
-            print(f"[recorder] _publish_latest_frame_png failed: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+            Path(SCREEN_FRAME_HEARTBEAT).touch()
+        except OSError:
+            logger.exception("frame heartbeat touch failed")
 
     def start(self):
         with redirect_stdout(sys.stderr):

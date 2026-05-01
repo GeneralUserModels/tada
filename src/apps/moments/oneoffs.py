@@ -14,17 +14,12 @@ load_dotenv()
 from agent.builder import build_agent
 from apps.moments._incremental import read_checkpoint, write_checkpoint, sessions_with_new_content
 from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
-from apps.moments.paths import list_active_task_files, summarize_tada_tasks
+from apps.moments.paths import snapshot_tada_mtimes, summarize_tada_tasks
 from apps.moments.state import set_pending_update
 
 _PROMPTS = Path(__file__).parent / "prompts"
 INSTRUCTION_TEMPLATE = (_PROMPTS / "oneoffs.txt").read_text()
 INCREMENTAL_SECTION = (_PROMPTS / "oneoffs_incremental.txt").read_text()
-
-
-def _snapshot_tada_mtimes(tada_dir: Path) -> dict[str, float]:
-    """Map slug → mtime for every active (executed + non-dismissed) tada task."""
-    return {md.stem: md.stat().st_mtime for md in list_active_task_files(tada_dir)}
 
 
 def run(
@@ -66,7 +61,7 @@ def run(
             f"have been missed."
         )
 
-    pre_mtimes = _snapshot_tada_mtimes(tada_dir)
+    pre_mtimes = snapshot_tada_mtimes(tada_dir)
 
     agent, _ = build_agent(
         model, logs_dir, extra_write_dirs=[str(tada_dir)], api_key=api_key,
@@ -77,7 +72,7 @@ def run(
     messages = [{"role": "user", "content": instruction}]
     result = agent.run(messages)
 
-    post_mtimes = _snapshot_tada_mtimes(tada_dir)
+    post_mtimes = snapshot_tada_mtimes(tada_dir)
     for slug, mtime in post_mtimes.items():
         if mtime > pre_mtimes.get(slug, 0):
             set_pending_update(tada_dir, slug, reason="oneoffs updated description")

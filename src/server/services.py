@@ -13,7 +13,7 @@ from connectors.service import run_context_logging_service
 from user_models.training import init_model, run_training_service
 from server.cost_tracker import init_cost_tracking, run_cost_logger
 from user_models.data_manager import DataManager
-from connectors.screen.napsack.recorder import TABRACADABRA_LATEST_FRAME_PNG
+from connectors.screen.napsack.recorder import SCREEN_FRAME_HEARTBEAT
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ async def _wait_for_boot_ready(state: ServerState) -> None:
         )
         try:
             screen_ok = (not require_screen) or (
-                (time.time() - os.stat(TABRACADABRA_LATEST_FRAME_PNG).st_mtime) < _BOOT_FRAME_FRESH_S
+                (time.time() - os.stat(SCREEN_FRAME_HEARTBEAT).st_mtime) < _BOOT_FRAME_FRESH_S
             )
         except OSError:
             screen_ok = not require_screen

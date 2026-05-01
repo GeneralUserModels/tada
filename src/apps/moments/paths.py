@@ -81,6 +81,11 @@ def list_active_task_files(tada_dir: Path) -> list[Path]:
     return active
 
 
+def snapshot_tada_mtimes(tada_dir: Path) -> dict[str, float]:
+    """Map slug → mtime for every active (executed + non-dismissed) tada task."""
+    return {md.stem: md.stat().st_mtime for md in list_active_task_files(tada_dir)}
+
+
 def summarize_tada_tasks(tada_dir: Path) -> str:
     """Render active (executed and not dismissed) tada tasks as a markdown listing.
 

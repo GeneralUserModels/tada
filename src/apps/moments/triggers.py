@@ -15,7 +15,7 @@ load_dotenv()
 from agent.builder import build_agent
 from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
 from apps.moments.execute import _parse_frontmatter
-from apps.moments.paths import list_active_task_files
+from apps.moments.paths import get_topic, list_active_task_files
 from apps.moments.state import set_pending_update
 
 _PROMPTS = Path(__file__).parent / "prompts"
@@ -55,7 +55,7 @@ def run(
         return "no triggered tasks"
 
     listing = "\n".join(
-        f'- **{md.parent.name}/{md.stem}** — trigger: "{fm["trigger"]}"\n'
+        f'- **{get_topic(md, tada_dir) or "(flat)"}/{md.stem}** — trigger: "{fm["trigger"]}"\n'
         f'  description: {fm.get("description", "")}'
         for md, fm in triggered
     )

@@ -276,10 +276,6 @@ export function TadaView() {
     });
   }, []);
 
-  // Cross-category groupings: Pinned + Unread span all topics. They show
-  // above topic chapters as quick-access summaries. Items can appear in
-  // both (a pinned-and-unread tada surfaces in Pinned, Unread, and its
-  // topic chapter) so each cross-cut view is complete on its own.
   const pinnedItems = useMemo(
     () => visibleResults.filter((r) => r.pinned && !r.dismissed),
     [visibleResults],
@@ -289,9 +285,6 @@ export function TadaView() {
     [visibleResults], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  // Placeholder cards: in-flight slugs whose result file isn't on disk yet.
-  // They have no topic until the result lands, so we render them above the
-  // accordion as a transient "Running" strip.
   const placeholderActivities = useMemo(() => {
     if (loading) return [];
     return runActivities.filter((act) => {
@@ -554,8 +547,6 @@ export function TadaView() {
 
       <div className="tada-list-body">
         <main className="tada-list-main">
-          {/* Placeholder entries: one per in-flight moment that doesn't have
-              a result on disk yet. */}
           {placeholderActivities.map((act) => (
             <article key={`placeholder-${act.slug}`} className="glass-card tada-entry tada-entry--running">
               <div className="tada-card-header">
