@@ -7,21 +7,27 @@ Last ingest: **{last_ingest_date}**
 
 {shared_wiki_rules}
 
-{shared_source_rules}
-
 ## Existing Wiki Pages
 
 {existing_pages_list}
+
+## Existing Content Page Metadata
+
+{existing_page_metadata}
 
 ## New Inputs Detected
 
 {new_inputs_list}
 
+## Changed Input Preview
+
+{changed_input_preview}
+
 ## Task
 
-Plan the ingest. Read enough existing wiki state and source metadata to decide what the update step should inspect.
+Plan the ingest using the lists, metadata, previews, and any discovery needed for the current mode.
 
-For first runs, plan broad coverage across available source types. For incremental runs, prioritize the new inputs while also naming adjacent existing pages and a small backfill sample. For no-new-data runs, plan enrichment, cross-linking, and coverage checks against the existing wiki.
+For first runs, discovery is expected: inspect the available source layout, sample useful source files, and identify the strongest starter pages. For incremental runs, prioritize the new inputs while also naming adjacent existing pages and a small backfill sample when useful. For no-new-data runs, use discovery for enrichment, cross-linking, and coverage checks against the existing wiki.
 
 End with a single fenced JSON block. It must be the last thing in your final message.
 
@@ -41,3 +47,4 @@ Rules:
 - Return only valid JSON in the fenced block.
 - Use paths relative to `{logs_dir}/` for log sources and relative to `{memory_dir}/` for wiki pages.
 - Do not invent files you have not seen unless clearly labeled as likely page titles.
+- Keep discovery purposeful and bounded. Prefer source directories and files relevant to the mode over unrelated filesystem exploration.

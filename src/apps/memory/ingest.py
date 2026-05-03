@@ -48,6 +48,10 @@ INVENTORY_KEYS = {
     "rationale",
 }
 _JSON_BLOCK_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
+_WIKI_LINK_RE = re.compile(r"\[\[([^\]\n]+)\]\]")
+PREVIEW_MAX_FILES = 20
+PREVIEW_MAX_LINES = 8
+PREVIEW_MAX_CHARS = 900
 
 
 @dataclass
@@ -179,6 +183,47 @@ def _existing_pages_list(memory_dir: Path) -> str:
     return "\n".join(f"- {p.relative_to(memory_dir)}" for p in pages)
 
 
+def _page_excerpt(path: Path, max_chars: int = 280) -> str:
+    if not path.exists():
+        return ""
+    text = path.read_text()
+    if text.startswith("---\n"):
+        marker = "\n---\n"
+        end = text.find(marker, 4)
+        if end != -1:
+            text = text[end + len(marker):]
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:max_chars]
+
+
+def _page_metadata_list(memory_dir: Path, rel_paths: list[str] | None = None) -> str:
+    pages: list[Path] = []
+    if rel_paths is None:
+        pages = _memory_pages(memory_dir)
+    else:
+        for rel in rel_paths:
+            page = memory_dir / rel
+            if not page.exists() or page.suffix != ".md":
+                continue
+            try:
+                page_rel = page.relative_to(memory_dir)
+            except ValueError:
+                continue
+            if _is_hidden_or_special(page_rel):
+                continue
+            pages.append(page)
+    if not pages:
+        return "- (no content pages)"
+    lines = []
+    for page in sorted(set(pages)):
+        rel = page.relative_to(memory_dir)
+        title = _page_title(page)
+        excerpt = _page_excerpt(page)
+        suffix = f" — {excerpt}" if excerpt else ""
+        lines.append(f"- `{rel}` — title: {title}{suffix}")
+    return "\n".join(lines)
+
+
 def _page_title(path: Path) -> str:
     text = path.read_text()
     match = re.search(r"^title:\s*(.+?)\s*$", text, re.MULTILINE)
@@ -187,11 +232,102 @@ def _page_title(path: Path) -> str:
     return path.stem.replace("-", " ").title()
 
 
+def _preview_line(line: str) -> str:
+    text = re.sub(r"\s+", " ", line).strip()
+    if len(text) > PREVIEW_MAX_CHARS:
+        return text[:PREVIEW_MAX_CHARS].rstrip() + "..."
+    return text
+
+
+def _file_preview(path: Path, root: Path) -> str | None:
+    if not path.exists() or not path.is_file():
+        return None
+    samples: list[str] = []
+    line_count = 0
+    with path.open(errors="replace") as f:
+        for line in f:
+            line_count += 1
+            if len(samples) >= PREVIEW_MAX_LINES:
+                continue
+            sample = _preview_line(line)
+            if sample:
+                samples.append(sample)
+    try:
+        rel = path.relative_to(root)
+    except ValueError:
+        rel = Path(os.path.relpath(path, root))
+    if not samples:
+        return f"- `{rel}` ({line_count} lines): (no non-empty preview lines)"
+    preview = "\n".join(f"  {i + 1}. {sample}" for i, sample in enumerate(samples))
+    return f"- `{rel}` ({line_count} lines):\n{preview}"
+
+
+def _changed_input_preview(logs_path: Path, inputs: IngestInputs) -> str:
+    paths: list[Path] = []
+    paths.extend(inputs.active_conversations)
+    paths.extend(inputs.chats)
+    paths.extend(inputs.audio)
+    paths.extend(inputs.tada_feedback)
+    paths.extend(logs_path / session / "labels.jsonl" for session in inputs.sessions)
+    paths.extend(logs_path / stream for stream in inputs.modified_streams)
+
+    seen: set[Path] = set()
+    previews: list[str] = []
+    for path in sorted(paths, key=lambda p: os.path.relpath(p, logs_path)):
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        preview = _file_preview(path, logs_path)
+        if preview:
+            previews.append(preview)
+        if len(previews) >= PREVIEW_MAX_FILES:
+            break
+    if not previews:
+        return "- (no changed input preview available)"
+    suffix = ""
+    if len(seen) < len(paths):
+        suffix = f"\n- ({len(paths) - len(seen)} additional changed files omitted from preview)"
+    return "\n\n".join(previews) + suffix
+
+
 def _has_frontmatter(path: Path) -> bool:
     text = path.read_text()
     if not text.startswith("---\n"):
         return False
     return "\n---\n" in text[4:]
+
+
+def _wiki_link_targets(text: str) -> list[str]:
+    targets: list[str] = []
+    for match in _WIKI_LINK_RE.finditer(text):
+        target = match.group(1).split("|", 1)[0].split("#", 1)[0].strip()
+        if target:
+            targets.append(target)
+    return targets
+
+
+def _page_identifiers(memory_dir: Path) -> set[str]:
+    identifiers: set[str] = set()
+    for page in _memory_pages(memory_dir):
+        rel = str(page.relative_to(memory_dir))
+        stem = rel[:-3] if rel.endswith(".md") else rel
+        title = _page_title(page)
+        identifiers.update({rel.lower(), stem.lower(), title.lower()})
+    return identifiers
+
+
+def _wiki_link_resolves(target: str, page_identifiers: set[str], index_text: str) -> bool:
+    target = target.strip()
+    if not target:
+        return True
+    candidates = {target.lower()}
+    if not target.endswith(".md"):
+        candidates.add(f"{target}.md".lower())
+    if any(candidate in page_identifiers for candidate in candidates):
+        return True
+    index_lower = index_text.lower()
+    return any(candidate in index_lower for candidate in candidates)
 
 
 def _validate_wiki(memory_dir: Path, today: str) -> list[dict[str, str]]:
@@ -221,6 +357,26 @@ def _validate_wiki(memory_dir: Path, today: str) -> list[dict[str, str]]:
                 "code": "index_missing_page",
                 "path": rel_text,
                 "message": "Content page is not represented in index.md by path or title",
+            })
+
+    page_identifiers = _page_identifiers(memory_dir)
+    seen_unresolved: set[tuple[str, str]] = set()
+    for page in _all_memory_markdown(memory_dir):
+        rel_text = str(page.relative_to(memory_dir))
+        if rel_text == "schema.md":
+            continue
+        for target in _wiki_link_targets(page.read_text()):
+            if _wiki_link_resolves(target, page_identifiers, index_text):
+                continue
+            key = (rel_text, target)
+            if key in seen_unresolved:
+                continue
+            seen_unresolved.add(key)
+            issues.append({
+                "code": "unresolved_wiki_link",
+                "path": rel_text,
+                "target": target,
+                "message": f"Wiki link [[{target}]] does not resolve to an existing page or index entry",
             })
 
     log_text = log_path.read_text() if log_path.exists() else ""
@@ -273,12 +429,17 @@ def _inventory_prompt(now: str, logs_dir: str, memory_dir: Path, inputs: IngestI
         if inputs.last_ingest is not None else "never"
     )
     return INVENTORY_TEMPLATE.format(
-        **_base_prompt_context(now, logs_dir, memory_dir),
+        now=now,
+        logs_dir=logs_dir,
+        memory_dir=str(memory_dir),
+        shared_wiki_rules=SHARED_WIKI_RULES.format(memory_dir=str(memory_dir)),
         inventory_rules=INVENTORY_RULES,
         mode=inputs.mode,
         last_ingest_date=last_ingest_text,
         new_inputs_list=inputs.new_inputs_list,
         existing_pages_list=_existing_pages_list(memory_dir),
+        existing_page_metadata=_page_metadata_list(memory_dir),
+        changed_input_preview=_changed_input_preview(Path(logs_dir), inputs),
     )
 
 
@@ -288,6 +449,7 @@ def _update_prompt(now: str, logs_dir: str, memory_dir: Path, inputs: IngestInpu
         update_rules=UPDATE_RULES,
         mode=inputs.mode,
         new_inputs_list=inputs.new_inputs_list,
+        existing_page_metadata=_page_metadata_list(memory_dir),
         inventory_json=_format_json(inventory),
     )
 
@@ -309,6 +471,8 @@ def _finalize_prompt(
         new_inputs_list=inputs.new_inputs_list,
         inventory_json=_format_json(inventory),
         changed_pages_list="\n".join(f"- {p}" for p in changed_pages) or "- (none detected)",
+        changed_page_metadata=_page_metadata_list(memory_dir, changed_pages),
+        all_page_metadata=_page_metadata_list(memory_dir),
         validation_report=_format_json(validation_issues) if validation_issues else "[]",
     )
 

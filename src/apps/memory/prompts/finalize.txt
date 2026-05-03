@@ -17,6 +17,14 @@ Today: `{today}`
 
 {changed_pages_list}
 
+## Changed Page Metadata
+
+{changed_page_metadata}
+
+## All Content Page Metadata
+
+{all_page_metadata}
+
 ## Validation Issues To Repair
 
 ```json
@@ -32,3 +40,5 @@ Do all of the following:
 - Ensure every normal content page is represented in `index.md` by title or path with a one-line description.
 - Append a dated `## {today}` entry to `log.md` describing pages created, pages updated, confidence changes, splits, and backfill/enrichment work.
 - If no content pages changed, still append a `## {today}` entry explaining what was checked.
+
+Use the provided page metadata to update `index.md` and `log.md`. Do not list or read content pages just to build catalog entries.

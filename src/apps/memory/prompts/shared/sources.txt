@@ -15,6 +15,11 @@ Behavioral and contextual sources:
 - `notifications/filtered.jsonl`: app/subtitle/body/summary.
 - `filesys/filtered.jsonl`: filesystem changes and summaries.
 
+Date grounding:
+- Preserve source dates exactly. If a `start_time`, email date, calendar date, or file timestamp says 2026, do not rewrite it as another year.
+- When describing observed activity, derive "as of" dates from the source timestamp, not from memory or general knowledge.
+- Do not introduce a specific year unless it appears in the source data, the current prompt date, or an existing wiki page you read.
+
 Ignore raw event streams and model artifacts unless a prompt specifically asks for them: `raw_events*`, `checkpoints.jsonl`, `predictions.jsonl`, `metrics.jsonl`, `retriever*`.
 
 Use tools to read evidence directly. Use subagents for independent source groups. Use shell analysis for counts, repeated entities, time patterns, and coverage checks. Use browser or web search only to enrich claims that are already grounded in logs.

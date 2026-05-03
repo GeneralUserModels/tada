@@ -14,6 +14,10 @@ Mode: `{mode}`
 {inventory_json}
 ```
 
+## Existing Content Page Metadata
+
+{existing_page_metadata}
+
 ## New Inputs Detected
 
 {new_inputs_list}
@@ -26,6 +30,8 @@ Important:
 - Read an existing page before editing it.
 - Prefer improving existing pages over creating near-duplicates.
 - Create a page when a real entity, project, person, theme, or pattern has enough evidence for a useful paragraph.
+- Create pages for newly discovered grounded entities even when inventory did not list them upfront.
+- If you add a `[[wiki-link]]` to a new entity, also create or update the target page unless an existing page or index entry already represents it.
 - If new information contradicts an existing page, update the page, lower confidence where needed, and preserve the older claim only when it remains historically useful.
 
 Finish with a concise summary of pages created, pages updated, and any unresolved catalog/log/schema issues.

@@ -166,11 +166,40 @@ class MemoryIngestTests(unittest.TestCase):
                 issues,
             )
 
+    def test_validation_detects_unresolved_wiki_links(self):
+        with tempfile.TemporaryDirectory() as d:
+            memory = Path(d) / "logs" / "memory"
+            ingest._bootstrap_memory(memory)
+            (memory / "project.md").write_text(
+                "---\ntitle: Project\nconfidence: 0.7\nlast_updated: 2026-05-03\n---\n\nUses [[GitHub]] and [[Existing Tool]].\n"
+            )
+            (memory / "existing.md").write_text(
+                "---\ntitle: Existing Tool\nconfidence: 0.7\nlast_updated: 2026-05-03\n---\n\nExisting page.\n"
+            )
+            (memory / "index.md").write_text("# Memory Index\n\n- Project — project.md\n- Existing Tool — existing.md\n")
+            (memory / "log.md").write_text("## 2026-05-03\n- Updated Project.\n")
+
+            issues = ingest._validate_wiki(memory, "2026-05-03")
+
+            self.assertIn(
+                {
+                    "code": "unresolved_wiki_link",
+                    "path": "project.md",
+                    "target": "GitHub",
+                    "message": "Wiki link [[GitHub]] does not resolve to an existing page or index entry",
+                },
+                issues,
+            )
+            self.assertFalse(any(issue.get("target") == "Existing Tool" for issue in issues))
+
     def test_update_prompt_includes_update_rules_without_stage_label(self):
         with tempfile.TemporaryDirectory() as d:
             logs = Path(d) / "logs"
             memory = logs / "memory"
             ingest._bootstrap_memory(memory)
+            (memory / "project.md").write_text(
+                "---\ntitle: Project\nconfidence: 0.7\nlast_updated: 2026-05-03\n---\n\nProject summary.\n"
+            )
             inputs = ingest.IngestInputs(
                 mode="incremental",
                 last_ingest=datetime(2025, 1, 1),
@@ -200,7 +229,95 @@ class MemoryIngestTests(unittest.TestCase):
 
             self.assertIn("Output content-page changes only.", prompt)
             self.assertIn("Do not update `index.md`, `log.md`, or `schema.md`.", prompt)
+            self.assertIn("## Existing Content Page Metadata", prompt)
+            self.assertIn("`project.md` — title: Project", prompt)
+            self.assertIn("Preserve source dates exactly.", prompt)
+            self.assertIn("Do not spend tool calls only checking whether a planned wiki page exists", prompt)
+            self.assertIn("Use shell analysis, search, or bounded discovery", prompt)
+            self.assertIn("Planning is useful when it improves coverage.", prompt)
+            self.assertIn("Do not use PlanUpdate just to mark routine items complete", prompt)
+            self.assertIn("Create pages for newly discovered grounded entities", prompt)
+            self.assertIn("Avoid leaving dangling `[[wiki-links]]`", prompt)
             self.assertNotIn("You are doing the UPDATE pass", prompt)
+
+    def test_inventory_prompt_allows_first_run_discovery_without_broad_source_rules(self):
+        with tempfile.TemporaryDirectory() as d:
+            logs = Path(d) / "logs"
+            memory = logs / "memory"
+            ingest._bootstrap_memory(memory)
+            session = logs / "session_20250102_000000"
+            session.mkdir(parents=True)
+            (session / "labels.jsonl").write_text(
+                json.dumps({"text": "Clicked Memex", "start_time": "2025-01-02_00-00-00-000000"}) + "\n"
+            )
+            inputs = ingest.IngestInputs(
+                mode="first_run",
+                last_ingest=None,
+                new_inputs_list="- session_20250102_000000/labels.jsonl",
+                active_conversations=[],
+                chats=[],
+                audio=[],
+                tada_feedback=[],
+                sessions=["session_20250102_000000"],
+                modified_streams=[],
+            )
+            prompt = ingest._inventory_prompt("2026-05-03 12:00", str(logs), memory, inputs)
+
+            self.assertIn("For first runs, discovery is expected", prompt)
+            self.assertIn("## Changed Input Preview", prompt)
+            self.assertIn("Clicked Memex", prompt)
+            self.assertIn("inspect the source layout and sample available source files", prompt)
+            self.assertIn("Keep discovery purposeful and bounded", prompt)
+            self.assertNotIn("Use subagents for independent source groups", prompt)
+
+    def test_finalize_prompt_includes_changed_page_metadata(self):
+        with tempfile.TemporaryDirectory() as d:
+            logs = Path(d) / "logs"
+            memory = logs / "memory"
+            ingest._bootstrap_memory(memory)
+            (memory / "project.md").write_text(
+                "---\ntitle: Project\nconfidence: 0.7\nlast_updated: 2026-05-03\n---\n\nProject page summary.\n"
+            )
+            inputs = ingest.IngestInputs(
+                mode="first_run",
+                last_ingest=None,
+                new_inputs_list="- session_20250102_000000/labels.jsonl",
+                active_conversations=[],
+                chats=[],
+                audio=[],
+                tada_feedback=[],
+                sessions=["session_20250102_000000"],
+                modified_streams=[],
+            )
+            inventory = {
+                "mode": "first_run",
+                "sources_to_read": [],
+                "existing_pages_to_read": [],
+                "likely_pages_to_create": [],
+                "likely_pages_to_update": [],
+                "backfill_sources_to_sample": [],
+                "rationale": "test",
+            }
+
+            prompt = ingest._finalize_prompt(
+                "2026-05-03 12:00",
+                str(logs),
+                memory,
+                inputs,
+                inventory,
+                ["project.md"],
+                [],
+            )
+
+            self.assertIn("## Changed Page Metadata", prompt)
+            self.assertIn("## All Content Page Metadata", prompt)
+            self.assertIn("`project.md` — title: Project", prompt)
+            self.assertIn("Project page summary.", prompt)
+            self.assertIn("Do not crawl directories", prompt)
+            self.assertIn("Do not list or read content pages just to build `index.md`", prompt)
+            self.assertIn("Do not use shell redirection, append operators, heredocs", prompt)
+            self.assertIn("Planning is optional. Keep it compact", prompt)
+            self.assertIn("read them together once", prompt)
 
 
 if __name__ == "__main__":

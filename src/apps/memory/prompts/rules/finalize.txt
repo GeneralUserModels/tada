@@ -10,5 +10,14 @@ Allowed work:
 
 Not allowed:
 - Do not start new source analysis.
+- Do not crawl directories with `find`, `ls -R`, broad `rg`, or equivalent discovery commands.
+- Do not list or read content pages just to build `index.md`; use the provided page metadata.
+- Do not use shell redirection, append operators, heredocs, or temp-file shell tricks to edit files.
 - Do not create unrelated new content pages.
 - Do not substantially rewrite content pages unless required to repair listed validation issues.
+
+Execution guidance:
+- If you need existing `index.md` and `log.md` content, read them together once.
+- Use `write_file` or `edit_file` for catalog and log changes.
+- Planning is optional. Keep it compact, and do not spend extra rounds on checklist bookkeeping.
+- You do not need to re-read `index.md` or `log.md` solely to verify your own writes; Python validates the wiki after finalize.
