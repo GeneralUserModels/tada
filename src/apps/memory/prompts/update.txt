@@ -1,0 +1,31 @@
+Current date and time: **{now}**
+
+Mode: `{mode}`
+
+{update_rules}
+
+{shared_wiki_rules}
+
+{shared_source_rules}
+
+## Inventory Plan
+
+```json
+{inventory_json}
+```
+
+## New Inputs Detected
+
+{new_inputs_list}
+
+## Task
+
+Execute the inventory plan. Read the planned sources and existing pages. Create or update normal content pages with grounded facts, insight, confidence scores, and cross-links.
+
+Important:
+- Read an existing page before editing it.
+- Prefer improving existing pages over creating near-duplicates.
+- Create a page when a real entity, project, person, theme, or pattern has enough evidence for a useful paragraph.
+- If new information contradicts an existing page, update the page, lower confidence where needed, and preserve the older claim only when it remains historically useful.
+
+Finish with a concise summary of pages created, pages updated, and any unresolved catalog/log/schema issues.

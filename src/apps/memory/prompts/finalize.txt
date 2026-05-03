@@ -1,0 +1,34 @@
+Current date and time: **{now}**
+
+Mode: `{mode}`
+Today: `{today}`
+
+{finalize_rules}
+
+{shared_wiki_rules}
+
+## Inventory Plan
+
+```json
+{inventory_json}
+```
+
+## Pages Changed Since This Ingest Started
+
+{changed_pages_list}
+
+## Validation Issues To Repair
+
+```json
+{validation_report}
+```
+
+## Task
+
+Finalize the wiki after content-page updates.
+
+Do all of the following:
+- Repair every validation issue listed above.
+- Ensure every normal content page is represented in `index.md` by title or path with a one-line description.
+- Append a dated `## {today}` entry to `log.md` describing pages created, pages updated, confidence changes, splits, and backfill/enrichment work.
+- If no content pages changed, still append a `## {today}` entry explaining what was checked.

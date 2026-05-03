@@ -1,0 +1,14 @@
+## Rules
+
+Output catalog, log, schema, and validation repairs only.
+
+Allowed work:
+- Repair listed validation issues.
+- Update `index.md` so every content page is represented by title or path with a one-line description.
+- Append the required dated entry to `log.md`.
+- Make minimal schema/convention repairs if validation requires it.
+
+Not allowed:
+- Do not start new source analysis.
+- Do not create unrelated new content pages.
+- Do not substantially rewrite content pages unless required to repair listed validation issues.

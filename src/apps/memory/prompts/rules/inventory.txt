@@ -1,0 +1,13 @@
+## Rules
+
+Output only a source/page work plan. Do not create, edit, or repair wiki files.
+
+Allowed work:
+- Inspect existing wiki files enough to understand coverage and gaps.
+- Inspect source metadata and small samples enough to choose what the update step should read.
+- Choose focused source files, existing pages, likely new pages, likely updated pages, and a small backfill sample.
+
+Not allowed:
+- Do not write or edit `index.md`, `log.md`, `schema.md`, or content pages.
+- Do not perform the memory synthesis itself.
+- Do not produce prose after the required JSON block.

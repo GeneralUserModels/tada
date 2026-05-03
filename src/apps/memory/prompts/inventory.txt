@@ -1,0 +1,43 @@
+Current date and time: **{now}**
+
+Mode: `{mode}`
+Last ingest: **{last_ingest_date}**
+
+{inventory_rules}
+
+{shared_wiki_rules}
+
+{shared_source_rules}
+
+## Existing Wiki Pages
+
+{existing_pages_list}
+
+## New Inputs Detected
+
+{new_inputs_list}
+
+## Task
+
+Plan the ingest. Read enough existing wiki state and source metadata to decide what the update step should inspect.
+
+For first runs, plan broad coverage across available source types. For incremental runs, prioritize the new inputs while also naming adjacent existing pages and a small backfill sample. For no-new-data runs, plan enrichment, cross-linking, and coverage checks against the existing wiki.
+
+End with a single fenced JSON block. It must be the last thing in your final message.
+
+```json
+{{
+  "mode": "{mode}",
+  "sources_to_read": ["relative/source/path"],
+  "existing_pages_to_read": ["relative/wiki/page.md"],
+  "likely_pages_to_create": ["Natural Page Title"],
+  "likely_pages_to_update": ["relative/wiki/page.md"],
+  "backfill_sources_to_sample": ["relative/older/source/path"],
+  "rationale": "Brief explanation of the plan."
+}}
+```
+
+Rules:
+- Return only valid JSON in the fenced block.
+- Use paths relative to `{logs_dir}/` for log sources and relative to `{memory_dir}/` for wiki pages.
+- Do not invent files you have not seen unless clearly labeled as likely page titles.

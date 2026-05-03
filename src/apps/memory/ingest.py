@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import re
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -16,8 +20,15 @@ from apps.moments._incremental import read_checkpoint, write_checkpoint, session
 
 
 _PROMPTS = Path(__file__).parent / "prompts"
-INGEST_TEMPLATE = (_PROMPTS / "ingest.txt").read_text()
-INCREMENTAL_SECTION = (_PROMPTS / "ingest_incremental.txt").read_text()
+SHARED_WIKI_RULES = (_PROMPTS / "shared" / "wiki.txt").read_text()
+SHARED_SOURCE_RULES = (_PROMPTS / "shared" / "sources.txt").read_text()
+INVENTORY_RULES = (_PROMPTS / "rules" / "inventory.txt").read_text()
+UPDATE_RULES = (_PROMPTS / "rules" / "update.txt").read_text()
+FINALIZE_RULES = (_PROMPTS / "rules" / "finalize.txt").read_text()
+INVENTORY_TEMPLATE = (_PROMPTS / "inventory.txt").read_text()
+UPDATE_TEMPLATE = (_PROMPTS / "update.txt").read_text()
+FINALIZE_TEMPLATE = (_PROMPTS / "finalize.txt").read_text()
+SCHEMA_TEMPLATE = (_PROMPTS / "schema.md").read_text()
 
 NON_SESSION_SOURCES = [
     "email/filtered.jsonl",
@@ -25,6 +36,31 @@ NON_SESSION_SOURCES = [
     "notifications/filtered.jsonl",
     "filesys/filtered.jsonl",
 ]
+
+SPECIAL_MEMORY_FILES = {"index.md", "log.md", "schema.md"}
+INVENTORY_KEYS = {
+    "mode",
+    "sources_to_read",
+    "existing_pages_to_read",
+    "likely_pages_to_create",
+    "likely_pages_to_update",
+    "backfill_sources_to_sample",
+    "rationale",
+}
+_JSON_BLOCK_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
+
+
+@dataclass
+class IngestInputs:
+    mode: str
+    last_ingest: datetime | None
+    new_inputs_list: str
+    active_conversations: list[Path]
+    chats: list[Path]
+    audio: list[Path]
+    tada_feedback: list[Path]
+    sessions: list[str]
+    modified_streams: list[str]
 
 
 def _modified_sources(logs_dir: str, since: datetime | None) -> list[str]:
@@ -49,22 +85,54 @@ def _new_files_in(base: Path, pattern: str, since: datetime | None) -> list[Path
     return [f for f in files if datetime.fromtimestamp(f.stat().st_mtime) > since]
 
 
-def run(
-    logs_dir: str,
-    model: str,
-    api_key: str | None = None,
-    on_round=None,
-    subagent_model: str | None = None,
-    subagent_api_key: str | None = None,
-) -> str:
-    logs_path = Path(logs_dir).resolve()
-    logs_dir = str(logs_path)
-    memory_dir = logs_path / "memory"
+def _is_hidden_or_special(rel: Path) -> bool:
+    return str(rel) in SPECIAL_MEMORY_FILES or any(part.startswith(".") for part in rel.parts)
+
+
+def _memory_pages(memory_dir: Path) -> list[Path]:
+    if not memory_dir.exists():
+        return []
+    pages: list[Path] = []
+    for path in memory_dir.rglob("*.md"):
+        rel = path.relative_to(memory_dir)
+        if _is_hidden_or_special(rel):
+            continue
+        pages.append(path)
+    return sorted(pages)
+
+
+def _all_memory_markdown(memory_dir: Path) -> list[Path]:
+    if not memory_dir.exists():
+        return []
+    return sorted(
+        p for p in memory_dir.rglob("*.md")
+        if not any(part.startswith(".") for part in p.relative_to(memory_dir).parts)
+    )
+
+
+def _bootstrap_memory(memory_dir: Path) -> None:
+    """Create deterministic first-run wiki files without overwriting user content."""
     memory_dir.mkdir(parents=True, exist_ok=True)
+    index = memory_dir / "index.md"
+    log = memory_dir / "log.md"
+    schema = memory_dir / "schema.md"
+    if not index.exists():
+        index.write_text("# Memory Index\n\n")
+    if not log.exists():
+        log.write_text("# Memory Log\n\n")
+    if not schema.exists():
+        schema.write_text(SCHEMA_TEMPLATE)
 
-    checkpoint_path = memory_dir / ".last_ingest"
-    last_ingest = read_checkpoint(checkpoint_path)
 
+def _section(label: str, items: list, formatter) -> str | None:
+    if not items:
+        return None
+    body = "\n".join(f"- {formatter(item)}" for item in items)
+    return f"**{label}:**\n{body}"
+
+
+def _collect_ingest_inputs(logs_path: Path, last_ingest: datetime | None) -> IngestInputs:
+    logs_dir = str(logs_path)
     tada_results = logs_path.parent / "logs-tada" / "results"
 
     new_active_convos = _new_files_in(logs_path / "active-conversations", "conversation_*.md", last_ingest)
@@ -73,18 +141,6 @@ def run(
     new_tada_feedback = _new_files_in(tada_results, "feedback_*.md", last_ingest)
     new_sessions = sessions_with_new_content(logs_dir, last_ingest)
     modified_streams = _modified_sources(logs_dir, last_ingest)
-
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    instruction = f"Current date and time: **{now}**\n\n" + INGEST_TEMPLATE.format(
-        memory_dir=str(memory_dir),
-        logs_dir=logs_dir,
-    )
-
-    def _section(label: str, items: list, formatter) -> str | None:
-        if not items:
-            return None
-        body = "\n".join(f"- {formatter(item)}" for item in items)
-        return f"**{label}:**\n{body}"
 
     rel = lambda f: os.path.relpath(f, logs_path)
     sections = [
@@ -96,39 +152,263 @@ def run(
         _section("Modified streams", modified_streams, str),
     ]
     new_inputs_list = "\n\n".join(s for s in sections if s)
-    has_new = bool(new_inputs_list)
+    if last_ingest is None:
+        mode = "first_run"
+    elif new_inputs_list:
+        mode = "incremental"
+    else:
+        mode = "no_new_data"
 
-    if last_ingest is not None and has_new:
-        instruction += INCREMENTAL_SECTION.format(
-            last_ingest_date=last_ingest.strftime("%Y-%m-%d %H:%M"),
-            new_inputs_list=new_inputs_list,
-            logs_dir=logs_dir,
-        )
-    elif last_ingest is not None and not has_new:
-        instruction += (
-            f"\n\n## Note\n\nThe last ingest was on "
-            f"**{last_ingest.strftime('%Y-%m-%d %H:%M')}** and there is no new data "
-            f"since then. Read the existing wiki and check for opportunities to enrich "
-            f"existing pages with web searches or cross-references."
-        )
+    return IngestInputs(
+        mode=mode,
+        last_ingest=last_ingest,
+        new_inputs_list=new_inputs_list or "- (none detected)",
+        active_conversations=new_active_convos,
+        chats=new_chats,
+        audio=new_audio,
+        tada_feedback=new_tada_feedback,
+        sessions=new_sessions,
+        modified_streams=modified_streams,
+    )
 
+
+def _existing_pages_list(memory_dir: Path) -> str:
+    pages = _memory_pages(memory_dir)
+    if not pages:
+        return "- (no existing content pages)"
+    return "\n".join(f"- {p.relative_to(memory_dir)}" for p in pages)
+
+
+def _page_title(path: Path) -> str:
+    text = path.read_text()
+    match = re.search(r"^title:\s*(.+?)\s*$", text, re.MULTILINE)
+    if match:
+        return match.group(1).strip().strip('"')
+    return path.stem.replace("-", " ").title()
+
+
+def _has_frontmatter(path: Path) -> bool:
+    text = path.read_text()
+    if not text.startswith("---\n"):
+        return False
+    return "\n---\n" in text[4:]
+
+
+def _validate_wiki(memory_dir: Path, today: str) -> list[dict[str, str]]:
+    issues: list[dict[str, str]] = []
+
+    index_path = memory_dir / "index.md"
+    log_path = memory_dir / "log.md"
+    if not index_path.exists():
+        issues.append({"code": "missing_special_file", "path": "index.md", "message": "index.md is missing"})
+    if not log_path.exists():
+        issues.append({"code": "missing_special_file", "path": "log.md", "message": "log.md is missing"})
+
+    for page in _memory_pages(memory_dir):
+        if not _has_frontmatter(page):
+            issues.append({
+                "code": "missing_frontmatter",
+                "path": str(page.relative_to(memory_dir)),
+                "message": "Content page is missing YAML frontmatter",
+            })
+
+    index_text = index_path.read_text() if index_path.exists() else ""
+    for page in _memory_pages(memory_dir):
+        rel_text = str(page.relative_to(memory_dir))
+        title = _page_title(page)
+        if rel_text not in index_text and title not in index_text:
+            issues.append({
+                "code": "index_missing_page",
+                "path": rel_text,
+                "message": "Content page is not represented in index.md by path or title",
+            })
+
+    log_text = log_path.read_text() if log_path.exists() else ""
+    if f"## {today}" not in log_text:
+        issues.append({
+            "code": "missing_log_entry",
+            "path": "log.md",
+            "message": f"log.md needs a dated entry headed '## {today}'",
+        })
+
+    return issues
+
+
+def _format_json(data: Any) -> str:
+    return json.dumps(data, indent=2, sort_keys=True, default=str)
+
+
+def _parse_inventory(result: str, expected_mode: str) -> dict[str, Any]:
+    matches = _JSON_BLOCK_RE.findall(result)
+    if not matches:
+        raise ValueError("Inventory pass did not return a fenced JSON block")
+    payload = json.loads(matches[-1])
+    missing = INVENTORY_KEYS - set(payload)
+    if missing:
+        raise ValueError(f"Inventory JSON missing keys: {', '.join(sorted(missing))}")
+    if payload.get("mode") != expected_mode:
+        raise ValueError(f"Inventory mode {payload.get('mode')!r} did not match expected mode {expected_mode!r}")
+    list_keys = INVENTORY_KEYS - {"mode", "rationale"}
+    for key in list_keys:
+        if not isinstance(payload.get(key), list):
+            raise ValueError(f"Inventory JSON key {key!r} must be a list")
+    if not isinstance(payload.get("rationale"), str):
+        raise ValueError("Inventory JSON key 'rationale' must be a string")
+    return payload
+
+
+def _base_prompt_context(now: str, logs_dir: str, memory_dir: Path) -> dict[str, str]:
+    return {
+        "now": now,
+        "logs_dir": logs_dir,
+        "memory_dir": str(memory_dir),
+        "shared_wiki_rules": SHARED_WIKI_RULES.format(memory_dir=str(memory_dir)),
+        "shared_source_rules": SHARED_SOURCE_RULES.format(logs_dir=logs_dir),
+    }
+
+
+def _inventory_prompt(now: str, logs_dir: str, memory_dir: Path, inputs: IngestInputs) -> str:
+    last_ingest_text = (
+        inputs.last_ingest.strftime("%Y-%m-%d %H:%M")
+        if inputs.last_ingest is not None else "never"
+    )
+    return INVENTORY_TEMPLATE.format(
+        **_base_prompt_context(now, logs_dir, memory_dir),
+        inventory_rules=INVENTORY_RULES,
+        mode=inputs.mode,
+        last_ingest_date=last_ingest_text,
+        new_inputs_list=inputs.new_inputs_list,
+        existing_pages_list=_existing_pages_list(memory_dir),
+    )
+
+
+def _update_prompt(now: str, logs_dir: str, memory_dir: Path, inputs: IngestInputs, inventory: dict[str, Any]) -> str:
+    return UPDATE_TEMPLATE.format(
+        **_base_prompt_context(now, logs_dir, memory_dir),
+        update_rules=UPDATE_RULES,
+        mode=inputs.mode,
+        new_inputs_list=inputs.new_inputs_list,
+        inventory_json=_format_json(inventory),
+    )
+
+
+def _finalize_prompt(
+    now: str,
+    logs_dir: str,
+    memory_dir: Path,
+    inputs: IngestInputs,
+    inventory: dict[str, Any],
+    changed_pages: list[str],
+    validation_issues: list[dict[str, str]],
+) -> str:
+    return FINALIZE_TEMPLATE.format(
+        **_base_prompt_context(now, logs_dir, memory_dir),
+        finalize_rules=FINALIZE_RULES,
+        mode=inputs.mode,
+        today=datetime.now().strftime("%Y-%m-%d"),
+        new_inputs_list=inputs.new_inputs_list,
+        inventory_json=_format_json(inventory),
+        changed_pages_list="\n".join(f"- {p}" for p in changed_pages) or "- (none detected)",
+        validation_report=_format_json(validation_issues) if validation_issues else "[]",
+    )
+
+
+def _run_agent_pass(
+    pass_name: str,
+    instruction: str,
+    logs_dir: str,
+    model: str,
+    api_key: str | None,
+    on_round,
+    subagent_model: str | None,
+    subagent_api_key: str | None,
+) -> str:
     agent, _ = build_agent(
         model, logs_dir, api_key=api_key,
         subagent_model=subagent_model, subagent_api_key=subagent_api_key,
     )
-    agent.max_rounds = 100
+    agent.max_rounds = 50 if pass_name in {"inventory", "finalize"} else 100
     agent.on_round = on_round
-    result = agent.run([{"role": "user", "content": instruction}])
+    return agent.run([{"role": "user", "content": instruction}])
+
+
+def run(
+    logs_dir: str,
+    model: str,
+    api_key: str | None = None,
+    on_round=None,
+    subagent_model: str | None = None,
+    subagent_api_key: str | None = None,
+) -> str:
+    logs_path = Path(logs_dir).resolve()
+    logs_dir = str(logs_path)
+    memory_dir = logs_path / "memory"
+    _bootstrap_memory(memory_dir)
+
+    checkpoint_path = memory_dir / ".last_ingest"
+    last_ingest = read_checkpoint(checkpoint_path)
+    inputs = _collect_ingest_inputs(logs_path, last_ingest)
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    inventory_result = _run_agent_pass(
+        "inventory",
+        _inventory_prompt(now, logs_dir, memory_dir, inputs),
+        logs_dir,
+        model,
+        api_key,
+        on_round,
+        subagent_model,
+        subagent_api_key,
+    )
+    inventory = _parse_inventory(inventory_result, inputs.mode)
+
+    before_mtimes = {str(p.relative_to(memory_dir)): p.stat().st_mtime for p in _all_memory_markdown(memory_dir)}
+    update_result = _run_agent_pass(
+        "update",
+        _update_prompt(now, logs_dir, memory_dir, inputs, inventory),
+        logs_dir,
+        model,
+        api_key,
+        on_round,
+        subagent_model,
+        subagent_api_key,
+    )
+    after_update_mtimes = {str(p.relative_to(memory_dir)): p.stat().st_mtime for p in _all_memory_markdown(memory_dir)}
+    changed = sorted(rel for rel, mtime in after_update_mtimes.items() if before_mtimes.get(rel) != mtime)
+    today = datetime.now().strftime("%Y-%m-%d")
+    validation_issues = _validate_wiki(memory_dir, today)
+
+    finalize_result = _run_agent_pass(
+        "finalize",
+        _finalize_prompt(now, logs_dir, memory_dir, inputs, inventory, changed, validation_issues),
+        logs_dir,
+        model,
+        api_key,
+        on_round,
+        subagent_model,
+        subagent_api_key,
+    )
+
+    final_issues = _validate_wiki(memory_dir, today)
+    if final_issues:
+        raise RuntimeError(f"Memory ingest validation failed: {_format_json(final_issues)}")
 
     write_checkpoint(checkpoint_path)
 
-    return result
+    return (
+        "## Inventory\n\n"
+        f"{inventory_result}\n\n"
+        "## Update\n\n"
+        f"{update_result}\n\n"
+        "## Finalize\n\n"
+        f"{finalize_result}"
+    )
 
 
 if __name__ == "__main__":
     import logging
 
-    from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
+    from apps.moments.cli_config import resolve_memory_api_key, resolve_memory_model
     from server.cost_tracker import init_cost_tracking
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -141,8 +421,8 @@ if __name__ == "__main__":
 
     tracker = init_cost_tracking()
 
-    model = args.model or resolve_moments_model()
-    api_key = args.api_key or resolve_moments_api_key()
+    model = args.model or resolve_memory_model()
+    api_key = args.api_key or resolve_memory_api_key()
 
     result = run(args.logs_dir, model=model, api_key=api_key)
     print(result)

@@ -1,0 +1,16 @@
+## Rules
+
+Output content-page changes only. Create or update normal memory wiki pages from the inventory plan.
+
+Allowed work:
+- Read planned sources and planned existing pages.
+- Create new content pages for supported people, projects, themes, relationships, or patterns.
+- Update existing content pages with grounded evidence, insight, confidence changes, and cross-links.
+- Split an overbroad content page when needed, keeping the original as a hub.
+
+Not allowed:
+- Do not update `index.md`, `log.md`, or `schema.md`.
+- Do not do catalog repair or operations logging.
+- Do not return a new inventory plan.
+
+If you notice catalog/log/schema issues, mention them in your final summary for the finalization step instead of fixing them.

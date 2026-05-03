@@ -14,3 +14,18 @@ def resolve_moments_model() -> str:
 def resolve_moments_api_key() -> str | None:
     data = _load_config()
     return data.get("moments_agent_api_key") or data.get("default_llm_api_key") or None
+
+
+def resolve_memory_model() -> str:
+    data = _load_config()
+    return data.get("memory_agent_model") or data["moments_agent_model"]
+
+
+def resolve_memory_api_key() -> str | None:
+    data = _load_config()
+    return (
+        data.get("memory_agent_api_key")
+        or data.get("agent_api_key")
+        or data.get("default_llm_api_key")
+        or None
+    )

@@ -32,10 +32,11 @@ def write_checkpoint(checkpoint_path: Path) -> None:
 def _last_label_time(labels_path: Path) -> datetime | None:
     """Read the last line of a labels.jsonl file and parse its start_time."""
     last_line = None
-    for line in labels_path.open():
-        line = line.strip()
-        if line:
-            last_line = line
+    with labels_path.open() as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                last_line = line
     if last_line is None:
         return None
     entry = json.loads(last_line)
