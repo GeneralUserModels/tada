@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from pydantic import BaseModel
+from pydantic import ValidationError
+from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_none
 
 load_dotenv()
 
-from agent.builder import build_agent
 from apps.common.activity_streams import (
     ActivityChunk,
     ActivityRow,
@@ -20,7 +23,9 @@ from apps.common.activity_streams import (
     merge_filtered_streams,
     render_activity_row,
 )
-from apps.common.structured_ops import StructuredOpsError, extract_json_object as extract_structured_json_object
+from apps.common.structured_completion import structured_completion
+from apps.common.structured_ops import StructuredOpsError, extract_json_object
+from agent.builder import build_agent
 from apps.moments.core.candidates import (
     CandidateError,
     MomentCandidate,
@@ -29,15 +34,16 @@ from apps.moments.core.candidates import (
 )
 from apps.moments.core.incremental import read_checkpoint, write_checkpoint
 from apps.moments.core.paths import migrate_moments_to_cadence, summarize_tada_tasks
+from apps.moments.schemas.structured import DraftActionPayload, IdeaPayload, ReconcilePayload
 
 _PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 DISCOVER_TEMPLATE = (_PROMPTS / "discover.txt").read_text()
+DISCOVER_COMPILE_TEMPLATE = (_PROMPTS / "discover_compile.txt").read_text()
 DISCOVER_RULES = (_PROMPTS / "rules" / "discover.txt").read_text()
 RECONCILE_TEMPLATE = (_PROMPTS / "reconcile.txt").read_text()
 RECONCILE_RULES = (_PROMPTS / "rules" / "reconcile.txt").read_text()
 SHARED_SOURCES = (_PROMPTS / "shared" / "sources.txt").read_text()
 SHARED_MOMENTS = (_PROMPTS / "shared" / "moments.txt").read_text()
-SHARED_USEFULNESS = (_PROMPTS / "shared" / "usefulness.txt").read_text()
 
 FILTERED_STREAM_SOURCES = [
     "screen/filtered.jsonl",
@@ -51,6 +57,9 @@ CHUNK_OVERLAP_CHARS = 7_500
 VALUE_MAX_CHARS = 700
 DRAFT_CATALOG_MAX_CHARS = 8_000
 DRAFT_DETAILS_MAX_COUNT = 8
+STRUCTURED_OUTPUT_ATTEMPTS = 2
+AGENT_IDEATION_MAX_ROUNDS = 30
+logger = logging.getLogger(__name__)
 
 _TOKEN_STOPWORDS = {
     "about",
@@ -133,7 +142,7 @@ def _candidate_search_text(candidate: MomentCandidate) -> str:
     )
 
 
-def _draft_context(drafts: dict[str, MomentCandidate], chunk: ActivityChunk) -> str:
+def _draft_context_for_text(drafts: dict[str, MomentCandidate], text: str) -> str:
     if not drafts:
         return "## Draft Catalog\n\n(no drafts yet)\n\n## Relevant Draft Details\n\n[]"
 
@@ -153,7 +162,7 @@ def _draft_context(drafts: dict[str, MomentCandidate], chunk: ActivityChunk) -> 
         lines.append(line)
         used_chars += len(line) + 1
 
-    chunk_tokens = _tokenize(chunk.rendered_text)
+    chunk_tokens = _tokenize(text)
     scored: list[tuple[int, str, MomentCandidate]] = []
     for candidate in ordered:
         score = len(chunk_tokens & _tokenize(_candidate_search_text(candidate)))
@@ -175,6 +184,10 @@ def _draft_context(drafts: dict[str, MomentCandidate], chunk: ActivityChunk) -> 
     )
 
 
+def _draft_context(drafts: dict[str, MomentCandidate], chunk: ActivityChunk) -> str:
+    return _draft_context_for_text(drafts, chunk.rendered_text)
+
+
 def _validate_rejected(value: Any) -> list[dict[str, str]]:
     if value is None:
         return []
@@ -194,108 +207,75 @@ def _validate_rejected(value: Any) -> list[dict[str, str]]:
     return result
 
 
-def _lookup_draft(drafts: dict[str, MomentCandidate], key: Any, field: str = "id") -> MomentCandidate:
-    if not isinstance(key, str) or not key.strip():
-        raise CandidateError(f"{field} is required")
-    normalized = key.strip()
-    for candidate in drafts.values():
-        if normalized in (candidate.id, candidate.slug):
-            return candidate
-    raise CandidateError(f"unknown draft id or slug: {normalized}")
+def _parse_structured_ideas(payload: IdeaPayload) -> tuple[list[dict[str, Any]], str]:
+    data = payload.model_dump(exclude_none=True)
+    ideas = data.get("ideas", [])
+    if not isinstance(ideas, list):
+        raise CandidateError("idea JSON ideas must be a list")
+    notes = data.get("notes", "")
+    if notes is None:
+        notes = ""
+    if not isinstance(notes, str):
+        raise CandidateError("idea JSON notes must be a string")
+    return ideas, notes.strip()
 
 
-def _operation_list(payload: dict[str, Any], field: str) -> list[Any]:
-    value = payload.get(field, [])
-    if value is None:
-        return []
-    if not isinstance(value, list):
-        raise CandidateError(f"discovery patch JSON {field} must be a list")
-    return value
+def _parse_draft_action_payload(payload: dict[str, Any]) -> tuple[list[MomentCandidate], list[dict[str, str]], list[dict[str, str]], str]:
+    raw_candidates = payload.get("upserts", [])
+    if raw_candidates is None:
+        raw_candidates = []
+    if not isinstance(raw_candidates, list):
+        raise CandidateError("draft action JSON upserts must be a list")
+    upserts = [validate_candidate(raw) for raw in raw_candidates]
+    seen: set[str] = set()
+    for candidate in upserts:
+        if candidate.id in seen or candidate.slug in seen:
+            raise CandidateError(f"duplicate draft action candidate id or slug: {candidate.id}")
+        seen.add(candidate.id)
+        seen.add(candidate.slug)
 
-
-def _extract_json_object(text: str) -> dict[str, Any]:
-    try:
-        return extract_structured_json_object(text)
-    except StructuredOpsError as exc:
-        raise CandidateError(str(exc)) from exc
-
-
-def _parse_draft_patch_result(result: str) -> tuple[dict[str, Any], str]:
-    payload = _extract_json_object(result)
-    patch = {
-        "create": _operation_list(payload, "create"),
-        "update": _operation_list(payload, "update"),
-        "merge": _operation_list(payload, "merge"),
-        "reject": _operation_list(payload, "reject"),
-    }
     notes = payload.get("notes", "")
     if notes is None:
         notes = ""
     if not isinstance(notes, str):
-        raise CandidateError("discovery patch JSON notes must be a string")
-    return patch, notes.strip()
+        raise CandidateError("draft action JSON notes must be a string")
+    return upserts, _validate_rejected(payload.get("rejected", [])), _validate_rejected(payload.get("remove", [])), notes.strip()
 
 
-def _apply_draft_patch(drafts: dict[str, MomentCandidate], patch: dict[str, Any]) -> list[dict[str, str]]:
-    rejected: list[dict[str, str]] = []
+def _parse_structured_draft_actions(payload: DraftActionPayload) -> tuple[list[MomentCandidate], list[dict[str, str]], list[dict[str, str]], str]:
+    return _parse_draft_action_payload(payload.model_dump(exclude_none=True))
 
-    for raw in patch.get("create", []):
-        candidate = validate_candidate(raw)
-        for existing in drafts.values():
-            if candidate.id == existing.id or candidate.slug == existing.slug:
-                raise CandidateError(f"duplicate created draft id or slug: {candidate.id}")
-        drafts[candidate.id] = candidate
 
-    for raw in patch.get("update", []):
-        if not isinstance(raw, dict):
-            raise CandidateError("update entries must be objects")
-        candidate = _lookup_draft(drafts, raw.get("id") or raw.get("slug"), "update.id")
-        fields = raw.get("fields")
-        if not isinstance(fields, dict):
-            raise CandidateError("update entries require fields object")
-        current = candidate.to_json()
-        allowed = set(current)
-        for key, value in fields.items():
-            if key not in allowed:
-                raise CandidateError(f"unknown update field: {key}")
-            current[key] = value
-        updated = validate_candidate(current)
-        for existing_id, existing in drafts.items():
+def _apply_draft_actions(
+    drafts: dict[str, MomentCandidate],
+    upserts: list[MomentCandidate],
+    remove: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    removed: list[dict[str, str]] = []
+    for item in remove:
+        key = item["id"]
+        matched_id = None
+        for candidate_id, candidate in drafts.items():
+            if key in (candidate_id, candidate.slug):
+                matched_id = candidate_id
+                break
+        if matched_id is None:
+            raise CandidateError(f"unknown draft id or slug for remove: {key}")
+        drafts.pop(matched_id)
+        removed.append({"id": matched_id, "reason": item["reason"]})
+
+    for candidate in upserts:
+        for existing_id, existing in list(drafts.items()):
             if existing_id == candidate.id:
                 continue
-            if updated.id == existing.id or updated.slug == existing.slug:
-                raise CandidateError(f"update creates duplicate draft id or slug: {updated.id}")
-        drafts.pop(candidate.id)
-        drafts[updated.id] = updated
-
-    for raw in patch.get("merge", []):
-        if not isinstance(raw, dict):
-            raise CandidateError("merge entries must be objects")
-        from_candidate = _lookup_draft(drafts, raw.get("from"), "merge.from")
-        into_candidate = _lookup_draft(drafts, raw.get("into"), "merge.into")
-        reason = raw.get("reason")
-        if not isinstance(reason, str) or not reason.strip():
-            raise CandidateError("merge entries require reason")
-        if from_candidate.id == into_candidate.id:
-            raise CandidateError("merge.from and merge.into must be different")
-        drafts.pop(from_candidate.id)
-        rejected.append({"id": from_candidate.id, "reason": reason.strip()})
-
-    for raw in patch.get("reject", []):
-        if not isinstance(raw, dict):
-            raise CandidateError("reject entries must be objects")
-        candidate = _lookup_draft(drafts, raw.get("id") or raw.get("slug"), "reject.id")
-        reason = raw.get("reason")
-        if not isinstance(reason, str) or not reason.strip():
-            raise CandidateError("reject entries require reason")
-        drafts.pop(candidate.id)
-        rejected.append({"id": candidate.id, "reason": reason.strip()})
-
-    return rejected
+            if existing.slug == candidate.slug:
+                drafts.pop(existing_id)
+                removed.append({"id": existing_id, "reason": f"replaced by upsert `{candidate.id}` with the same slug"})
+        drafts[candidate.id] = candidate
+    return removed
 
 
-def _parse_reconcile_result(result: str) -> tuple[list[MomentCandidate], list[dict[str, str]], list[dict[str, str]], str]:
-    payload = _extract_json_object(result)
+def _parse_reconcile_payload(payload: dict[str, Any]) -> tuple[list[MomentCandidate], list[dict[str, str]], list[dict[str, str]], str]:
     raw_candidates = payload.get("candidates")
     if not isinstance(raw_candidates, list):
         raise CandidateError("reconciliation JSON must contain candidates list")
@@ -337,6 +317,77 @@ def _parse_reconcile_result(result: str) -> tuple[list[MomentCandidate], list[di
     return candidates, _validate_rejected(payload.get("rejected", [])), updates, notes.strip()
 
 
+def _parse_structured_reconcile(payload: ReconcilePayload) -> tuple[list[MomentCandidate], list[dict[str, str]], list[dict[str, str]], str]:
+    return _parse_reconcile_payload(payload.model_dump(exclude_none=True))
+
+
+def _run_tool_agent_for_ideation(
+    *,
+    instruction: str,
+    logs_dir: str,
+    model: str,
+    api_key: str | None,
+    on_round,
+    subagent_model: str | None,
+    subagent_api_key: str | None,
+) -> str:
+    agent, _ = build_agent(
+        model,
+        logs_dir,
+        api_key=api_key,
+        subagent_model=subagent_model,
+        subagent_api_key=subagent_api_key,
+    )
+    agent.max_rounds = AGENT_IDEATION_MAX_ROUNDS
+    agent.on_round = on_round
+    result = agent.run([{"role": "user", "content": instruction}]).strip()
+    if not result or result == "(max rounds reached)":
+        raise CandidateError("discovery ideation agent did not produce usable notes")
+    return result
+
+
+def _parse_agent_ideas(result: str) -> tuple[list[dict[str, Any]], str]:
+    try:
+        payload = extract_json_object(result)
+        parsed = IdeaPayload.model_validate(payload)
+    except (StructuredOpsError, ValidationError) as exc:
+        raise CandidateError(f"discovery ideation agent returned invalid idea JSON: {exc}") from exc
+    return _parse_structured_ideas(parsed)
+
+
+@retry(
+    stop=stop_after_attempt(STRUCTURED_OUTPUT_ATTEMPTS),
+    wait=wait_none(),
+    retry=retry_if_exception_type(CandidateError),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
+def _run_agent_for_valid_json(
+    *,
+    instruction: str,
+    model: str,
+    api_key: str | None,
+    on_round,
+    response_model: type[BaseModel],
+    metadata_app: str,
+    parser,
+):
+    if on_round:
+        on_round(1, 1)
+    try:
+        result, payload = structured_completion(
+            model=model,
+            instruction=instruction,
+            response_model=response_model,
+            api_key=api_key,
+            metadata_app=metadata_app,
+        )
+        parsed = parser(payload)
+    except StructuredOpsError as exc:
+        raise CandidateError(str(exc)) from exc
+    return result, parsed
+
+
 def _build_instruction(
     *,
     now: str,
@@ -358,12 +409,36 @@ def _build_instruction(
         discover_rules=DISCOVER_RULES,
         shared_sources=SHARED_SOURCES.format(logs_dir=logs_dir),
         shared_moments=SHARED_MOMENTS.format(tada_dir=str(tada_dir)),
-        shared_usefulness=SHARED_USEFULNESS,
         accepted_moments=accepted_moments,
         feedback_state_summary=feedback_state_summary,
         chunk_metadata=chunk.metadata,
         activity_chunk=chunk.rendered_text,
         draft_context=draft_context,
+    )
+
+
+def _build_draft_action_instruction(
+    *,
+    now: str,
+    logs_dir: str,
+    tada_dir: Path,
+    accepted_moments: str,
+    feedback_state_summary: str,
+    current_drafts: list[MomentCandidate],
+    ideas: list[dict[str, Any]],
+) -> str:
+    return DISCOVER_COMPILE_TEMPLATE.format(
+        now=now,
+        logs_dir=logs_dir,
+        tada_dir=str(tada_dir),
+        shared_moments=SHARED_MOMENTS.format(tada_dir=str(tada_dir)),
+        accepted_moments=accepted_moments,
+        feedback_state_summary=feedback_state_summary,
+        draft_context=_draft_context_for_text(
+            {candidate.id: candidate for candidate in current_drafts},
+            json.dumps(ideas, sort_keys=True),
+        ),
+        idea_json=json.dumps(ideas, indent=2, sort_keys=True),
     )
 
 
@@ -382,7 +457,6 @@ def _build_reconcile_instruction(
         tada_dir=str(tada_dir),
         reconcile_rules=RECONCILE_RULES,
         shared_moments=SHARED_MOMENTS.format(tada_dir=str(tada_dir)),
-        shared_usefulness=SHARED_USEFULNESS,
         accepted_moments=accepted_moments,
         feedback_state_summary=feedback_state_summary,
         draft_candidate_json=_candidate_json(draft_candidates),
@@ -414,18 +488,16 @@ def _reconcile_drafts(
         feedback_state_summary=feedback_state_summary,
         draft_candidates=drafts,
     )
-    agent, _ = build_agent(
-        model,
-        logs_dir,
-        extra_write_dirs=[str(logs_path / "moments")],
+    _result, parsed = _run_agent_for_valid_json(
+        instruction=instruction,
+        model=model,
         api_key=api_key,
-        subagent_model=subagent_model,
-        subagent_api_key=subagent_api_key,
+        on_round=on_round,
+        response_model=ReconcilePayload,
+        metadata_app="moments_reconcile",
+        parser=_parse_structured_reconcile,
     )
-    agent.max_rounds = 30
-    agent.on_round = on_round
-    result = agent.run([{"role": "user", "content": instruction}])
-    return _parse_reconcile_result(result)
+    return parsed
 
 
 def run(
@@ -470,21 +542,42 @@ def run(
             chunk=chunk,
             draft_context=_draft_context(drafts, chunk),
         )
-        agent, _ = build_agent(
-            model,
-            logs_dir,
-            extra_write_dirs=[str(logs_path / "moments")],
+        ideas, idea_notes = _parse_agent_ideas(_run_tool_agent_for_ideation(
+            instruction=instruction,
+            logs_dir=logs_dir,
+            model=model,
             api_key=api_key,
+            on_round=on_round,
             subagent_model=subagent_model,
             subagent_api_key=subagent_api_key,
+        ))
+        compiler_instruction = _build_draft_action_instruction(
+            now=now,
+            logs_dir=logs_dir,
+            tada_dir=tada_dir,
+            accepted_moments=accepted_moments,
+            feedback_state_summary=feedback_summary,
+            current_drafts=list(drafts.values()),
+            ideas=ideas,
         )
-        agent.max_rounds = 80
-        agent.on_round = on_round
-        result = agent.run([{"role": "user", "content": instruction}])
-        patch, chunk_notes = _parse_draft_patch_result(result)
-        rejected.extend(_apply_draft_patch(drafts, patch))
-        if chunk_notes:
-            notes.append(f"chunk {chunk.index}: {chunk_notes}")
+        _result, (upserts, chunk_rejected, removed_drafts, compiler_notes) = _run_agent_for_valid_json(
+            instruction=compiler_instruction,
+            model=model,
+            api_key=api_key,
+            on_round=on_round,
+            response_model=DraftActionPayload,
+            metadata_app="moments_draft_compile",
+            parser=_parse_structured_draft_actions,
+        )
+        rejected.extend(_apply_draft_actions(drafts, upserts, removed_drafts))
+        rejected.extend(chunk_rejected)
+        chunk_note_parts = []
+        if idea_notes:
+            chunk_note_parts.append(f"ideas: {idea_notes}")
+        if compiler_notes:
+            chunk_note_parts.append(f"compiled: {compiler_notes}")
+        if chunk_note_parts:
+            notes.append(f"chunk {chunk.index}: " + " | ".join(chunk_note_parts))
 
     if chunks_processed == 0:
         mode = "no_new_data"

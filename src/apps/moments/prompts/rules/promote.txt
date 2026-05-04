@@ -4,7 +4,21 @@
 - Reject vague, generic, duplicative, or weakly evidenced candidates.
 - Prefer a smaller set of high-value accepted moments over a large noisy set.
 - A promoted candidate must have a concrete artifact, specific sources, and a clear user benefit.
-- If a candidate has the same slug as an existing accepted moment, treat it as a proposed update to that moment. Promote it when the new evidence, scope, instructions, or artifact would make the accepted moment better; do not reject it solely because it overlaps.
+- Prefer candidates that save the user time, reduce missed information, clarify a decision, or make recurring work easier.
+- Reject candidates that only give broad productivity coaching, summarize the user's life without a clear use, repeat an existing moment, or require data that is unlikely to be available.
+
+## Executor Capabilities For Completability Checks
+
+- Accepted moments are later run by an executor agent with tools.
+- The executor can browse authenticated sites with the user's cookies, run shell/code, do deep research, draft emails/docs, and produce static artifacts such as HTML or markdown.
+- The executor cannot call LLMs at runtime, modify arbitrary files, or build interactive backends.
+- Every accepted moment run is one-shot: a daily digest means generate one digest now, not create a daemon or subscription.
+- Prefer tasks that amplify the user: deep information foraging, multi-step workflows, and extra-mile work the user would not do themselves.
+- Deprioritize anything a human could do in a few minutes.
+
+## Tips
+
+- Python deterministically routes candidates whose slug matches an existing accepted moment as updates to that moment.
+- Promote an update candidate only when its new evidence, scope, instructions, or artifact would make the accepted moment better.
 - Reject near-duplicates that use a different slug from an accepted moment unless they are meaningfully distinct.
 - Do not call tools. Do not read files, run shell commands, or write accepted markdown. Python will persist promoted moments after parsing your JSON.
-- Return fenced JSON only.

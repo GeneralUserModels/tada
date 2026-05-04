@@ -4,8 +4,6 @@ Current date and time: **{now}**
 
 {shared_moments}
 
-{shared_usefulness}
-
 ## Existing Accepted Moments
 
 {accepted_moments}
@@ -26,43 +24,6 @@ Reconcile the draft candidates against existing accepted moments and feedback.
 
 Return the final candidate list that should be persisted for promotion. Do not promote moments and do not write accepted markdown files.
 
-End with a single fenced JSON block. It must be the last thing in your final message.
+For candidate cadence fields, use a real `schedule` for `scheduled`, a real `trigger` for `trigger`, and `not_applicable` for the irrelevant field required by the structured schema.
 
-```json
-{{
-  "candidates": [
-    {{
-      "id": "stable-candidate-id",
-      "slug": "stable-kebab-slug",
-      "topic": "kebab-topic",
-      "title": "Short title",
-      "description": "One-sentence summary",
-      "cadence": "once",
-      "schedule": "",
-      "trigger": "",
-      "confidence": 0.8,
-      "usefulness": 8,
-      "specific_instructions": "What the execution agent should do.",
-      "desired_artifact": "What interface or artifact should be produced.",
-      "evidence": ["Evidence item with source path and timestamp"],
-      "source_paths": ["relative/source/path"],
-      "why_now": "Why this is timely.",
-      "user_value": "Why this helps the user."
-    }}
-  ],
-  "updates": [
-    {{
-      "candidate_id": "draft-id-routed-as-update",
-      "accepted_slug": "existing-accepted-slug",
-      "reason": "Why this should update the accepted moment instead of becoming a new one."
-    }}
-  ],
-  "rejected": [
-    {{
-      "id": "rejected-draft-id",
-      "reason": "Why it was rejected."
-    }}
-  ],
-  "notes": "Optional short implementation/debug note."
-}}
-```
+Submit the structured reconciliation output with `candidates`, `updates`, `rejected`, and `notes`.

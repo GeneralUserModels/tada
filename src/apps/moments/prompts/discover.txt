@@ -9,8 +9,6 @@ Last discovery: **{last_discovery_date}**
 
 {shared_moments}
 
-{shared_usefulness}
-
 ## Existing Accepted Moments
 
 {accepted_moments}
@@ -33,57 +31,34 @@ Last discovery: **{last_discovery_date}**
 
 ## Task
 
-You are processing one chronological activity chunk. Use this chunk to create, update, merge, or reject draft moments.
+You are the creative ideation step for one chronological activity chunk. Use this chunk to propose useful moment ideas.
 
-Return patch operations only. Python owns the full draft state and will apply your operations deterministically. Do not promote moments and do not write accepted markdown files.
+Return idea cards only. Do not produce patch operations, do not maintain draft state, do not promote moments, and do not write accepted markdown files. A separate compiler step will convert your ideas into draft candidates.
+
+Favor specific ideas that produce concrete artifacts. It is fine to be creative here, but every idea must cite evidence from the activity chunk or targeted source context.
+
+For `relation_to_existing`, use:
+- `new` for a distinct new idea.
+- `possible_update` when the idea may refresh an accepted moment or current draft.
+- `duplicate` when it looks covered already.
+- `weak` when it is probably not useful enough.
 
 End with a single fenced JSON block. It must be the last thing in your final message.
 
 ```json
 {{
-  "create": [
+  "ideas": [
     {{
-      "id": "stable-candidate-id",
-      "slug": "stable-kebab-slug",
-      "topic": "kebab-topic",
-      "title": "Short title",
-      "description": "One-sentence summary",
-      "cadence": "once",
-      "schedule": "",
-      "trigger": "",
-      "confidence": 0.8,
-      "usefulness": 8,
-      "specific_instructions": "What the execution agent should do.",
-      "desired_artifact": "What interface or artifact should be produced.",
-      "evidence": ["Evidence item with source path and timestamp"],
+      "title": "Short useful idea title",
+      "topic_hint": "kebab-or-plain-topic",
+      "artifact": "Concrete artifact the executor should produce",
+      "why_useful": "Why this would save time, reduce missed information, clarify a decision, or make recurring work easier",
+      "evidence": ["Evidence item with source path, line/timestamp, or other concrete pointer"],
       "source_paths": ["relative/source/path"],
-      "why_now": "Why this is timely.",
-      "user_value": "Why this helps the user."
+      "cadence_hint": "once",
+      "relation_to_existing": "new"
     }}
   ],
-  "update": [
-    {{
-      "id": "existing-draft-id-or-slug",
-      "fields": {{
-        "evidence": ["Full replacement evidence list including old and new evidence"],
-        "confidence": 0.85,
-        "why_now": "Updated reason"
-      }}
-    }}
-  ],
-  "merge": [
-    {{
-      "from": "duplicate-draft-id-or-slug",
-      "into": "surviving-draft-id-or-slug",
-      "reason": "Why these drafts are the same underlying moment."
-    }}
-  ],
-  "reject": [
-    {{
-      "id": "rejected-draft-id-or-slug",
-      "reason": "Why it was rejected."
-    }}
-  ],
-  "notes": "Optional short implementation/debug note."
+  "notes": "Short note about searches, files, or reasoning that informed the ideas."
 }}
 ```

@@ -3,28 +3,36 @@
 from __future__ import annotations
 
 import json
+import logging
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
+from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_none
 
 load_dotenv()
 
-from agent.builder import build_agent
+from apps.common.structured_completion import structured_completion
+from apps.common.structured_ops import StructuredOpsError
 from apps.moments.core.incremental import read_checkpoint, write_checkpoint
 from apps.moments.core.candidates import (
+    CandidateError,
+    MomentCandidate,
     latest_candidate_file,
     parse_promotion_result,
     read_candidate_jsonl,
     write_accepted_moment,
 )
-from apps.moments.core.paths import migrate_moments_to_cadence, summarize_tada_tasks
+from apps.moments.core.paths import find_task_md, get_topic, migrate_moments_to_cadence, summarize_tada_tasks
+from apps.moments.schemas.structured import PromotionPayload
 
 _PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 PROMOTE_TEMPLATE = (_PROMPTS / "promote.txt").read_text()
 PROMOTE_RULES = (_PROMPTS / "rules" / "promote.txt").read_text()
 SHARED_MOMENTS = (_PROMPTS / "shared" / "moments.txt").read_text()
-SHARED_USEFULNESS = (_PROMPTS / "shared" / "usefulness.txt").read_text()
+STRUCTURED_OUTPUT_ATTEMPTS = 2
+logger = logging.getLogger(__name__)
 
 
 def _feedback_state_summary(tada_dir: Path) -> str:
@@ -36,6 +44,56 @@ def _feedback_state_summary(tada_dir: Path) -> str:
     if feedback:
         parts.append("Recent feedback files:\n" + "\n".join(f"- {p.relative_to(tada_dir)}" for p in feedback[-20:]))
     return "\n\n".join(parts) or "- (none)"
+
+
+def _route_existing_slug_updates(tada_dir: Path, candidates: list[MomentCandidate]) -> tuple[list[MomentCandidate], int]:
+    routed: list[MomentCandidate] = []
+    routed_count = 0
+    for candidate in candidates:
+        accepted_path = find_task_md(tada_dir, candidate.slug)
+        if accepted_path is None:
+            routed.append(candidate)
+            continue
+        accepted_topic = get_topic(accepted_path, tada_dir)
+        if candidate.topic == accepted_topic:
+            routed.append(candidate)
+            continue
+        routed.append(replace(candidate, topic=accepted_topic))
+        routed_count += 1
+    return routed, routed_count
+
+
+@retry(
+    stop=stop_after_attempt(STRUCTURED_OUTPUT_ATTEMPTS),
+    wait=wait_none(),
+    retry=retry_if_exception_type(CandidateError),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
+def _run_promotion_agent_for_valid_json(
+    *,
+    instruction: str,
+    candidates: list[MomentCandidate],
+    model: str,
+    api_key: str | None,
+    on_round,
+):
+    if on_round:
+        on_round(1, 1)
+    try:
+        result, payload = structured_completion(
+            model=model,
+            instruction=instruction,
+            response_model=PromotionPayload,
+            api_key=api_key,
+            metadata_app="moments_promote",
+        )
+    except StructuredOpsError as exc:
+        raise CandidateError(str(exc)) from exc
+    return result, parse_promotion_result(
+        "```json\n" + json.dumps(payload.model_dump(exclude_none=True)) + "\n```",
+        candidates,
+    )
 
 
 def run(
@@ -61,13 +119,7 @@ def run(
     candidates = read_candidate_jsonl(candidate_path)
     if n > 0:
         candidates = candidates[:n]
-
-    agent, _ = build_agent(
-        model, logs_dir, extra_write_dirs=[str(tada_path)], api_key=api_key,
-        subagent_model=subagent_model, subagent_api_key=subagent_api_key,
-    )
-    agent.max_rounds = 40
-    agent.on_round = on_round
+    candidates, routed_updates = _route_existing_slug_updates(tada_path, candidates)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     candidate_json = json.dumps([c.to_json() for c in candidates], indent=2)
@@ -75,17 +127,24 @@ def run(
         now=now,
         promote_rules=PROMOTE_RULES,
         shared_moments=SHARED_MOMENTS.format(tada_dir=str(tada_path)),
-        shared_usefulness=SHARED_USEFULNESS,
         accepted_moments=summarize_tada_tasks(tada_path),
         feedback_state_summary=_feedback_state_summary(tada_path),
         candidate_json=candidate_json,
     )
 
-    result = agent.run([{"role": "user", "content": instruction}])
-    promoted, _rejected = parse_promotion_result(result, candidates)
+    result, (promoted, _rejected) = _run_promotion_agent_for_valid_json(
+        instruction=instruction,
+        candidates=candidates,
+        model=model,
+        api_key=api_key,
+        on_round=on_round,
+    )
     for candidate in promoted:
         write_accepted_moment(tada_path, candidate)
 
     write_checkpoint(checkpoint_path)
 
-    return f"{result}\n\nPromoted {len(promoted)} of {len(candidates)} candidates from {candidate_path}"
+    summary = f"{result}\n\nPromoted {len(promoted)} of {len(candidates)} candidates from {candidate_path}"
+    if routed_updates:
+        summary += f"\nRouted {routed_updates} same-slug candidates to existing accepted moment paths."
+    return summary

@@ -8,21 +8,27 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+from pydantic import ValidationError
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from apps.moments.steps import discover, promote
+from apps.common import structured_completion as structured_completion_module
+from apps.common.structured_ops import StructuredOpsError, extract_json_object
 from apps.moments.core.candidates import (
     CandidateError,
     parse_discovery_result,
     parse_promotion_result,
     render_accepted_markdown,
     validate_candidate,
+    write_candidates_jsonl,
 )
 from apps.moments.core.paths import migrate_moments_to_cadence
 from apps.moments.runtime.scheduler import should_run
+from apps.moments.schemas.structured import DraftActionPayload
 
 
 def _candidate(**overrides):
@@ -34,7 +40,7 @@ def _candidate(**overrides):
         "description": "Track relevant papers.",
         "cadence": "scheduled",
         "schedule": "daily at 8am",
-        "trigger": "",
+        "trigger": "not_applicable",
         "confidence": 0.8,
         "usefulness": 8,
         "specific_instructions": "Find new papers and summarize why they matter.",
@@ -48,16 +54,59 @@ def _candidate(**overrides):
     return base
 
 
-class _FakeAgent:
-    def __init__(self, result: str):
-        self.result = result
-        self.max_rounds = 0
+def _idea(**overrides):
+    base = {
+        "title": "Paper Digest",
+        "topic_hint": "research",
+        "artifact": "A ranked feed of papers.",
+        "why_useful": "Saves triage time.",
+        "evidence": ["memory/index.md mentions research"],
+        "source_paths": ["memory/index.md"],
+        "cadence_hint": "scheduled",
+        "relation_to_existing": "new",
+    }
+    base.update(overrides)
+    return base
+
+
+class _FakeStructuredCompletion:
+    def __init__(self, *results: str | Exception):
+        self.results = list(results)
+        self.instructions: list[str] = []
+
+    def __call__(self, *, instruction, response_model, **kwargs):
+        self.instructions.append(instruction)
+        if not self.results:
+            raise AssertionError("No fake structured completion result queued")
+        result = self.results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        try:
+            payload = extract_json_object(result)
+        except StructuredOpsError:
+            try:
+                payload = json.loads(result)
+            except json.JSONDecodeError as exc:
+                raise StructuredOpsError(f"invalid JSON: {exc}") from exc
+        try:
+            parsed = response_model.model_validate(payload)
+        except ValidationError as exc:
+            raise StructuredOpsError(f"structured output validation failed: {exc}") from exc
+        return result, parsed
+
+
+class _FakeToolAgent:
+    def __init__(self, *results: str):
+        self.results = list(results) or ["```json\n" + json.dumps({"ideas": [_idea()], "notes": ""}) + "\n```"]
+        self.max_rounds = None
         self.on_round = None
-        self.messages = []
+        self.messages: list[list[dict]] = []
 
     def run(self, messages):
-        self.messages = messages
-        return self.result
+        self.messages.append(messages)
+        if not self.results:
+            raise AssertionError("No fake tool agent result queued")
+        return self.results.pop(0)
 
 
 def _filtered_row(timestamp: datetime, source_name: str, text: str, **extra):
@@ -138,30 +187,32 @@ class MomentsPipelineTests(unittest.TestCase):
             (screen / "filtered.jsonl").write_text(
                 _filtered_row(datetime(2025, 1, 1, 0, 0), "screen", "reading papers") + "\n"
             )
-            discovery_json = "```json\n" + json.dumps({"create": [_candidate()], "update": [], "merge": [], "reject": [], "notes": ""}) + "\n```"
+            draft_state_json = "```json\n" + json.dumps({"upserts": [_candidate()], "rejected": [], "remove": [], "notes": ""}) + "\n```"
             reconcile_json = "```json\n" + json.dumps({"candidates": [_candidate()], "updates": [], "rejected": [], "notes": ""}) + "\n```"
             promotion_json = '```json\n{"promoted":["paper-digest"],"rejected":[]}\n```'
-            discover_agent = _FakeAgent(discovery_json)
-            reconcile_agent = _FakeAgent(reconcile_json)
-            promote_agent = _FakeAgent(promotion_json)
+            discover_structured = _FakeStructuredCompletion(draft_state_json, reconcile_json)
+            promote_structured = _FakeStructuredCompletion(promotion_json)
 
-            with patch.object(discover, "build_agent", side_effect=[(discover_agent, None), (reconcile_agent, None)]):
+            fake_agent = _FakeToolAgent()
+            with patch.object(discover, "build_agent", return_value=(fake_agent, None)), \
+                 patch.object(discover, "structured_completion", side_effect=discover_structured):
                 discover.run(str(logs), model="fake")
-            discover_prompt = discover_agent.messages[0]["content"]
+            discover_prompt = fake_agent.messages[0][0]["content"]
             self.assertIn("screen/filtered.jsonl", discover_prompt)
             self.assertIn("reading papers", discover_prompt)
             self.assertIn("(no drafts yet)", discover_prompt)
-            self.assertIn("Draft Candidates From Discovery", reconcile_agent.messages[0]["content"])
+            self.assertIn("Idea Cards From This Chunk", discover_structured.instructions[0])
+            self.assertIn("Draft Candidates From Discovery", discover_structured.instructions[1])
             candidate_files = sorted((logs / "moments" / "candidates").glob("*.jsonl"))
             self.assertEqual(len(candidate_files), 1)
             self.assertTrue((logs / "moments" / ".last_discovery").exists())
 
-            with patch.object(promote, "build_agent", return_value=(promote_agent, None)):
+            with patch.object(promote, "structured_completion", side_effect=promote_structured):
                 promote.run(str(logs), model="fake")
             accepted = root / "logs-tada" / "research" / "paper-digest.md"
             self.assertTrue(accepted.exists())
             self.assertIn("cadence: scheduled", accepted.read_text())
-            self.assertIn("paper-digest", promote_agent.messages[0]["content"])
+            self.assertIn("paper-digest", promote_structured.instructions[0])
 
     def test_invalid_discovery_does_not_write_checkpoint(self):
         with tempfile.TemporaryDirectory() as d:
@@ -171,11 +222,140 @@ class MomentsPipelineTests(unittest.TestCase):
             (screen / "filtered.jsonl").write_text(
                 _filtered_row(datetime(2025, 1, 1, 0, 0), "screen", "reading papers") + "\n"
             )
-            agent = _FakeAgent("not json")
-            with patch.object(discover, "build_agent", return_value=(agent, None)):
+            structured = _FakeStructuredCompletion("not json")
+            with patch.object(discover, "build_agent", return_value=(_FakeToolAgent("not json"), None)), \
+                 patch.object(discover, "structured_completion", side_effect=structured):
                 with self.assertRaises(CandidateError):
                     discover.run(str(logs), model="fake")
             self.assertFalse((logs / "moments" / ".last_discovery").exists())
+
+    def test_discovery_retries_malformed_json_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            logs = Path(d) / "logs"
+            screen = logs / "screen"
+            screen.mkdir(parents=True)
+            (screen / "filtered.jsonl").write_text(
+                _filtered_row(datetime(2025, 1, 1, 0, 0), "screen", "reading papers") + "\n"
+            )
+            structured = _FakeStructuredCompletion(
+                StructuredOpsError("structured output validation failed"),
+                "```json\n" + json.dumps({"upserts": [_candidate()], "rejected": [], "remove": [], "notes": ""}) + "\n```",
+                "```json\n" + json.dumps({"candidates": [_candidate()], "updates": [], "rejected": [], "notes": ""}) + "\n```",
+            )
+
+            with patch.object(discover, "build_agent", return_value=(_FakeToolAgent(), None)), \
+                 patch.object(discover, "structured_completion", side_effect=structured):
+                discover.run(str(logs), model="fake")
+
+            self.assertTrue((logs / "moments" / ".last_discovery").exists())
+            candidate_files = sorted((logs / "moments" / "candidates").glob("*.jsonl"))
+            self.assertEqual(len(candidate_files), 1)
+
+    def test_discovery_reports_draft_compile_rejections(self):
+        with tempfile.TemporaryDirectory() as d:
+            logs = Path(d) / "logs"
+            screen = logs / "screen"
+            screen.mkdir(parents=True)
+            (screen / "filtered.jsonl").write_text(
+                _filtered_row(datetime(2025, 1, 1, 0, 0), "screen", "reading papers") + "\n"
+            )
+            structured = _FakeStructuredCompletion(
+                "```json\n"
+                + json.dumps({
+                    "upserts": [],
+                    "rejected": [{"id": "paper-digest", "reason": "too weak"}],
+                    "remove": [],
+                    "notes": "dropped weak idea",
+                })
+                + "\n```",
+            )
+
+            with patch.object(discover, "build_agent", return_value=(_FakeToolAgent(), None)), \
+                 patch.object(discover, "structured_completion", side_effect=structured):
+                result = discover.run(str(logs), model="fake")
+
+            self.assertIn("Rejected or merged 1 drafts", result)
+            self.assertTrue((logs / "moments" / ".last_discovery").exists())
+
+    def test_structured_completion_accepts_provider_rejected_but_valid_pydantic_json(self):
+        raw = json.dumps({"upserts": [_candidate()], "notes": ""})
+
+        class _FakeSchemaError(Exception):
+            raw_response = raw
+
+        with patch.object(structured_completion_module.litellm, "JSONSchemaValidationError", _FakeSchemaError), \
+             patch.object(structured_completion_module, "_litellm_structured_completion", side_effect=_FakeSchemaError()):
+            text, payload = structured_completion_module.structured_completion(
+                model="fake",
+                instruction="instruction",
+                response_model=DraftActionPayload,
+            )
+
+        self.assertEqual(text, raw)
+        self.assertEqual(payload.upserts[0].slug, "paper-digest")
+        self.assertEqual(payload.rejected, [])
+
+    def test_promotion_retries_malformed_json_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            logs = root / "logs"
+            logs.mkdir()
+            write_candidates_jsonl(logs, [validate_candidate(_candidate())])
+            structured = _FakeStructuredCompletion(
+                StructuredOpsError("structured output validation failed"),
+                '```json\n{"promoted":["paper-digest"],"rejected":[]}\n```',
+            )
+
+            with patch.object(promote, "structured_completion", side_effect=structured):
+                promote.run(str(logs), model="fake")
+
+            self.assertTrue((logs / "moments" / ".last_promotion").exists())
+            accepted = root / "logs-tada" / "research" / "paper-digest.md"
+            self.assertTrue(accepted.exists())
+
+    def test_promotion_routes_same_slug_to_existing_topic(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            logs = root / "logs"
+            logs.mkdir()
+            tada = root / "logs-tada"
+            accepted_dir = tada / "research"
+            accepted_dir.mkdir(parents=True)
+            (accepted_dir / "paper-digest.md").write_text(
+                "---\n"
+                "title: Paper Digest\n"
+                "description: Track relevant papers.\n"
+                "cadence: scheduled\n"
+                "schedule: daily at 8am\n"
+                "confidence: 0.80\n"
+                "usefulness: 8\n"
+                "---\n\nExisting body\n"
+            )
+            (tada / "results" / "paper-digest").mkdir(parents=True)
+            write_candidates_jsonl(logs, [
+                validate_candidate(
+                    _candidate(
+                        id="paper-digest-update",
+                        slug="paper-digest",
+                        topic="wrong-topic",
+                        title="Updated Paper Digest",
+                        evidence=["new evidence"],
+                    )
+                )
+            ])
+            structured = _FakeStructuredCompletion('```json\n{"promoted":["paper-digest-update"],"rejected":[]}\n```')
+
+            with patch.object(promote, "structured_completion", side_effect=structured):
+                result = promote.run(str(logs), model="fake")
+
+            accepted = accepted_dir / "paper-digest.md"
+            accepted_text = accepted.read_text()
+            self.assertIn("Updated Paper Digest", accepted_text)
+            self.assertIn("new evidence", accepted_text)
+            self.assertFalse((tada / "wrong-topic" / "paper-digest.md").exists())
+            self.assertIn('"topic": "research"', structured.instructions[0])
+            self.assertNotIn('"topic": "wrong-topic"', structured.instructions[0])
+            self.assertIn("Routed 1 same-slug candidates", result)
 
     def test_chronological_merge_skips_checkpoint_and_invalid_rows(self):
         with tempfile.TemporaryDirectory() as d:
@@ -300,28 +480,24 @@ class MomentsPipelineTests(unittest.TestCase):
             )
             first = _candidate(title="Paper Digest", evidence=["first chunk"])
             second = _candidate(title="Paper Digest", evidence=["first chunk", "second chunk"])
-            agents = [
-                _FakeAgent("```json\n" + json.dumps({"create": [first], "update": [], "merge": [], "reject": [], "notes": ""}) + "\n```"),
-                _FakeAgent(
-                    "```json\n"
-                    + json.dumps({
-                        "create": [],
-                        "update": [{"id": "paper-digest", "fields": {"evidence": ["first chunk", "second chunk"]}}],
-                        "merge": [],
-                        "reject": [],
-                        "notes": "",
-                    })
-                    + "\n```"
-                ),
-                _FakeAgent("```json\n" + json.dumps({"candidates": [second], "updates": [], "rejected": [], "notes": "kept final draft"}) + "\n```"),
-            ]
+            structured = _FakeStructuredCompletion(
+                "```json\n" + json.dumps({"upserts": [first], "rejected": [], "remove": [], "notes": ""}) + "\n```",
+                "```json\n" + json.dumps({"upserts": [second], "rejected": [], "remove": [], "notes": ""}) + "\n```",
+                "```json\n" + json.dumps({"candidates": [second], "updates": [], "rejected": [], "notes": "kept final draft"}) + "\n```",
+            )
+            fake_agent = _FakeToolAgent(
+                "```json\n" + json.dumps({"ideas": [_idea(evidence=["first chunk"])], "notes": ""}) + "\n```",
+                "```json\n" + json.dumps({"ideas": [_idea(evidence=["second chunk"], relation_to_existing="possible_update")], "notes": ""}) + "\n```",
+            )
             chunks = [discover.ActivityChunk(index=1, rows=[row1]), discover.ActivityChunk(index=2, rows=[row2])]
 
-            with patch.object(discover, "_chunk_filtered_rows", return_value=iter(chunks)), patch.object(discover, "build_agent", side_effect=[(agents[0], None), (agents[1], None), (agents[2], None)]):
+            with patch.object(discover, "build_agent", return_value=(fake_agent, None)), \
+                 patch.object(discover, "_chunk_filtered_rows", return_value=iter(chunks)), \
+                 patch.object(discover, "structured_completion", side_effect=structured):
                 discover.run(str(logs), model="fake")
 
-            self.assertIn("Paper Digest", agents[1].messages[0]["content"])
-            self.assertIn("second chunk", agents[2].messages[0]["content"])
+            self.assertIn("Paper Digest", structured.instructions[1])
+            self.assertIn("second chunk", structured.instructions[1])
             candidate_file = sorted((logs / "moments" / "candidates").glob("*.jsonl"))[-1]
             self.assertIn("second chunk", candidate_file.read_text())
 
@@ -350,8 +526,8 @@ class MomentsPipelineTests(unittest.TestCase):
             (tada / "results" / "paper-digest").mkdir(parents=True)
             draft = _candidate(id="new-paper-tracker", slug="new-paper-tracker", evidence=["new evidence"])
             update = _candidate(id="paper-digest", slug="paper-digest", evidence=["new evidence"])
-            discovery_agent = _FakeAgent("```json\n" + json.dumps({"create": [draft], "update": [], "merge": [], "reject": [], "notes": ""}) + "\n```")
-            reconcile_agent = _FakeAgent(
+            structured = _FakeStructuredCompletion(
+                "```json\n" + json.dumps({"upserts": [draft], "rejected": [], "remove": [], "notes": ""}) + "\n```",
                 "```json\n"
                 + json.dumps({
                     "candidates": [update],
@@ -359,13 +535,14 @@ class MomentsPipelineTests(unittest.TestCase):
                     "rejected": [],
                     "notes": "routed duplicate as update",
                 })
-                + "\n```"
+                + "\n```",
             )
 
-            with patch.object(discover, "build_agent", side_effect=[(discovery_agent, None), (reconcile_agent, None)]):
+            with patch.object(discover, "build_agent", return_value=(_FakeToolAgent(), None)), \
+                 patch.object(discover, "structured_completion", side_effect=structured):
                 result = discover.run(str(logs), model="fake")
 
-            self.assertIn("research/paper-digest", reconcile_agent.messages[0]["content"])
+            self.assertIn("research/paper-digest", structured.instructions[1])
             self.assertIn("Routed 1 candidates as updates", result)
             candidate_file = sorted((logs / "moments" / "candidates").glob("*.jsonl"))[-1]
             candidate_text = candidate_file.read_text()
