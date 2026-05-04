@@ -42,3 +42,24 @@ Do all of the following:
 - If no content pages changed, still append a `## {today}` entry explaining what was checked.
 
 Use the provided page metadata to update `index.md` and `log.md`. Do not list or read content pages just to build catalog entries.
+
+Do not write files directly. Python will apply the returned operations after validating paths.
+
+End with a single fenced JSON block. It must be the last thing in your final message.
+
+```json
+{{
+  "create_pages": [],
+  "update_pages": [
+    {{
+      "path": "index.md",
+      "markdown": "# Memory Index\\n\\n- Page Title — path/page.md: one-line description"
+    }},
+    {{
+      "path": "log.md",
+      "markdown": "# Memory Log\\n\\n## {today}\\n- Updated pages."
+    }}
+  ],
+  "notes": "Concise summary of validation repairs."
+}}
+```

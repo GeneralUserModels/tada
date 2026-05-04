@@ -1,9 +1,4 @@
-"""Filesystem helpers for the topic-grouped tada layout.
-
-Tasks live at `logs-tada/<topic>/<slug>.md`. Legacy flat `logs-tada/<slug>.md`
-files are still recognized so the runtime keeps working until filter migrates
-them. Results stay flat at `logs-tada/results/<slug>/`.
-"""
+"""Filesystem helpers for the topic-grouped tada layout."""
 
 from __future__ import annotations
 
@@ -26,6 +21,81 @@ def list_task_files(tada_dir: Path) -> list[Path]:
             files.extend(sub.glob("*.md"))
     files.sort()
     return files
+
+
+def _split_frontmatter(text: str) -> tuple[dict[str, str], str] | None:
+    if not text.startswith("---"):
+        return None
+    end = text.find("\n---", 3)
+    if end == -1:
+        return None
+    body_start = text.find("\n", end + 4)
+    body = text[body_start + 1:] if body_start != -1 else ""
+    frontmatter: dict[str, str] = {}
+    for line in text[3:end].strip().splitlines():
+        if ":" in line:
+            key, _, value = line.partition(":")
+            frontmatter[key.strip()] = value.strip()
+    return frontmatter, body
+
+
+def _render_frontmatter(fm: dict[str, str], body: str) -> str:
+    order = ["title", "description", "cadence", "schedule", "trigger", "confidence", "usefulness"]
+    lines = ["---"]
+    emitted: set[str] = set()
+    for key in order:
+        value = fm.get(key)
+        if value is not None and value != "":
+            lines.append(f"{key}: {value}")
+            emitted.add(key)
+    for key in sorted(k for k in fm if k not in emitted and k != "frequency"):
+        value = fm[key]
+        if value != "":
+            lines.append(f"{key}: {value}")
+    lines.extend(["---", ""])
+    return "\n".join(lines) + body
+
+
+def migrate_moments_to_cadence(tada_dir: Path) -> int:
+    """Rewrite accepted moment/state schema from frequency to cadence."""
+    if not tada_dir.exists():
+        return 0
+    changed = 0
+    for md in list_task_files(tada_dir):
+        text = md.read_text()
+        parsed = _split_frontmatter(text)
+        if parsed is None:
+            continue
+        fm, body = parsed
+        if "cadence" in fm:
+            continue
+        frequency = fm.pop("frequency", "")
+        if fm.get("trigger"):
+            fm["cadence"] = "trigger"
+            fm.pop("schedule", None)
+        elif frequency in ("daily", "weekly"):
+            fm["cadence"] = "scheduled"
+        else:
+            fm["cadence"] = "once"
+            fm.pop("schedule", None)
+        md.write_text(_render_frontmatter(fm, body))
+        changed += 1
+
+    state_path = tada_dir / "results" / "_moment_state.json"
+    if state_path.exists():
+        import json
+
+        state = json.loads(state_path.read_text())
+        state_changed = False
+        for entry in state.values():
+            if "frequency_override" in entry:
+                old = entry.pop("frequency_override")
+                entry["cadence_override"] = "scheduled" if old in ("daily", "weekly") else old
+                state_changed = True
+        if state_changed:
+            state_path.write_text(json.dumps(state, indent=2))
+            changed += 1
+    return changed
 
 
 def find_task_md(tada_dir: Path, slug: str) -> Path | None:
@@ -58,10 +128,10 @@ def list_active_task_files(tada_dir: Path) -> list[Path]:
 
     "Active" = the slug appears under `logs-tada/results/<slug>/` AND the slug's
     state in `_moment_state.json` does not have `dismissed: true`. Used by
-    discovery/oneoffs/triggers — they should only consider tasks the user has
+    discovery/promotion/triggers — they should only consider tasks the user has
     actually engaged with.
     """
-    from apps.moments.state import load_state
+    from apps.moments.core.state import load_state
 
     if not tada_dir.exists():
         return []
@@ -89,12 +159,12 @@ def snapshot_tada_mtimes(tada_dir: Path) -> dict[str, float]:
 def summarize_tada_tasks(tada_dir: Path) -> str:
     """Render active (executed and not dismissed) tada tasks as a markdown listing.
 
-    Each entry shows topic/slug, title, description, frequency, schedule, and trigger
+    Each entry shows topic/slug, title, description, cadence, schedule, and trigger
     so the discovery agent can decide whether a new candidate would duplicate an
     existing task. Excludes tasks that have never been executed and tasks the user
     dismissed — proposing variants of those would not be useful.
     """
-    from apps.moments.execute import _parse_frontmatter
+    from apps.moments.runtime.execute import _parse_frontmatter
 
     files = list_active_task_files(tada_dir)
     if not files:
@@ -107,12 +177,12 @@ def summarize_tada_tasks(tada_dir: Path) -> str:
         slug = md.stem
         title = fm.get("title", slug)
         description = fm.get("description", "")
-        frequency = fm.get("frequency", "?")
+        cadence = fm.get("cadence", "?")
         schedule = fm.get("schedule", "—")
         trigger = fm.get("trigger") or "—"
         lines.append(
             f"- **{topic}/{slug}** — {title}\n"
             f"  {description}\n"
-            f"  frequency: {frequency} | schedule: {schedule} | trigger: {trigger}"
+            f"  cadence: {cadence} | schedule: {schedule} | trigger: {trigger}"
         )
     return "\n".join(lines)

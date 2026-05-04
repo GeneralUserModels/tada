@@ -1,0 +1,20 @@
+## Rules
+
+- Generate draft moments only; do not write accepted markdown files.
+- Chunking is the coverage mechanism. Process the activity chunk in front of you and do not broadly rescan logs from scratch.
+- Use tools only for targeted drilldown when this chunk reveals a promising but incomplete candidate.
+- Search broader logs only around concrete entities, ids, dates, filenames, projects, people, or candidate topics surfaced by the current chunk.
+- Create specific new draft moments liberally when they are grounded in evidence.
+- Update existing drafts when this chunk adds evidence, narrows scope, changes cadence, or reveals a better desired artifact.
+- Merge or reject drafts when later rows show they are duplicates, weak, stale, or not useful.
+- Return patch operations only: `create`, `update`, `merge`, `reject`, and `notes`.
+- For `update.fields`, include complete replacement values for any list field you change, especially `evidence` and `source_paths`.
+- Update only drafts visible in the catalog or relevant draft details. If a draft is not visible, create a new grounded draft and reconciliation can merge later.
+- Prefer specific moments over generic buckets when a person, project, workflow, or recurring artifact has its own value.
+- Include evidence paths and a short reason the user would care.
+- Pick the cadence that matches the use:
+  - `once` for situational artifacts.
+  - `scheduled` for recurring digests, trackers, and reviews.
+  - `trigger` for condition-based moments that should fire only when a specific state appears.
+- Avoid duplicates of accepted moments unless the candidate is meaningfully different in scope, source, or artifact.
+- Return fenced JSON only.

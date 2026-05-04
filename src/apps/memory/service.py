@@ -11,7 +11,7 @@ from pathlib import Path
 
 from server.feature_flags import is_enabled
 from agent.builder import _ensure_sandbox_async
-from apps.moments.scheduler import is_due
+from apps.moments.runtime.scheduler import is_due
 from server.cost_tracker import init_cost_tracking
 
 logger = logging.getLogger(__name__)

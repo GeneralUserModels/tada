@@ -1,0 +1,10 @@
+## Rules
+
+- Promote only candidates that are clearly useful and executable.
+- Reject vague, generic, duplicative, or weakly evidenced candidates.
+- Prefer a smaller set of high-value accepted moments over a large noisy set.
+- A promoted candidate must have a concrete artifact, specific sources, and a clear user benefit.
+- If a candidate has the same slug as an existing accepted moment, treat it as a proposed update to that moment. Promote it when the new evidence, scope, instructions, or artifact would make the accepted moment better; do not reject it solely because it overlaps.
+- Reject near-duplicates that use a different slug from an accepted moment unless they are meaningfully distinct.
+- Do not call tools. Do not read files, run shell commands, or write accepted markdown. Python will persist promoted moments after parsing your JSON.
+- Return fenced JSON only.

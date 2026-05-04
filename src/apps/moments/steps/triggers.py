@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
 from datetime import datetime
@@ -13,13 +12,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.builder import build_agent
-from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
-from apps.moments.execute import _parse_frontmatter
-from apps.moments.paths import get_topic, list_active_task_files
-from apps.moments.state import set_pending_update
+from apps.moments.runtime.execute import _parse_frontmatter
+from apps.moments.core.paths import get_topic, list_active_task_files, migrate_moments_to_cadence
+from apps.moments.core.state import set_pending_update
 
-_PROMPTS = Path(__file__).parent / "prompts"
+_PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 INSTRUCTION_TEMPLATE = (_PROMPTS / "triggers.txt").read_text()
+TRIGGER_RULES = (_PROMPTS / "rules" / "triggers.txt").read_text()
+SHARED_SOURCES = (_PROMPTS / "shared" / "sources.txt").read_text()
 
 _FIRED_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
 
@@ -44,11 +44,12 @@ def run(
     logs_path = Path(logs_dir).resolve()
     logs_dir = str(logs_path)
     tada_dir = logs_path.parent / "logs-tada"
+    migrate_moments_to_cadence(tada_dir)
 
     triggered: list[tuple[Path, dict]] = []
     for md in list_active_task_files(tada_dir):
         fm = _parse_frontmatter(md.read_text())
-        if fm.get("trigger"):
+        if fm.get("cadence") == "trigger" and fm.get("trigger"):
             triggered.append((md, fm))
 
     if not triggered:
@@ -62,8 +63,13 @@ def run(
     valid_slugs = {md.stem for md, _ in triggered}
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     instruction = (
-        f"Current date and time: **{now}**\n\n"
-        + INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir, triggered_tasks_list=listing)
+        INSTRUCTION_TEMPLATE.format(
+            now=now,
+            logs_dir=logs_dir,
+            triggered_tasks_list=listing,
+            trigger_rules=TRIGGER_RULES,
+            shared_sources=SHARED_SOURCES.format(logs_dir=logs_dir),
+        )
     )
 
     agent, _ = build_agent(
@@ -82,14 +88,3 @@ def run(
         set_pending_update(tada_dir, slug, reason=f"trigger fired {fired_at}")
 
     return result
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate trigger conditions on existing tada tasks")
-    parser.add_argument("logs_dir", help="Path to the logs directory")
-    parser.add_argument("-m", "--model", default=None)
-    args = parser.parse_args()
-    model = args.model or resolve_moments_model()
-
-    result = run(args.logs_dir, model=model, api_key=resolve_moments_api_key())
-    print(result)

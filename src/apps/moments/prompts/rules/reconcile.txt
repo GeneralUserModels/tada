@@ -1,0 +1,10 @@
+## Rules
+
+- Do not call tools. Reconcile only from the accepted-moment summary, feedback/state signals, and draft candidate JSON in the prompt.
+- Reject drafts that duplicate accepted moments without adding meaningful new scope, evidence, cadence, artifact, or user value.
+- If a draft should update an accepted moment, keep it only when it uses the accepted moment's stable slug and topic; list the routing in `updates`.
+- Allow a draft as a new candidate only when it is meaningfully distinct from accepted moments and other drafts.
+- Preserve high-value new evidence by folding it into the best surviving candidate instead of creating near-duplicates.
+- Prefer stable ids/slugs. Do not create new slugs for updates to existing accepted moments.
+- Return final candidates only. Do not include rejected drafts in `candidates`.
+- Return fenced JSON only.

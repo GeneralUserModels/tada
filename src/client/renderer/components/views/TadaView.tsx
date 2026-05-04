@@ -6,7 +6,8 @@ import { ChatView } from "../ChatView";
 import { FeatureActivityBanner } from "../FeatureActivityBanner";
 import { getServerUrl } from "../../api/client";
 
-const FREQUENCY_OPTIONS = ["daily", "weekly", "once"] as const;
+const CADENCE_OPTIONS = ["scheduled", "once"] as const;
+const REPEAT_OPTIONS = ["daily", "weekly"] as const;
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 
 const UNCATEGORIZED = "uncategorized";
@@ -151,10 +152,16 @@ function parseDay(schedule: string): string {
 }
 
 /** Build a schedule string from parts. time24 is "HH:mm" format. */
-function buildSchedule(frequency: string, time24: string, day: string): string {
+function parseRepeat(schedule: string): string {
+  const lower = schedule.toLowerCase();
+  if (DAYS.some((d) => lower.includes(d.toLowerCase())) || lower.includes("weekly")) return "weekly";
+  return "daily";
+}
+
+function buildSchedule(repeat: string, time24: string, day: string): string {
   const friendly = fromTime24(time24);
-  if (frequency === "weekly") return `${day} at ${friendly}`;
-  return `at ${friendly}`;
+  if (repeat === "weekly") return `${day} at ${friendly}`;
+  return `daily at ${friendly}`;
 }
 
 /** Compute progress percent (0-100) from a run activity, or 0 if unknown. */
@@ -205,7 +212,8 @@ export function TadaView() {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
-  const [editFreq, setEditFreq] = useState("");
+  const [editCadence, setEditCadence] = useState("");
+  const [editRepeat, setEditRepeat] = useState("daily");
   const [editTime, setEditTime] = useState("");
   const [editDay, setEditDay] = useState("Monday");
   const [closedTopics, setClosedTopics] = useState<Set<string>>(new Set());
@@ -345,23 +353,25 @@ export function TadaView() {
 
   const openScheduleEditor = (e: React.MouseEvent, r: MomentResult) => {
     e.stopPropagation();
+    if (effectiveCadence(r) === "trigger") return;
     const sched = r.schedule_override || r.schedule;
     setEditingSlug(r.slug);
-    setEditFreq(r.frequency_override || r.frequency);
+    setEditCadence(effectiveCadence(r));
+    setEditRepeat(parseRepeat(sched));
     setEditTime(toTime24(parseTimeStr(sched)));
     setEditDay(parseDay(sched));
   };
 
   const saveSchedule = async () => {
     if (!editingSlug) return;
-    if (editFreq !== "once" && !editTime) return;
-    const schedule = editFreq === "once" ? "" : buildSchedule(editFreq, editTime, editDay);
-    await editSchedule(editingSlug, editFreq, schedule);
+    if (editCadence === "scheduled" && !editTime) return;
+    const schedule = editCadence === "scheduled" ? buildSchedule(editRepeat, editTime, editDay) : "";
+    await editSchedule(editingSlug, editCadence, schedule);
     setEditingSlug(null);
   };
 
   const displayTime = (r: MomentResult) => parseTimeStr(r.schedule_override || r.schedule);
-  const effectiveFrequency = (r: MomentResult) => r.frequency_override || r.frequency;
+  const effectiveCadence = (r: MomentResult) => r.cadence_override || r.cadence;
 
   // Detail view
   if (selectedSlug && resultUrl) {
@@ -707,11 +717,11 @@ export function TadaView() {
               </h3>
             </div>
             <div className="tada-card-schedule tada-card-schedule--clickable" onClick={(e) => openScheduleEditor(e, r)}>
-              <span className="tada-card-frequency" data-freq={effectiveFrequency(r)}>
+              <span className="tada-card-frequency" data-freq={effectiveCadence(r)}>
                 <span className="tada-card-frequency-dot" aria-hidden="true" />
-                {effectiveFrequency(r)}
+                {effectiveCadence(r)}
               </span>
-              {effectiveFrequency(r) !== "once" && (
+              {effectiveCadence(r) === "scheduled" && (
                 <span className="tada-card-time">{displayTime(r)}</span>
               )}
               <span className="tada-card-date">{timeAgo(r.completed_at)}</span>
@@ -722,16 +732,22 @@ export function TadaView() {
               <div className="tada-schedule-editor" onClick={(e) => e.stopPropagation()}>
                 <div className="tada-schedule-editor-row">
                   <div className="tada-schedule-field">
-                    <span>Frequency</span>
-                    <TadaDropdown value={editFreq} options={FREQUENCY_OPTIONS} onChange={setEditFreq} />
+                    <span>Cadence</span>
+                    <TadaDropdown value={editCadence} options={CADENCE_OPTIONS} onChange={setEditCadence} />
                   </div>
-                  {editFreq === "weekly" && (
+                  {editCadence === "scheduled" && (
+                    <div className="tada-schedule-field">
+                      <span>Repeat</span>
+                      <TadaDropdown value={editRepeat} options={REPEAT_OPTIONS} onChange={setEditRepeat} />
+                    </div>
+                  )}
+                  {editCadence === "scheduled" && editRepeat === "weekly" && (
                     <div className="tada-schedule-field">
                       <span>Day</span>
                       <TadaDropdown value={editDay} options={DAYS} onChange={setEditDay} />
                     </div>
                   )}
-                  {editFreq !== "once" && (
+                  {editCadence === "scheduled" && (
                     <div className="tada-schedule-field">
                       <span>Time</span>
                       <TadaTimePicker value={editTime} onChange={setEditTime} />

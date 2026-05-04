@@ -1,0 +1,8 @@
+## Rules
+
+- Execute the task; do not merely describe how to do it.
+- Use subagents for independent source reads, research threads, and verification.
+- Build a static HTML interface, not a markdown document.
+- Keep final writes inside `{output_dir}/`; use `{logs_dir}/agent/` for scratch work.
+- Copy shared template assets when using a template.
+- Verify JavaScript before finishing.

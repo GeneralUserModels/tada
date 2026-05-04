@@ -10,9 +10,9 @@ import time as _time
 from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 
-from apps.moments.execute import run as execute_moment, _parse_frontmatter as parse_frontmatter
-from apps.moments.paths import list_task_files
-from apps.moments.state import clear_pending_update, load_state
+from apps.moments.runtime.execute import run as execute_moment, _parse_frontmatter as parse_frontmatter
+from apps.moments.core.paths import list_task_files, migrate_moments_to_cadence
+from apps.moments.core.state import clear_pending_update, load_state
 from server.feature_flags import is_enabled
 
 logger = logging.getLogger(__name__)
@@ -38,12 +38,22 @@ def _parse_time(s: str) -> time | None:
     return time(hour, minute)
 
 
-def _next_run_time(schedule: str, frequency: str) -> datetime | None:
+def _schedule_period(schedule: str) -> timedelta | None:
+    schedule_lower = schedule.lower()
+    if any(name in schedule_lower for name in _DOW) or "weekly" in schedule_lower:
+        return timedelta(weeks=1)
+    if schedule_lower.strip():
+        return timedelta(days=1)
+    return None
+
+
+def _next_run_time(schedule: str) -> datetime | None:
     """Compute the next run datetime from a human-readable schedule string."""
     schedule_lower = schedule.lower().strip()
     now = datetime.now()
+    period = _schedule_period(schedule)
 
-    if frequency == "daily":
+    if period == timedelta(days=1):
         time_match = re.search(r"(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)", schedule_lower)
         if not time_match:
             return None
@@ -55,7 +65,7 @@ def _next_run_time(schedule: str, frequency: str) -> datetime | None:
             candidate += timedelta(days=1)
         return candidate
 
-    if frequency == "weekly":
+    if period == timedelta(weeks=1):
         day_name = None
         for name in _DOW:
             if name in schedule_lower:
@@ -100,17 +110,16 @@ def save_run(results_dir: Path, slug: str, started_at: float, completed_at: floa
         f.write("\n")
 
 
-_FREQUENCY_PERIOD = {"daily": timedelta(days=1), "weekly": timedelta(weeks=1)}
-
-
-def is_due(schedule: str, frequency: str, last_run: datetime | None) -> bool:
+def is_due(schedule: str, cadence: str, last_run: datetime | None) -> bool:
     """True if the most recent scheduled occurrence hasn't been completed yet.
 
     Used by pollers that wake every ~minute and need to catch up after the app
     was closed or the machine was asleep at the scheduled time.
     """
-    next_run = _next_run_time(schedule, frequency)
-    period = _FREQUENCY_PERIOD.get(frequency)
+    if cadence != "scheduled":
+        return False
+    next_run = _next_run_time(schedule)
+    period = _schedule_period(schedule)
     if next_run is None or period is None:
         return False
     most_recent_target = next_run - period
@@ -119,19 +128,25 @@ def is_due(schedule: str, frequency: str, last_run: datetime | None) -> bool:
     return last_run < most_recent_target
 
 
-def should_run(slug: str, frequency: str, schedule: str, run_history: dict[str, float]) -> bool:
+def should_run(slug: str, cadence: str, schedule: str, run_history: dict[str, float]) -> bool:
     """Determine if a task should run now based on its schedule and run history."""
     last_run = run_history.get(slug)
     now = datetime.now()
 
-    if frequency == "once":
+    if cadence == "once":
         return last_run is None
 
-    period = _FREQUENCY_PERIOD.get(frequency)
+    if cadence == "trigger":
+        return False
+
+    if cadence != "scheduled":
+        return False
+
+    period = _schedule_period(schedule)
     if period is None:
         return False
 
-    next_run = _next_run_time(schedule, frequency)
+    next_run = _next_run_time(schedule)
     if next_run is None:
         return False
 
@@ -156,7 +171,7 @@ async def _execute_one_moment(
     slug: str,
     fm: dict,
     slug_state: dict,
-    effective_frequency: str,
+    effective_cadence: str,
     effective_schedule: str,
     logs_dir: str,
     results_dir: Path,
@@ -175,7 +190,7 @@ async def _execute_one_moment(
     another's banner.
     """
     output_dir = str(results_dir / slug)
-    freq_override = slug_state.get("frequency_override") or None
+    cadence_override = slug_state.get("cadence_override") or None
     sched_override = slug_state.get("schedule_override") or None
     moment_title = fm.get("title", slug)
     run_msg = f"Running: {moment_title}"
@@ -186,15 +201,15 @@ async def _execute_one_moment(
         started_at = _time.time()
         logger.info(f"Executing moment: {slug}")
         await state.broadcast_activity(
-            activity_key, run_msg, slug=slug, frequency=effective_frequency,
+            activity_key, run_msg, slug=slug, cadence=effective_cadence,
         )
         on_round = state.make_round_callback(
-            activity_key, run_msg, slug=slug, frequency=effective_frequency,
+            activity_key, run_msg, slug=slug, cadence=effective_cadence,
         )
         try:
             success = await asyncio.to_thread(
                 execute_moment, str(md_file), output_dir, logs_dir, model,
-                frequency_override=freq_override, schedule_override=sched_override,
+                cadence_override=cadence_override, schedule_override=sched_override,
                 api_key=api_key,
                 last_run_at=last_run_at,
                 on_round=on_round,
@@ -226,7 +241,7 @@ async def _execute_one_moment(
                 "title": meta.get("title", fm.get("title", slug)),
                 "description": meta.get("description", fm.get("description", "")),
                 "completed_at": true_updated,
-                "frequency": effective_frequency,
+                "cadence": effective_cadence,
                 "schedule": effective_schedule,
             })
             logger.info(f"Moment completed: {slug}")
@@ -266,6 +281,7 @@ async def run_moments_scheduler(state) -> None:
             tada_dir = Path(state.config.tada_dir).resolve()
             if not tada_dir.exists():
                 continue
+            migrate_moments_to_cadence(tada_dir)
 
             results_dir = tada_dir / "results"
             results_dir.mkdir(parents=True, exist_ok=True)
@@ -274,9 +290,9 @@ async def run_moments_scheduler(state) -> None:
 
             for md_file in list_task_files(tada_dir):
                 fm = parse_frontmatter(md_file.read_text())
-                frequency = fm.get("frequency", "")
+                cadence = fm.get("cadence", "")
                 schedule = fm.get("schedule", "")
-                if frequency not in ("daily", "weekly", "once"):
+                if cadence not in ("once", "scheduled", "trigger"):
                     continue
 
                 slug = md_file.stem
@@ -285,16 +301,16 @@ async def run_moments_scheduler(state) -> None:
                 slug_state = moment_state.get(slug, {})
                 if slug_state.get("dismissed"):
                     continue
-                effective_frequency = slug_state.get("frequency_override") or frequency
+                effective_cadence = slug_state.get("cadence_override") or cadence
                 effective_schedule = slug_state.get("schedule_override") or schedule
                 pending = bool(slug_state.get("pending_update"))
-                if not pending and not should_run(slug, effective_frequency, effective_schedule, run_history):
+                if not pending and not should_run(slug, effective_cadence, effective_schedule, run_history):
                     continue
 
                 state.moments_in_flight_slugs.add(slug)
                 task = asyncio.create_task(_execute_one_moment(
                     state, md_file, slug, fm, slug_state,
-                    effective_frequency, effective_schedule,
+                    effective_cadence, effective_schedule,
                     logs_dir, results_dir, tada_dir, model, api_key,
                     run_history.get(slug),
                     subagent_model=subagent_model,

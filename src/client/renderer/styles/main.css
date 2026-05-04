@@ -1882,8 +1882,12 @@ button, input, select, textarea, canvas, a, label,
   opacity: 0.6;
 }
 
-.tada-entry .tada-card-frequency[data-freq="weekly"] .tada-card-frequency-dot {
+.tada-entry .tada-card-frequency[data-freq="scheduled"] .tada-card-frequency-dot {
   background: var(--fern);
+}
+
+.tada-entry .tada-card-frequency[data-freq="trigger"] .tada-card-frequency-dot {
+  background: var(--cream);
 }
 
 .tada-entry .tada-card-time {

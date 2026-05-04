@@ -6,7 +6,7 @@ interface AgentActivity {
   agent: string;
   message: string | null;
   slug?: string | null;
-  frequency?: string | null;
+  cadence?: string | null;
   num_turns?: number | null;
   max_turns?: number | null;
 }
@@ -81,8 +81,9 @@ interface MomentTask {
   slug: string;
   title: string;
   description: string;
-  frequency: string;
+  cadence: string;
   schedule: string;
+  trigger: string;
   confidence: number;
   usefulness: number;
   topic: string;
@@ -93,7 +94,7 @@ interface MomentResult {
   title: string;
   description: string;
   completed_at: string;
-  frequency: string;
+  cadence: string;
   schedule: string;
   topic: string;
   dismissed: boolean;
@@ -102,7 +103,7 @@ interface MomentResult {
   time_spent_ms: number;
   last_viewed: string | null;
   schedule_override: string | null;
-  frequency_override: string | null;
+  cadence_override: string | null;
   thumbs: "up" | "down" | null;
   has_feedback: boolean;
   feedback_incorporated: boolean;

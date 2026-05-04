@@ -9,7 +9,8 @@ Highest-signal first-person sources:
 - `{logs_dir}/../logs-tada/results/*/feedback_*.md`: user feedback on generated moments.
 
 Behavioral and contextual sources:
-- `session_*/labels.jsonl`: screen activity labels; use `start_time` and `text`.
+- `screen/filtered.jsonl`: screen activity stream; use `timestamp`, `text`, `dense_caption`, `source.id`, and screenshot pointers.
+- `screen/labels.jsonl`: detailed screen labels for targeted drilldown from a cited `source.id`.
 - `email/filtered.jsonl`: email subject/from/date/summary.
 - `calendar/filtered.jsonl`: event summary/start/end/location/description.
 - `notifications/filtered.jsonl`: app/subtitle/body/summary.

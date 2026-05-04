@@ -35,16 +35,16 @@ class MemoryIngestTests(unittest.TestCase):
             chat = logs / "chats" / "chat_1" / "conversation.md"
             chat.parent.mkdir(parents=True)
             chat.write_text("**User:** hello\n")
-            session = logs / "session_20250102_000000"
-            session.mkdir()
-            (session / "labels.jsonl").write_text(
-                json.dumps({"start_time": "2025-01-02_00-00-00-000000", "text": "coding"}) + "\n"
+            screen = logs / "screen"
+            screen.mkdir()
+            (screen / "filtered.jsonl").write_text(
+                json.dumps({"timestamp": datetime(2025, 1, 2).timestamp(), "source_name": "screen", "text": "coding"}) + "\n"
             )
 
             incremental = ingest._collect_ingest_inputs(logs, datetime(2025, 1, 1))
             self.assertEqual(incremental.mode, "incremental")
             self.assertIn("chats/chat_1/conversation.md", incremental.new_inputs_list)
-            self.assertIn("session_20250102_000000/labels.jsonl", incremental.new_inputs_list)
+            self.assertIn("screen/filtered.jsonl", incremental.new_inputs_list)
 
             no_new = ingest._collect_ingest_inputs(logs, datetime(2099, 1, 1))
             self.assertEqual(no_new.mode, "no_new_data")
@@ -93,15 +93,24 @@ class MemoryIngestTests(unittest.TestCase):
 ```"""
                 if pass_name == "update":
                     self.assertIn('"likely_pages_to_create"', instruction)
-                    (memory / "project.md").write_text(
-                        "---\ntitle: Project\nconfidence: 0.7\nlast_updated: 2026-05-03\n---\n\nProject page. [c:0.7]\n"
-                    )
-                    return "updated project.md"
+                    return "```json\n" + json.dumps({
+                        "create_pages": [{
+                            "path": "project.md",
+                            "markdown": "---\ntitle: Project\nconfidence: 0.7\nlast_updated: 2026-05-03\n---\n\nProject page. [c:0.7]\n",
+                        }],
+                        "update_pages": [],
+                        "notes": "updated project.md",
+                    }) + "\n```"
                 if pass_name == "finalize":
                     today = datetime.now().strftime("%Y-%m-%d")
-                    (memory / "index.md").write_text("# Memory Index\n\n- Project — project.md\n")
-                    (memory / "log.md").write_text(f"# Memory Log\n\n## {today}\n- Created [[Project]].\n")
-                    return "finalized"
+                    return "```json\n" + json.dumps({
+                        "create_pages": [],
+                        "update_pages": [
+                            {"path": "index.md", "markdown": "# Memory Index\n\n- Project — project.md\n"},
+                            {"path": "log.md", "markdown": f"# Memory Log\n\n## {today}\n- Created Project.\n"},
+                        ],
+                        "notes": "finalized",
+                    }) + "\n```"
                 raise AssertionError(pass_name)
 
             with patch.object(ingest, "_run_agent_pass", side_effect=fake_pass):
@@ -135,9 +144,15 @@ class MemoryIngestTests(unittest.TestCase):
 {"mode":"first_run","sources_to_read":[],"existing_pages_to_read":[],"likely_pages_to_create":["Project"],"likely_pages_to_update":[],"backfill_sources_to_sample":[],"rationale":"test"}
 ```"""
                 if pass_name == "update":
-                    (memory / "project.md").write_text("Project page without frontmatter.\n")
-                    return "updated"
-                return "did not repair index or log"
+                    return "```json\n" + json.dumps({
+                        "create_pages": [{
+                            "path": "project.md",
+                            "markdown": "---\ntitle: Project\nconfidence: 0.7\nlast_updated: 2026-05-03\n---\n\nProject page.\n",
+                        }],
+                        "update_pages": [],
+                        "notes": "updated",
+                    }) + "\n```"
+                return "```json\n" + json.dumps({"create_pages": [], "update_pages": [], "notes": "did not repair index or log"}) + "\n```"
 
             with patch.object(ingest, "_run_agent_pass", side_effect=fake_pass):
                 with self.assertRaises(RuntimeError):
@@ -208,7 +223,6 @@ class MemoryIngestTests(unittest.TestCase):
                 chats=[],
                 audio=[],
                 tada_feedback=[],
-                sessions=[],
                 modified_streams=[],
             )
             prompt = ingest._update_prompt(
@@ -227,8 +241,10 @@ class MemoryIngestTests(unittest.TestCase):
                 },
             )
 
-            self.assertIn("Output content-page changes only.", prompt)
+            self.assertIn("Output content-page operations only.", prompt)
             self.assertIn("Do not update `index.md`, `log.md`, or `schema.md`.", prompt)
+            self.assertIn("Do not call `write_file` or `edit_file`", prompt)
+            self.assertIn('"create_pages"', prompt)
             self.assertIn("## Existing Content Page Metadata", prompt)
             self.assertIn("`project.md` — title: Project", prompt)
             self.assertIn("Preserve source dates exactly.", prompt)
@@ -245,21 +261,20 @@ class MemoryIngestTests(unittest.TestCase):
             logs = Path(d) / "logs"
             memory = logs / "memory"
             ingest._bootstrap_memory(memory)
-            session = logs / "session_20250102_000000"
-            session.mkdir(parents=True)
-            (session / "labels.jsonl").write_text(
-                json.dumps({"text": "Clicked Memex", "start_time": "2025-01-02_00-00-00-000000"}) + "\n"
+            screen = logs / "screen"
+            screen.mkdir(parents=True)
+            (screen / "filtered.jsonl").write_text(
+                json.dumps({"timestamp": datetime(2025, 1, 2).timestamp(), "source_name": "screen", "text": "Clicked Memex"}) + "\n"
             )
             inputs = ingest.IngestInputs(
                 mode="first_run",
                 last_ingest=None,
-                new_inputs_list="- session_20250102_000000/labels.jsonl",
+                new_inputs_list="- screen/filtered.jsonl",
                 active_conversations=[],
                 chats=[],
                 audio=[],
                 tada_feedback=[],
-                sessions=["session_20250102_000000"],
-                modified_streams=[],
+                modified_streams=["screen/filtered.jsonl"],
             )
             prompt = ingest._inventory_prompt("2026-05-03 12:00", str(logs), memory, inputs)
 
@@ -281,12 +296,11 @@ class MemoryIngestTests(unittest.TestCase):
             inputs = ingest.IngestInputs(
                 mode="first_run",
                 last_ingest=None,
-                new_inputs_list="- session_20250102_000000/labels.jsonl",
+                new_inputs_list="- screen/filtered.jsonl",
                 active_conversations=[],
                 chats=[],
                 audio=[],
                 tada_feedback=[],
-                sessions=["session_20250102_000000"],
                 modified_streams=[],
             )
             inventory = {
@@ -316,6 +330,8 @@ class MemoryIngestTests(unittest.TestCase):
             self.assertIn("Do not crawl directories", prompt)
             self.assertIn("Do not list or read content pages just to build `index.md`", prompt)
             self.assertIn("Do not use shell redirection, append operators, heredocs", prompt)
+            self.assertIn("Do not call `write_file` or `edit_file`", prompt)
+            self.assertIn('"update_pages"', prompt)
             self.assertIn("Planning is optional. Keep it compact", prompt)
             self.assertIn("read them together once", prompt)
 

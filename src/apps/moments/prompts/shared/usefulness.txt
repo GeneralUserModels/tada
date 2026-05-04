@@ -1,0 +1,15 @@
+## Usefulness
+
+Optimize for useful artifacts, not generic advice.
+
+Good moments:
+- Produce a concrete interface, report, tracker, digest, list, map, table, research brief, or work product.
+- Are grounded in evidence from logs, memory, conversations, or external context.
+- Save the user time, reduce missed information, clarify a decision, or make recurring work easier.
+- Have a specific audience, topic, source set, and output.
+
+Weak moments:
+- Give broad productivity coaching.
+- Merely summarize the user's life without a clear use.
+- Repeat an existing moment with a different title.
+- Require data that is unlikely to be available.

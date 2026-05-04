@@ -11,7 +11,7 @@ from agent.tools.edit import EditTool
 from agent.tools.terminal import TerminalTool
 
 
-_PROMPTS = Path(__file__).parent / "prompts"
+_PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 REFINE_SYSTEM_PROMPT = (_PROMPTS / "verify_refine_system.txt").read_text()
 REFINE_USER_TEMPLATE = (_PROMPTS / "verify_refine_user.txt").read_text()
 

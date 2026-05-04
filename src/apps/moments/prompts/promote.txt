@@ -1,0 +1,36 @@
+Current date and time: **{now}**
+
+{promote_rules}
+
+{shared_moments}
+
+{shared_usefulness}
+
+## Existing Accepted Moments
+
+{accepted_moments}
+
+## Feedback And State Signals
+
+{feedback_state_summary}
+
+## Candidate Moments
+
+```json
+{candidate_json}
+```
+
+## Task
+
+Choose which candidates should become accepted moments. Do not call tools. Python will write the accepted markdown files, so return only ids/slugs and reasons.
+
+End with a single fenced JSON block. It must be the last thing in your final message.
+
+```json
+{{
+  "promoted": ["candidate-id-or-slug"],
+  "rejected": [
+    {{"id": "candidate-id-or-slug", "reason": "Why it was rejected"}}
+  ]
+}}
+```

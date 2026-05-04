@@ -1,11 +1,6 @@
 Current date and time: **{now}**
 
-Mode: `{mode}`
-Last discovery: **{last_discovery_date}**
-
-{discover_rules}
-
-{shared_sources}
+{reconcile_rules}
 
 {shared_moments}
 
@@ -19,29 +14,23 @@ Last discovery: **{last_discovery_date}**
 
 {feedback_state_summary}
 
-## Current Draft State
+## Draft Candidates From Discovery
 
-{draft_context}
-
-## Activity Chunk Metadata
-
-{chunk_metadata}
-
-## Activity Chunk
-
-{activity_chunk}
+```json
+{draft_candidate_json}
+```
 
 ## Task
 
-You are processing one chronological activity chunk. Use this chunk to create, update, merge, or reject draft moments.
+Reconcile the draft candidates against existing accepted moments and feedback.
 
-Return patch operations only. Python owns the full draft state and will apply your operations deterministically. Do not promote moments and do not write accepted markdown files.
+Return the final candidate list that should be persisted for promotion. Do not promote moments and do not write accepted markdown files.
 
 End with a single fenced JSON block. It must be the last thing in your final message.
 
 ```json
 {{
-  "create": [
+  "candidates": [
     {{
       "id": "stable-candidate-id",
       "slug": "stable-kebab-slug",
@@ -61,26 +50,16 @@ End with a single fenced JSON block. It must be the last thing in your final mes
       "user_value": "Why this helps the user."
     }}
   ],
-  "update": [
+  "updates": [
     {{
-      "id": "existing-draft-id-or-slug",
-      "fields": {{
-        "evidence": ["Full replacement evidence list including old and new evidence"],
-        "confidence": 0.85,
-        "why_now": "Updated reason"
-      }}
+      "candidate_id": "draft-id-routed-as-update",
+      "accepted_slug": "existing-accepted-slug",
+      "reason": "Why this should update the accepted moment instead of becoming a new one."
     }}
   ],
-  "merge": [
+  "rejected": [
     {{
-      "from": "duplicate-draft-id-or-slug",
-      "into": "surviving-draft-id-or-slug",
-      "reason": "Why these drafts are the same underlying moment."
-    }}
-  ],
-  "reject": [
-    {{
-      "id": "rejected-draft-id-or-slug",
+      "id": "rejected-draft-id",
       "reason": "Why it was rejected."
     }}
   ],

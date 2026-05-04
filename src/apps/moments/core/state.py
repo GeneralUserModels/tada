@@ -33,7 +33,7 @@ DEFAULT_SLUG_STATE = {
     "time_spent_ms": 0,
     "last_viewed": None,
     "schedule_override": None,
-    "frequency_override": None,
+    "cadence_override": None,
     "last_feedback_incorporated_at": None,
     "pending_update": False,
     "pending_update_reason": None,

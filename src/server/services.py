@@ -132,8 +132,8 @@ async def start_services(state: ServerState) -> None:
         state.memory_task = asyncio.create_task(run_memory_service(state))
 
     if is_enabled(state.config, "moments") and state.config.moments_enabled:
-        from apps.moments.scheduler import run_moments_scheduler
-        from apps.moments.discovery import run_moments_discovery
+        from apps.moments.runtime.scheduler import run_moments_scheduler
+        from apps.moments.runtime.discovery import run_moments_discovery
         state.moments_scheduler_task = asyncio.create_task(run_moments_scheduler(state))
         state.moments_discovery_task = asyncio.create_task(run_moments_discovery(state))
 

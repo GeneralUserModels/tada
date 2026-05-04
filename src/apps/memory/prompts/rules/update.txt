@@ -1,6 +1,6 @@
 ## Rules
 
-Output content-page changes only. Create or update normal memory wiki pages from the inventory plan.
+Output content-page operations only. Create or update normal memory wiki pages from the inventory plan.
 
 Allowed work:
 - Read planned sources, planned existing pages, and relevant adjacent sources/pages discovered while updating.
@@ -13,11 +13,12 @@ Not allowed:
 - Do not update `index.md`, `log.md`, or `schema.md`.
 - Do not do catalog repair or operations logging.
 - Do not return a new inventory plan.
+- Do not call `write_file` or `edit_file`; return JSON operations only.
 - Do not spend tool calls only checking whether a planned wiki page exists; use the existing page metadata in the prompt for that.
 
 Execution guidance:
 - Planning is useful when it improves coverage. Keep any plan compact. Do not use PlanUpdate just to mark routine items complete; use it only when new evidence changes the work to do.
-- After reading the planned evidence and pages, batch related file writes/edits when practical.
+- After reading the planned evidence and pages, batch related full-page replacements into the JSON response.
 - Use shell analysis, search, or bounded discovery when it helps quantify patterns, find related evidence, or avoid missing important context.
 - Create focused new pages liberally for grounded people, projects, tools, labs, themes, relationships, modules, or patterns.
 - Standalone pages are appropriate even when the entity appears inside a dashboard, profile, or activity screen, as long as the page can state grounded facts with confidence.

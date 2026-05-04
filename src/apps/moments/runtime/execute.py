@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import argparse
 import json
-import os
 import shutil
 import subprocess
 from datetime import datetime, timezone
@@ -15,16 +13,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.builder import build_agent
-from apps.moments.cli_config import resolve_moments_api_key, resolve_moments_model
-from apps.moments.verify_refine import verify_and_refine
+from apps.moments.runtime.verify_refine import verify_and_refine
 
-TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 OUTPUT_FILES = ["index.html", "styles.css", "app.js", "data.js", "base.css", "components.js", "meta.json"]
 
-_PROMPTS = Path(__file__).parent / "prompts"
+_PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 INSTRUCTION_TEMPLATE = (_PROMPTS / "execute.txt").read_text()
 UPDATE_INSTRUCTION_TEMPLATE = (_PROMPTS / "execute_update.txt").read_text()
+SHARED_SOURCES = (_PROMPTS / "shared" / "sources.txt").read_text()
+SHARED_INTERFACE = (_PROMPTS / "shared" / "interface.txt").read_text()
+EXECUTE_RULES = (_PROMPTS / "rules" / "execute.txt").read_text()
+EXECUTE_UPDATE_RULES = (_PROMPTS / "rules" / "execute_update.txt").read_text()
 
 
 
@@ -81,7 +82,7 @@ def run(
     output_dir: str,
     logs_dir: str,
     model: str,
-    frequency_override: str | None = None,
+    cadence_override: str | None = None,
     schedule_override: str | None = None,
     api_key: str | None = None,
     last_run_at: float | None = None,
@@ -103,7 +104,7 @@ def run(
         Path(backup_dir).parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(output_dir, backup_dir)
 
-    effective_frequency = frequency_override or fm.get("frequency", "")
+    effective_cadence = cadence_override or fm.get("cadence", "")
     effective_schedule = schedule_override or fm.get("schedule", "")
 
     # Read user feedback files and state (thumbs, dismissed, etc.)
@@ -138,18 +139,24 @@ def run(
             task_content=task_content,
             output_dir=output_dir,
             logs_dir=logs_dir,
-            frequency=effective_frequency,
+            cadence=effective_cadence,
             schedule=effective_schedule,
             last_run_at=last_run_str,
+            shared_sources=SHARED_SOURCES.format(logs_dir=logs_dir),
+            shared_interface=SHARED_INTERFACE,
+            execute_update_rules=EXECUTE_UPDATE_RULES.format(output_dir=output_dir, logs_dir=logs_dir),
         ) + feedback_section
     else:
         instruction = f"Current date and time: **{now}**\n\n" + INSTRUCTION_TEMPLATE.format(
             task_content=task_content,
             output_dir=output_dir,
             logs_dir=logs_dir,
-            frequency=effective_frequency,
+            cadence=effective_cadence,
             schedule=effective_schedule,
             templates_dir=str(TEMPLATES_DIR),
+            shared_sources=SHARED_SOURCES.format(logs_dir=logs_dir),
+            shared_interface=SHARED_INTERFACE,
+            execute_rules=EXECUTE_RULES.format(output_dir=output_dir, logs_dir=logs_dir),
         )
 
     agent, _ = build_agent(
@@ -167,7 +174,7 @@ def run(
             "title": fm.get("title", Path(task_path).stem),
             "description": fm.get("description", ""),
             "completed_at": datetime.now(timezone.utc).isoformat(),
-            "frequency": effective_frequency,
+            "cadence": effective_cadence,
             "schedule": effective_schedule,
         }, indent=2))
 
@@ -194,7 +201,7 @@ def run(
 
         # Mark any feedback as incorporated
         if feedback_files:
-            from apps.moments.state import load_state, save_state
+            from apps.moments.core.state import load_state, save_state
             tada_dir = Path(output_dir).parent.parent
             all_state = load_state(tada_dir)
             slug = Path(output_dir).name
@@ -212,18 +219,3 @@ def run(
         return True
     _clean_output(output_dir)
     return False
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Execute a moment task")
-    parser.add_argument("task_path", help="Path to the task .md file")
-    parser.add_argument("output_dir", help="Directory to write HTML output")
-    parser.add_argument("logs_dir", help="Path to the logs directory")
-    parser.add_argument("-m", "--model", default=None)
-    parser.add_argument("--api-key", default=None, help="API key (default: from config or $ANTHROPIC_API_KEY)")
-    args = parser.parse_args()
-    model = args.model or resolve_moments_model()
-    api_key = args.api_key or os.environ.get("ANTHROPIC_API_KEY") or resolve_moments_api_key()
-
-    success = run(args.task_path, args.output_dir, args.logs_dir, model=model, api_key=api_key)
-    print("Success" if success else "Failed")

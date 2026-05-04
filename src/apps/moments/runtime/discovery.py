@@ -31,35 +31,23 @@ class _DiscoveryBase:
 
 
 class MomentsDiscovery(_DiscoveryBase):
-    """Discovers recurring automation tasks from activity logs."""
+    """Discovers candidate moments from activity logs."""
 
     def run(self, on_round=None) -> str:
         """Analyze logs and write task files. Blocking."""
-        from apps.moments.discover import run as moments_run
+        from apps.moments.steps.discover import run as moments_run
         return moments_run(
             self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
             subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
         )
 
 
-class OneoffsDiscovery(_DiscoveryBase):
-    """Discovers one-off situational tasks from activity logs."""
-
-    def run(self, on_round=None) -> str:
-        """Analyze logs and write one-off task files. Blocking."""
-        from apps.moments.oneoffs import run as oneoffs_run
-        return oneoffs_run(
-            self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
-            subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
-        )
-
-
 class TaskFilter(_DiscoveryBase):
-    """Filters discovered tasks and copies completable ones to logs-tada/."""
+    """Promotes discovered candidates into logs-tada/."""
 
     def run(self, on_round=None) -> str:
-        """Filter tasks through tada. Blocking."""
-        from apps.moments.filter import run as filter_run
+        """Promote candidate moments through tada. Blocking."""
+        from apps.moments.steps.promote import run as filter_run
         return filter_run(
             self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
             subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
@@ -71,7 +59,7 @@ class TriggersCheck(_DiscoveryBase):
 
     def run(self, on_round=None) -> str:
         """Check triggers and mark fired tasks for re-execution. Blocking."""
-        from apps.moments.triggers import run as triggers_run
+        from apps.moments.steps.triggers import run as triggers_run
         return triggers_run(
             self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
             subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
@@ -95,7 +83,7 @@ async def run_moments_discovery(state) -> None:
     Polling (instead of one long sleep to the next target) catches up after
     laptop sleep/wake and avoids drift if the schedule is edited at runtime.
     """
-    from apps.moments.scheduler import is_due
+    from apps.moments.runtime.scheduler import is_due
 
     logger.info("Moments discovery service started")
 
@@ -115,7 +103,7 @@ async def run_moments_discovery(state) -> None:
                 continue
 
             schedule = getattr(state.config, "moments_discovery_schedule", "daily at 2am")
-            if not is_due(schedule, "daily", _read_last_run(last_run_file)):
+            if not is_due(schedule, "scheduled", _read_last_run(last_run_file)):
                 continue
 
             cfg = state.config
@@ -126,34 +114,22 @@ async def run_moments_discovery(state) -> None:
 
             try:
                 discover_msg = "Discovering Tadas…"
-                # Two parallel agents share the "moments_discovery" banner; we
-                # intentionally don't wire up an on_round callback here because
-                # both agents would broadcast their own progress to the same
-                # key, causing the bar to ping-pong between their counts. The
-                # static set+clear keeps the spinner up without a misleading
-                # progress number.
                 await state.broadcast_activity("moments_discovery", discover_msg)
-                logger.info("Discovery: finding recurring + one-off moments in parallel")
-                results = await asyncio.gather(
-                    asyncio.to_thread(MomentsDiscovery(logs_dir, model, api_key, subagent_model, subagent_api_key).run),
-                    asyncio.to_thread(OneoffsDiscovery(logs_dir, model, api_key, subagent_model, subagent_api_key).run),
-                    return_exceptions=True,
-                )
-                recurring_ok = not isinstance(results[0], Exception)
-                oneoffs_ok = not isinstance(results[1], Exception)
-                if not recurring_ok:
-                    logger.exception("Recurring discovery failed", exc_info=results[0])
-                if not oneoffs_ok:
-                    logger.exception("One-offs discovery failed", exc_info=results[1])
-
-                if not (recurring_ok or oneoffs_ok):
-                    logger.warning("Both discovery stages failed; skipping filter and last_run update")
+                discover_cb = state.make_round_callback("moments_discovery", discover_msg)
+                logger.info("Discovery: finding candidate moments")
+                try:
+                    await asyncio.to_thread(
+                        MomentsDiscovery(logs_dir, model, api_key, subagent_model, subagent_api_key).run,
+                        on_round=discover_cb,
+                    )
+                except Exception:
+                    logger.exception("Discovery failed; skipping promotion and triggers")
                     continue
 
-                filter_msg = "Filtering Tadas…"
+                filter_msg = "Promoting Tadas…"
                 await state.broadcast_activity("moments_discovery", filter_msg)
                 filter_cb = state.make_round_callback("moments_discovery", filter_msg)
-                logger.info("Discovery: filtering tasks")
+                logger.info("Discovery: promoting candidates")
                 await asyncio.to_thread(
                     TaskFilter(logs_dir, model, api_key, subagent_model, subagent_api_key).run,
                     on_round=filter_cb,
@@ -179,54 +155,3 @@ async def run_moments_discovery(state) -> None:
         except Exception:
             logger.exception("Moments discovery error")
             await asyncio.sleep(300)
-
-
-def main():
-    """Run the full discovery pipeline once: discover moments, oneoffs, then filter."""
-    import argparse
-    import os
-
-    parser = argparse.ArgumentParser(description="Run moments discovery pipeline")
-    parser.add_argument("--logs-dir", default=os.getenv("TADA_LOG_DIR", "./logs"),
-                        help="Path to logs directory (default: $TADA_LOG_DIR or ./logs)")
-    parser.add_argument("--model", default=os.getenv("TADA_AGENT_MODEL", "anthropic/claude-sonnet-4-20250514"),
-                        help="Model to use for discovery")
-    parser.add_argument("--api-key", default=os.getenv("ANTHROPIC_API_KEY", ""),
-                        help="API key (default: $ANTHROPIC_API_KEY)")
-    args = parser.parse_args()
-
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-
-    logs_dir = str(Path(args.logs_dir).resolve())
-    api_key = args.api_key or None
-
-    async def _run_pipeline() -> None:
-        logger.info("Discovery: finding recurring + one-off moments in parallel in %s", logs_dir)
-        results = await asyncio.gather(
-            asyncio.to_thread(MomentsDiscovery(logs_dir, args.model, api_key).run),
-            asyncio.to_thread(OneoffsDiscovery(logs_dir, args.model, api_key).run),
-            return_exceptions=True,
-        )
-        recurring_ok = not isinstance(results[0], Exception)
-        oneoffs_ok = not isinstance(results[1], Exception)
-        if not recurring_ok:
-            logger.exception("Recurring discovery failed", exc_info=results[0])
-        if not oneoffs_ok:
-            logger.exception("One-offs discovery failed", exc_info=results[1])
-        if not (recurring_ok or oneoffs_ok):
-            logger.warning("Both discovery stages failed; skipping filter")
-            return
-
-        logger.info("Discovery: filtering tasks")
-        await asyncio.to_thread(TaskFilter(logs_dir, args.model, api_key).run)
-
-        logger.info("Discovery: evaluating triggers")
-        await asyncio.to_thread(TriggersCheck(logs_dir, args.model, api_key).run)
-
-        logger.info("Discovery pipeline complete")
-
-    asyncio.run(_run_pipeline())
-
-
-if __name__ == "__main__":
-    main()

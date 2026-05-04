@@ -16,7 +16,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.builder import build_agent
-from apps.moments._incremental import read_checkpoint, write_checkpoint, sessions_with_new_content
+from apps.common.activity_streams import DEFAULT_FILTERED_STREAM_SOURCES
+from apps.common.structured_ops import StructuredOpsError, extract_json_object, require_list, require_string, safe_rel_path
+from apps.moments.core.incremental import read_checkpoint, write_checkpoint
 
 
 _PROMPTS = Path(__file__).parent / "prompts"
@@ -30,12 +32,7 @@ UPDATE_TEMPLATE = (_PROMPTS / "update.txt").read_text()
 FINALIZE_TEMPLATE = (_PROMPTS / "finalize.txt").read_text()
 SCHEMA_TEMPLATE = (_PROMPTS / "schema.md").read_text()
 
-NON_SESSION_SOURCES = [
-    "email/filtered.jsonl",
-    "calendar/filtered.jsonl",
-    "notifications/filtered.jsonl",
-    "filesys/filtered.jsonl",
-]
+FILTERED_STREAM_SOURCES = DEFAULT_FILTERED_STREAM_SOURCES
 
 SPECIAL_MEMORY_FILES = {"index.md", "log.md", "schema.md"}
 INVENTORY_KEYS = {
@@ -63,16 +60,15 @@ class IngestInputs:
     chats: list[Path]
     audio: list[Path]
     tada_feedback: list[Path]
-    sessions: list[str]
     modified_streams: list[str]
 
 
 def _modified_sources(logs_dir: str, since: datetime | None) -> list[str]:
     """Return non-session source files modified after *since*."""
     if since is None:
-        return [s for s in NON_SESSION_SOURCES if (Path(logs_dir) / s).exists()]
+        return [s for s in FILTERED_STREAM_SOURCES if (Path(logs_dir) / s).exists()]
     result = []
-    for src in NON_SESSION_SOURCES:
+    for src in FILTERED_STREAM_SOURCES:
         p = Path(logs_dir) / src
         if p.exists() and datetime.fromtimestamp(p.stat().st_mtime) > since:
             result.append(src)
@@ -143,7 +139,6 @@ def _collect_ingest_inputs(logs_path: Path, last_ingest: datetime | None) -> Ing
     new_chats = _new_files_in(logs_path / "chats", "conversation.md", last_ingest)
     new_audio = _new_files_in(logs_path / "audio", "*.md", last_ingest)
     new_tada_feedback = _new_files_in(tada_results, "feedback_*.md", last_ingest)
-    new_sessions = sessions_with_new_content(logs_dir, last_ingest)
     modified_streams = _modified_sources(logs_dir, last_ingest)
 
     rel = lambda f: os.path.relpath(f, logs_path)
@@ -152,8 +147,7 @@ def _collect_ingest_inputs(logs_path: Path, last_ingest: datetime | None) -> Ing
         _section("Chats with assistant", new_chats, rel),
         _section("Audio transcripts", new_audio, rel),
         _section("Tada moment feedback", new_tada_feedback, rel),
-        _section("Sessions with new screen activity", new_sessions, lambda s: f"{s}/labels.jsonl"),
-        _section("Modified streams", modified_streams, str),
+        _section("Modified filtered streams", modified_streams, str),
     ]
     new_inputs_list = "\n\n".join(s for s in sections if s)
     if last_ingest is None:
@@ -171,7 +165,6 @@ def _collect_ingest_inputs(logs_path: Path, last_ingest: datetime | None) -> Ing
         chats=new_chats,
         audio=new_audio,
         tada_feedback=new_tada_feedback,
-        sessions=new_sessions,
         modified_streams=modified_streams,
     )
 
@@ -268,7 +261,6 @@ def _changed_input_preview(logs_path: Path, inputs: IngestInputs) -> str:
     paths.extend(inputs.chats)
     paths.extend(inputs.audio)
     paths.extend(inputs.tada_feedback)
-    paths.extend(logs_path / session / "labels.jsonl" for session in inputs.sessions)
     paths.extend(logs_path / stream for stream in inputs.modified_streams)
 
     seen: set[Path] = set()
@@ -413,6 +405,64 @@ def _parse_inventory(result: str, expected_mode: str) -> dict[str, Any]:
     return payload
 
 
+def _validate_markdown_for_write(path: Path, memory_dir: Path, markdown: str, allow_special: bool) -> None:
+    try:
+        rel = path.relative_to(memory_dir)
+    except ValueError as exc:
+        raise ValueError(f"Memory op path escapes memory dir: {path}") from exc
+    if any(part.startswith(".") for part in rel.parts):
+        raise ValueError(f"Memory op path cannot be hidden: {rel}")
+    is_special = str(rel) in SPECIAL_MEMORY_FILES
+    if is_special and not allow_special:
+        raise ValueError(f"Memory op cannot modify special file in this pass: {rel}")
+    if not is_special and not _has_frontmatter_text(markdown):
+        raise ValueError(f"Memory content page must include YAML frontmatter: {rel}")
+
+
+def _has_frontmatter_text(text: str) -> bool:
+    return text.startswith("---\n") and "\n---\n" in text[4:]
+
+
+def _parse_page_ops(result: str, memory_dir: Path, allow_special: bool) -> tuple[dict[str, list[dict[str, str]]], str]:
+    try:
+        payload = extract_json_object(result)
+    except StructuredOpsError as exc:
+        raise ValueError(str(exc)) from exc
+    ops: dict[str, list[dict[str, str]]] = {"create_pages": [], "update_pages": []}
+    for op_name in ops:
+        for item in require_list(payload, op_name):
+            if not isinstance(item, dict):
+                raise ValueError(f"{op_name} entries must be objects")
+            rel = require_string(item, "path")
+            markdown = require_string(item, "markdown")
+            path = safe_rel_path(memory_dir, rel, suffix=".md")
+            _validate_markdown_for_write(path, memory_dir, markdown, allow_special=allow_special)
+            ops[op_name].append({"path": str(path.relative_to(memory_dir)), "markdown": markdown})
+    notes = payload.get("notes", "")
+    if notes is None:
+        notes = ""
+    if not isinstance(notes, str):
+        raise ValueError("Page operation notes must be a string")
+    return ops, notes.strip()
+
+
+def _apply_page_ops(memory_dir: Path, ops: dict[str, list[dict[str, str]]]) -> list[str]:
+    changed: list[str] = []
+    for item in ops.get("create_pages", []):
+        path = safe_rel_path(memory_dir, item["path"], suffix=".md")
+        if path.exists():
+            raise ValueError(f"create_pages cannot overwrite existing file: {item['path']}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(item["markdown"])
+        changed.append(str(path.relative_to(memory_dir)))
+    for item in ops.get("update_pages", []):
+        path = safe_rel_path(memory_dir, item["path"], suffix=".md")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(item["markdown"])
+        changed.append(str(path.relative_to(memory_dir)))
+    return sorted(set(changed))
+
+
 def _base_prompt_context(now: str, logs_dir: str, memory_dir: Path) -> dict[str, str]:
     return {
         "now": now,
@@ -537,8 +587,10 @@ def run(
         subagent_model,
         subagent_api_key,
     )
+    update_ops, update_notes = _parse_page_ops(update_result, memory_dir, allow_special=False)
+    update_changed = _apply_page_ops(memory_dir, update_ops)
     after_update_mtimes = {str(p.relative_to(memory_dir)): p.stat().st_mtime for p in _all_memory_markdown(memory_dir)}
-    changed = sorted(rel for rel, mtime in after_update_mtimes.items() if before_mtimes.get(rel) != mtime)
+    changed = sorted(set(update_changed) | {rel for rel, mtime in after_update_mtimes.items() if before_mtimes.get(rel) != mtime})
     today = datetime.now().strftime("%Y-%m-%d")
     validation_issues = _validate_wiki(memory_dir, today)
 
@@ -552,27 +604,35 @@ def run(
         subagent_model,
         subagent_api_key,
     )
+    finalize_ops, finalize_notes = _parse_page_ops(finalize_result, memory_dir, allow_special=True)
+    _apply_page_ops(memory_dir, finalize_ops)
 
     final_issues = _validate_wiki(memory_dir, today)
     if final_issues:
         raise RuntimeError(f"Memory ingest validation failed: {_format_json(final_issues)}")
 
     write_checkpoint(checkpoint_path)
+    update_notes_text = f"\nNotes: {update_notes}" if update_notes else ""
+    finalize_notes_text = f"\nNotes: {finalize_notes}" if finalize_notes else ""
 
     return (
         "## Inventory\n\n"
         f"{inventory_result}\n\n"
         "## Update\n\n"
         f"{update_result}\n\n"
+        f"Applied update page ops: {', '.join(changed) or '(none)'}"
+        f"{update_notes_text}\n\n"
         "## Finalize\n\n"
-        f"{finalize_result}"
+        f"{finalize_result}\n\n"
+        f"Applied finalize page ops."
+        f"{finalize_notes_text}"
     )
 
 
 if __name__ == "__main__":
     import logging
 
-    from apps.moments.cli_config import resolve_memory_api_key, resolve_memory_model
+    from server.config import CONFIG_PATH
     from server.cost_tracker import init_cost_tracking
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -585,8 +645,13 @@ if __name__ == "__main__":
 
     tracker = init_cost_tracking()
 
-    model = args.model or resolve_memory_model()
-    api_key = args.api_key or resolve_memory_api_key()
+    config = json.loads(CONFIG_PATH.read_text())
+    model = args.model or config.get("memory_agent_model") or config["moments_agent_model"]
+    api_key = args.api_key or (
+        config.get("memory_agent_api_key")
+        or config.get("agent_api_key")
+        or config.get("default_llm_api_key")
+    )
 
     result = run(args.logs_dir, model=model, api_key=api_key)
     print(result)

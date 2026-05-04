@@ -1,0 +1,7 @@
+## Rules
+
+- Preserve the existing interface structure unless a targeted fix is needed.
+- Refresh data and content with information newer than the previous run.
+- Exclude items the user already saw in the last successful output.
+- Keep final writes inside `{output_dir}/`; use `{logs_dir}/agent/` for scratch work.
+- Verify JavaScript before finishing.

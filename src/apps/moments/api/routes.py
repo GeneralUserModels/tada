@@ -15,11 +15,11 @@ from pydantic import BaseModel
 import asyncio
 import time as _time
 
-from apps.moments.execute import _parse_frontmatter as parse_frontmatter
-from apps.moments.execute import run as execute_moment
-from apps.moments.paths import find_task_md, get_topic, list_task_files
-from apps.moments.scheduler import save_run, load_run_history
-from apps.moments.state import (
+from apps.moments.runtime.execute import _parse_frontmatter as parse_frontmatter
+from apps.moments.runtime.execute import run as execute_moment
+from apps.moments.core.paths import find_task_md, get_topic, list_task_files, migrate_moments_to_cadence
+from apps.moments.runtime.scheduler import save_run, load_run_history
+from apps.moments.core.state import (
     load_state,
     save_state,
     DEFAULT_SLUG_STATE,
@@ -38,7 +38,7 @@ class MomentStateUpdate(BaseModel):
 
 
 class ScheduleUpdate(BaseModel):
-    frequency: str
+    cadence: str
     schedule: str
 
 
@@ -52,22 +52,24 @@ def _get_tada_dir(request: Request) -> Path:
 
 @router.get("/tasks")
 async def list_tasks(request: Request):
-    """List all scheduled tasks from logs-tada/<topic>/*.md (daily/weekly/once only)."""
+    """List all accepted moments from logs-tada/<topic>/*.md."""
     tada_dir = _get_tada_dir(request)
     if not tada_dir.exists():
         return []
+    migrate_moments_to_cadence(tada_dir)
     tasks = []
     for md_file in list_task_files(tada_dir):
         fm = parse_frontmatter(md_file.read_text())
-        frequency = fm.get("frequency", "")
-        if frequency not in ("daily", "weekly", "once"):
+        cadence = fm.get("cadence", "")
+        if cadence not in ("once", "scheduled", "trigger"):
             continue
         tasks.append({
             "slug": md_file.stem,
             "title": fm.get("title", md_file.stem),
             "description": fm.get("description", ""),
-            "frequency": frequency,
+            "cadence": cadence,
             "schedule": fm.get("schedule", ""),
+            "trigger": fm.get("trigger", ""),
             "confidence": float(fm.get("confidence", 0)),
             "usefulness": int(fm.get("usefulness", 0)),
             "topic": get_topic(md_file, tada_dir),
@@ -79,6 +81,7 @@ async def list_tasks(request: Request):
 async def list_results(request: Request, include_dismissed: bool = False):
     """List completed moment results, sorted by most recent first."""
     tada_dir = _get_tada_dir(request)
+    migrate_moments_to_cadence(tada_dir)
     results_dir = tada_dir / "results"
     if not results_dir.exists():
         return []
@@ -88,6 +91,9 @@ async def list_results(request: Request, include_dismissed: bool = False):
     # without re-globbing per slug.
     slug_topics: dict[str, str] = {
         md.stem: get_topic(md, tada_dir) for md in list_task_files(tada_dir)
+    }
+    slug_frontmatter: dict[str, dict] = {
+        md.stem: parse_frontmatter(md.read_text()) for md in list_task_files(tada_dir)
     }
     results = []
     for meta_path in results_dir.glob("*/meta.json"):
@@ -129,8 +135,8 @@ async def list_results(request: Request, include_dismissed: bool = False):
             "title": meta.get("title", slug),
             "description": meta.get("description", ""),
             "completed_at": completed_at,
-            "frequency": meta.get("frequency", ""),
-            "schedule": meta.get("schedule", ""),
+            "cadence": meta.get("cadence") or slug_frontmatter.get(slug, {}).get("cadence", ""),
+            "schedule": meta.get("schedule") or slug_frontmatter.get(slug, {}).get("schedule", ""),
             "topic": slug_topics.get(slug, ""),
             "has_feedback": has_feedback,
             "feedback_incorporated": feedback_incorporated,
@@ -189,14 +195,15 @@ async def update_moment_state(slug: str, body: MomentStateUpdate, request: Reque
 
 @router.put("/{slug}/schedule")
 async def update_moment_schedule(slug: str, body: ScheduleUpdate, request: Request):
-    """Update the schedule/frequency overrides for a moment."""
-    if body.frequency not in ("daily", "weekly", "once"):
-        return JSONResponse({"error": "frequency must be daily, weekly, or once"}, status_code=400)
+    """Update cadence/schedule overrides for a moment."""
+    if body.cadence not in ("once", "scheduled", "trigger"):
+        return JSONResponse({"error": "cadence must be once, scheduled, or trigger"}, status_code=400)
 
     tada_dir = _get_tada_dir(request)
+    migrate_moments_to_cadence(tada_dir)
     all_state = load_state(tada_dir)
     entry = {**DEFAULT_SLUG_STATE, **all_state.get(slug, {})}
-    entry["frequency_override"] = body.frequency
+    entry["cadence_override"] = body.cadence
     entry["schedule_override"] = body.schedule
     all_state[slug] = entry
     save_state(tada_dir, all_state)
@@ -235,6 +242,7 @@ async def rerun_moment(slug: str, request: Request):
     """Trigger an immediate re-execution of a moment."""
     state = request.app.state.server
     tada_dir = _get_tada_dir(request)
+    migrate_moments_to_cadence(tada_dir)
     task_path = find_task_md(tada_dir, slug)
 
     if task_path is None:
@@ -263,7 +271,7 @@ async def rerun_moment(slug: str, request: Request):
     fm = parse_frontmatter(task_path.read_text())
     all_state = load_state(tada_dir)
     slug_state = all_state.get(slug, {})
-    freq_override = slug_state.get("frequency_override") or None
+    cadence_override = slug_state.get("cadence_override") or None
     sched_override = slug_state.get("schedule_override") or None
     run_history = load_run_history(results_dir)
 
@@ -282,18 +290,18 @@ async def rerun_moment(slug: str, request: Request):
 
                 moment_title = fm.get("title", slug)
                 run_msg = f"Running: {moment_title}"
-                effective_frequency = freq_override or fm.get("frequency", "")
+                effective_cadence = cadence_override or fm.get("cadence", "")
                 activity_key = f"moment_run:{slug}"
                 await state.broadcast_activity(
-                    activity_key, run_msg, slug=slug, frequency=effective_frequency,
+                    activity_key, run_msg, slug=slug, cadence=effective_cadence,
                 )
                 on_round = state.make_round_callback(
-                    activity_key, run_msg, slug=slug, frequency=effective_frequency,
+                    activity_key, run_msg, slug=slug, cadence=effective_cadence,
                 )
                 try:
                     success = await asyncio.to_thread(
                         execute_moment, str(task_path), output_dir, logs_dir, model,
-                        frequency_override=freq_override, schedule_override=sched_override,
+                        cadence_override=cadence_override, schedule_override=sched_override,
                         api_key=api_key,
                         last_run_at=run_history.get(slug),
                         on_round=on_round,
@@ -324,7 +332,7 @@ async def rerun_moment(slug: str, request: Request):
                         "title": meta.get("title", fm.get("title", slug)),
                         "description": meta.get("description", fm.get("description", "")),
                         "completed_at": true_updated,
-                        "frequency": effective_frequency,
+                        "cadence": effective_cadence,
                         "schedule": effective_schedule,
                     })
                     logger.info(f"Moment re-executed: {slug}")
@@ -340,7 +348,7 @@ async def rerun_moment(slug: str, request: Request):
 
 # ── Feedback ──────────────────────────────────────────────────
 
-FEEDBACK_SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "feedback.txt").read_text()
+FEEDBACK_SYSTEM_PROMPT = (Path(__file__).resolve().parent.parent / "prompts" / "feedback.txt").read_text()
 
 
 def _read_moment_files(result_dir: Path) -> str:
