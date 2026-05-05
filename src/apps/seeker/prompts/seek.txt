@@ -13,7 +13,7 @@ Check {logs_dir}/active-conversations/ for any existing files:
 Read activity from these files in {logs_dir}/:
 
 **PRIMARY — these are the most important:**
-- session_*/labels.jsonl — the user's actual screen activity. Fields: text, start_time. Read ALL session directories. Ignore raw_events (mouse noise).
+- screen/labels.jsonl — the user's actual screen activity. Fields: text, start_time. Read recent entries or grep narrowly for relevant terms. Ignore raw_events (mouse noise).
 - audio/<YYYY-MM-DD_HH-MM-SS>.md — one markdown transcript per recording session of the user's microphone. Each file has time-range headers (e.g. `## 15:01:02 – 15:03:02`) and bracketed-timestamp transcript lines. This captures what the user says aloud — meetings, voice notes, conversations — and is uniquely revealing of beliefs, intentions, and affect.
 - memory/ — a wiki of markdown pages about the user (people, projects, interests, habits, personality). Read memory/index.md for a catalog. Use this to understand what is already known about the user so your questions go deeper, not wider. Ask about things the wiki is uncertain or silent about.
 - chats/<session_id>/conversation.md — markdown transcripts of the user's prior chats with the Tada assistant (User/Assistant turns). The user's own questions and follow-ups reveal current preoccupations and what they're seeking help with — useful for targeting your follow-up questions.
@@ -27,7 +27,7 @@ Read activity from these files in {logs_dir}/:
 **IGNORE these files — they are internal pipeline data, not user activity:**
 - checkpoints.jsonl, predictions.jsonl, metrics.jsonl, retriever*, raw_events*
 
-Use subagents to read session directories in parallel.
+Use subagents to read large log sources in parallel when useful.
 
 ## Step 3: Curate existing questions, then generate new ones
 

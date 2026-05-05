@@ -74,10 +74,13 @@ class OnlineRecorder(ScreenRecorder):
             super().__init__(*args, **kwargs)
         self.aggregation_queue = Queue(maxsize=queue_maxsize)
 
-        # always redirect session_dir into logs (or custom log_dir)
+        # Always keep raw recorder sessions under the screen connector's area.
+        # Assistant-facing streams stay at logs/screen/{labels,filtered}.jsonl;
+        # these per-run folders contain raw screenshots/events/aggregations.
         base = Path(log_dir) if log_dir else self.DEFAULT_LOG_DIR
+        sessions_base = base / "screen" / "sessions"
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.session_dir = base / f"session_{timestamp}"
+        self.session_dir = sessions_base / f"session_{timestamp}"
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self.save_worker.session_dir = self.session_dir
         self.save_worker.screenshots_dir = self.session_dir / "screenshots"

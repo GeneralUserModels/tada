@@ -40,7 +40,7 @@ Read whatever sources are relevant; the writer cannot read these later.
 - `email/filtered.jsonl`, `calendar/filtered.jsonl`, `notifications/filtered.jsonl`, `filesys/filtered.jsonl` — structured per-source feeds. All share the shape `{timestamp, text (one-line summary), source: {...raw fields...}, source_name}`. Grep `text`; read `source` for raw fields (subject/from/date for email; summary/start/end for calendar; app/title/body for notifications; type/path for filesys).
 - `logs-tada/<slug>.md` — finished "moments" the user has commissioned (research digests, prep docs, comparisons). Dense, human-curated; great for "what have I already researched on X".
 
-Ignore: `checkpoints.jsonl`, `predictions*.jsonl`, `metrics.jsonl`, `retriever*`, `raw_events*`, `recordings/`, `agent/`, `session_*/{events,raw_aggregations}.jsonl` and `session_*/screenshots/`, `*_eval*`, `*.parquet`.
+Ignore: `checkpoints.jsonl`, `predictions*.jsonl`, `metrics.jsonl`, `retriever*`, `raw_events*`, `recordings/`, `agent/`, `screen/sessions/session_*/{input_events,events,raw_aggregations}.jsonl` and `screen/sessions/session_*/screenshots/`, `*_eval*`, `*.parquet`.
 
 ## How questions map to sources
 
