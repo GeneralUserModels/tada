@@ -17,7 +17,7 @@ CONFIG_DEFAULTS_PATH = Path(
 # Default model identifiers — single source of truth for Python.
 DEFAULT_LLM_MODEL = "gemini/gemini-3.1-flash-lite-preview"
 DEFAULT_TINKER_MODEL = "Qwen/Qwen3-VL-30B-A3B-Instruct"
-DEFAULT_AGENT_MODEL = "anthropic/claude-sonnet-4-6"
+DEFAULT_AGENT_MODEL = "gemini/gemini-3-flash-preview"
 
 # Fields exposed via GET/PUT /api/settings (the UI settings panel).
 SETTINGS_API_FIELDS: frozenset[str] = frozenset({

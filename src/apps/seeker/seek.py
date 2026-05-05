@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.builder import build_agent
+from server.config import DEFAULT_AGENT_MODEL
 
 INSTRUCTION_TEMPLATE = (Path(__file__).parent / "prompts" / "seek.txt").read_text()
 
@@ -39,7 +40,7 @@ def run(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze activity logs to generate user-understanding questions")
     parser.add_argument("logs_dir", help="Path to the logs directory")
-    parser.add_argument("-m", "--model", default=os.environ.get("TADA_AGENT_MODEL", "anthropic/claude-sonnet-4-6"))
+    parser.add_argument("-m", "--model", default=os.environ.get("TADA_AGENT_MODEL", DEFAULT_AGENT_MODEL))
     args = parser.parse_args()
 
     result = run(args.logs_dir, model=args.model)

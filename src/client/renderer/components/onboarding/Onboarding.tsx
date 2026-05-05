@@ -13,8 +13,8 @@ import { ChatStep } from "./steps/ChatStep";
 import { TadasStep } from "./steps/TadasStep";
 import { MemexStep } from "./steps/MemexStep";
 import { ModelsKeysStep } from "./steps/ModelsKeysStep";
-import { LLM_MODELS, AGENT_MODELS, TINKER_MODELS } from "../shared/ModelDropdown";
-import { LLM_ROWS, AGENT_ROWS, fanOut } from "../shared/AdvancedLLMSection";
+import { AGENT_MODELS } from "../shared/ModelDropdown";
+import { AGENT_ROWS, fanOut } from "../shared/AdvancedLLMSection";
 import {
   startGoogleSignIn,
   getGoogleUser,
@@ -210,16 +210,13 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
     return () => { cancelled = true; };
   }, [serverReady, visibleSteps]);
 
-  // Model + API key state — defaults sourced from the shared model lists
-  const [model, setModel] = useState(LLM_MODELS[0].value);
+  // Onboarding defaults to a single Gemini key. Advanced per-feature model/key
+  // overrides stay in Settings; the only onboarding override is an optional
+  // separate agent setup for users who want Claude or a different agent key.
   const [agentModel, setAgentModel] = useState(AGENT_MODELS[0].value);
-  const [tinkerModel, setTinkerModel] = useState(TINKER_MODELS[0].value);
   const [labelerKey, setLabelerKey] = useState("");
   const [agentKey, setAgentKey] = useState("");
-  const [tinkerKey, setTinkerKey] = useState("");
-  const [wandbKey, setWandbKey] = useState("");
-  const [tinkerError, setTinkerError] = useState("");
-  const [advancedValues, setAdvancedValues] = useState<Record<string, string>>({});
+  const [useAgentOverride, setUseAgentOverride] = useState(false);
 
   const currentStep = visibleSteps ? visibleSteps[step] : null;
   const currentId = currentStep?.id;
@@ -302,36 +299,30 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
     }
   };
 
-  const validateTinker = (val: string) => {
-    if (val && !val.startsWith("tml-")) {
-      setTinkerError('Tinker keys must start with "tml-"');
-      return false;
-    }
-    setTinkerError("");
-    return true;
-  };
-
   const buildSettings = () => {
-    const advanced: Record<string, string> = {};
-    for (const [k, v] of Object.entries(advancedValues)) {
-      if (v.trim()) advanced[k] = v.trim();
-    }
-    const selectedLlmModel = model || LLM_MODELS[0].value;
     const selectedAgentModel = agentModel || AGENT_MODELS[0].value;
     const trimmedAgentKey = agentKey.trim();
     const trimmedLabelerKey = labelerKey.trim();
     const settings: Record<string, unknown> = {
-      ...fanOut(LLM_ROWS, "modelKey", selectedLlmModel),
-      ...fanOut(AGENT_ROWS, "modelKey", selectedAgentModel),
-      agent_model: selectedAgentModel,
-      model: tinkerModel || undefined,
       default_llm_api_key: trimmedLabelerKey,
-      ...fanOut(LLM_ROWS, "apiKeyKey", trimmedLabelerKey),
-      ...(trimmedAgentKey ? { agent_api_key: trimmedAgentKey, ...fanOut(AGENT_ROWS, "apiKeyKey", trimmedAgentKey) } : {}),
-      ...advanced,
+      label_model_api_key: "",
+      filter_model_api_key: "",
+      reward_llm_api_key: "",
+      tabracadabra_api_key: "",
+      agent_api_key: "",
+      moments_agent_api_key: "",
+      memory_agent_api_key: "",
+      seeker_api_key: "",
+      subagent_api_key: "",
     };
-    if (tinkerKey.trim()) settings.tinker_api_key = tinkerKey.trim();
-    if (wandbKey.trim()) settings.wandb_api_key = wandbKey.trim();
+    if (useAgentOverride) {
+      Object.assign(settings, {
+        ...fanOut(AGENT_ROWS, "modelKey", selectedAgentModel),
+        agent_model: selectedAgentModel,
+        agent_api_key: trimmedAgentKey,
+        ...fanOut(AGENT_ROWS, "apiKeyKey", trimmedAgentKey),
+      });
+    }
     return settings;
   };
 
@@ -533,24 +524,14 @@ export function Onboarding({ serverReady = false }: { serverReady?: boolean }) {
       {currentId === "models_keys" && (
         <ModelsKeysStep
           flag={flag}
-          model={model}
           agentModel={agentModel}
-          tinkerModel={tinkerModel}
           labelerKey={labelerKey}
           agentKey={agentKey}
-          tinkerKey={tinkerKey}
-          wandbKey={wandbKey}
-          tinkerError={tinkerError}
-          advancedValues={advancedValues}
-          setModel={setModel}
+          useAgentOverride={useAgentOverride}
           setAgentModel={setAgentModel}
-          setTinkerModel={setTinkerModel}
           setLabelerKey={setLabelerKey}
           setAgentKey={setAgentKey}
-          setTinkerKey={setTinkerKey}
-          setWandbKey={setWandbKey}
-          setAdvancedValues={setAdvancedValues}
-          validateTinker={validateTinker}
+          setUseAgentOverride={setUseAgentOverride}
           onBack={() => goBack(step)}
           onFinish={() => { saveSettings(); advance(step); }}
         />
