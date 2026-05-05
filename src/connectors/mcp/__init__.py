@@ -36,6 +36,8 @@ class MCPConnector:
         # MCP's stdio_client only inherits a minimal set (HOME, PATH, etc.) by default,
         # so without this, API keys and other env vars set in the server process are lost.
         merged_env = {**os.environ, **(env or {})}
+        merged_env["TADA_PARENT_PID"] = str(os.getpid())
+        merged_env["TADA_PARENT_WATCHDOG"] = "1"
         self._server_params = StdioServerParameters(command=command, args=args, env=merged_env)
         self._tool_name = tool_name
         self._exclude: set[str] = set(exclude_from_serialization or [])
