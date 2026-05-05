@@ -2,35 +2,34 @@
 
 from __future__ import annotations
 
-import json
-import re
 from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
+from pydantic import ValidationError
 
 load_dotenv()
 
 from agent.builder import build_agent
+from apps.common.structured_ops import StructuredOpsError, extract_json_object
 from apps.moments.runtime.execute import _parse_frontmatter
 from apps.moments.core.paths import get_topic, list_active_task_files, migrate_moments_to_cadence
 from apps.moments.core.state import set_pending_update
+from apps.moments.schemas.structured import TriggerPayload
 
 _PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 INSTRUCTION_TEMPLATE = (_PROMPTS / "triggers.txt").read_text()
 TRIGGER_RULES = (_PROMPTS / "rules" / "triggers.txt").read_text()
 SHARED_SOURCES = (_PROMPTS / "shared" / "sources.txt").read_text()
 
-_FIRED_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
-
 
 def _parse_fired_slugs(result: str) -> list[str]:
-    """Extract the LAST fenced ```json``` block and read its `fired` list."""
-    matches = _FIRED_RE.findall(result)
-    if not matches:
+    """Extract and validate the agent's `fired` slug list."""
+    try:
+        payload = TriggerPayload.model_validate(extract_json_object(result))
+    except (StructuredOpsError, ValidationError):
         return []
-    payload = json.loads(matches[-1])
-    return list(payload.get("fired", []))
+    return payload.fired
 
 
 def run(

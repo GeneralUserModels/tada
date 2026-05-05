@@ -31,6 +31,8 @@ _PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 PROMOTE_TEMPLATE = (_PROMPTS / "promote.txt").read_text()
 PROMOTE_RULES = (_PROMPTS / "rules" / "promote.txt").read_text()
 SHARED_MOMENTS = (_PROMPTS / "shared" / "moments.txt").read_text()
+SHARED_EXECUTOR_CAPABILITIES = (_PROMPTS / "shared" / "executor_capabilities.txt").read_text()
+SHARED_QUALITY_BAR = (_PROMPTS / "shared" / "quality_bar.txt").read_text()
 STRUCTURED_OUTPUT_ATTEMPTS = 2
 logger = logging.getLogger(__name__)
 
@@ -117,8 +119,6 @@ def run(
     if last_promotion is not None and datetime.fromtimestamp(candidate_path.stat().st_mtime) <= last_promotion:
         return "no new candidate files to promote"
     candidates = read_candidate_jsonl(candidate_path)
-    if n > 0:
-        candidates = candidates[:n]
     candidates, routed_updates = _route_existing_slug_updates(tada_path, candidates)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -126,25 +126,28 @@ def run(
     instruction = PROMOTE_TEMPLATE.format(
         now=now,
         promote_rules=PROMOTE_RULES,
+        shared_executor_capabilities=SHARED_EXECUTOR_CAPABILITIES,
+        shared_quality_bar=SHARED_QUALITY_BAR,
         shared_moments=SHARED_MOMENTS.format(tada_dir=str(tada_path)),
         accepted_moments=summarize_tada_tasks(tada_path),
         feedback_state_summary=_feedback_state_summary(tada_path),
         candidate_json=candidate_json,
     )
 
-    result, (promoted, _rejected) = _run_promotion_agent_for_valid_json(
+    result, (ranked, _rejected) = _run_promotion_agent_for_valid_json(
         instruction=instruction,
         candidates=candidates,
         model=model,
         api_key=api_key,
         on_round=on_round,
     )
+    promoted = ranked[:n] if n > 0 else ranked
     for candidate in promoted:
         write_accepted_moment(tada_path, candidate)
 
     write_checkpoint(checkpoint_path)
 
-    summary = f"{result}\n\nPromoted {len(promoted)} of {len(candidates)} candidates from {candidate_path}"
+    summary = f"{result}\n\nRanked {len(ranked)} of {len(candidates)} candidates. Promoted top {len(promoted)} from {candidate_path}"
     if routed_updates:
         summary += f"\nRouted {routed_updates} same-slug candidates to existing accepted moment paths."
     return summary

@@ -5,6 +5,3 @@
 - Exclude items the user already saw in the last successful output.
 - Keep final writes inside `{output_dir}/`; use `{logs_dir}/agent/` for scratch work.
 - Verify JavaScript before finishing.
-- You can browse authenticated sites with the user's cookies, run shell/code, do deep research, draft emails/docs, and produce static artifacts.
-- Do not call LLMs at runtime, modify arbitrary files outside the allowed output/scratch locations, or build interactive backends.
-- Every run is one-shot: a daily digest means generate one digest now, not create a daemon or subscription.

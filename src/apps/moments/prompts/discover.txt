@@ -1,9 +1,14 @@
 Current date and time: **{now}**
 
 Mode: `{mode}`
-Last discovery: **{last_discovery_date}**
+Last discovery checkpoint: **{last_discovery_date}**
+Activity window starts after: **{activity_since_date}**
 
 {discover_rules}
+
+{shared_executor_capabilities}
+
+{shared_quality_bar}
 
 {shared_sources}
 
@@ -17,7 +22,7 @@ Last discovery: **{last_discovery_date}**
 
 {feedback_state_summary}
 
-## Current Draft State
+## Draft State For This Chunk
 
 {draft_context}
 
@@ -35,7 +40,7 @@ You are the creative ideation step for one chronological activity chunk. Use thi
 
 Return idea cards only. Do not produce patch operations, do not maintain draft state, do not promote moments, and do not write accepted markdown files. A separate compiler step will convert your ideas into draft candidates.
 
-Favor specific ideas that produce concrete artifacts. It is fine to be creative here, but every idea must cite evidence from the activity chunk or targeted source context.
+It is fine to be creative here, but every idea must cite evidence from the activity chunk or targeted source context.
 
 For `relation_to_existing`, use:
 - `new` for a distinct new idea.

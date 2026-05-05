@@ -40,7 +40,7 @@ def verify_and_refine(
         tools=tools,
         max_rounds=30,
         web_search=True,
-        api_key=api_key,
+        api_key=api_key
     )
 
     message = REFINE_USER_TEMPLATE.format(output_dir=output_dir)

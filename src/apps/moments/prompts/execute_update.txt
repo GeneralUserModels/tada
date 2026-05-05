@@ -2,6 +2,8 @@ You are updating an existing moment interface with fresh data.
 
 {execute_update_rules}
 
+{shared_executor_capabilities}
+
 {shared_sources}
 
 {shared_interface}

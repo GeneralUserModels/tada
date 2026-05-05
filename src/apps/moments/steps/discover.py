@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from dotenv import load_dotenv
@@ -21,11 +24,12 @@ from apps.common.activity_streams import (
     RenderedActivityRow,
     chunk_activity_rows,
     merge_filtered_streams,
+    parse_timestamp,
     render_activity_row,
 )
 from apps.common.structured_completion import structured_completion
 from apps.common.structured_ops import StructuredOpsError, extract_json_object
-from agent.builder import build_agent
+from agent.builder import build_agent, _ensure_sandbox
 from apps.moments.core.candidates import (
     CandidateError,
     MomentCandidate,
@@ -44,6 +48,8 @@ RECONCILE_TEMPLATE = (_PROMPTS / "reconcile.txt").read_text()
 RECONCILE_RULES = (_PROMPTS / "rules" / "reconcile.txt").read_text()
 SHARED_SOURCES = (_PROMPTS / "shared" / "sources.txt").read_text()
 SHARED_MOMENTS = (_PROMPTS / "shared" / "moments.txt").read_text()
+SHARED_EXECUTOR_CAPABILITIES = (_PROMPTS / "shared" / "executor_capabilities.txt").read_text()
+SHARED_QUALITY_BAR = (_PROMPTS / "shared" / "quality_bar.txt").read_text()
 
 FILTERED_STREAM_SOURCES = [
     "screen/filtered.jsonl",
@@ -52,14 +58,20 @@ FILTERED_STREAM_SOURCES = [
     "notifications/filtered.jsonl",
     "filesys/filtered.jsonl",
 ]
-CHUNK_TARGET_CHARS = 50_000
-CHUNK_OVERLAP_CHARS = 7_500
+ESTIMATED_CHARS_PER_TOKEN = 4
+CHUNK_TARGET_TOKENS = 64_000
+CHUNK_OVERLAP_TOKENS = 8_000
+CHUNK_TARGET_CHARS = CHUNK_TARGET_TOKENS * ESTIMATED_CHARS_PER_TOKEN
+CHUNK_OVERLAP_CHARS = CHUNK_OVERLAP_TOKENS * ESTIMATED_CHARS_PER_TOKEN
+DISCOVERY_CHUNK_CONCURRENCY = 4
+INITIAL_DISCOVERY_LOOKBACK = timedelta(days=1)
 VALUE_MAX_CHARS = 700
 DRAFT_CATALOG_MAX_CHARS = 8_000
 DRAFT_DETAILS_MAX_COUNT = 8
 STRUCTURED_OUTPUT_ATTEMPTS = 2
 AGENT_IDEATION_MAX_ROUNDS = 30
 logger = logging.getLogger(__name__)
+_BUILD_AGENT_LOCK = Lock()
 
 _TOKEN_STOPWORDS = {
     "about",
@@ -81,8 +93,67 @@ FilteredRow = ActivityRow
 RenderedRow = RenderedActivityRow
 
 
+@dataclass(frozen=True)
+class ChunkDiscoveryResult:
+    chunk_index: int
+    upserts: list[MomentCandidate]
+    rejected: list[dict[str, str]]
+    removed: list[dict[str, str]]
+    idea_notes: str
+    compiler_notes: str
+
+
 def _merged_filtered_rows(logs_path: Path, since: datetime | None):
     return merge_filtered_streams(logs_path, since, FILTERED_STREAM_SOURCES)
+
+
+def _iter_jsonl_lines_reverse(path: Path, block_size: int = 8192):
+    with path.open("rb") as f:
+        f.seek(0, 2)
+        position = f.tell()
+        buffer = b""
+        while position > 0:
+            read_size = min(block_size, position)
+            position -= read_size
+            f.seek(position)
+            chunk = f.read(read_size)
+            lines = (chunk + buffer).splitlines()
+            if position > 0:
+                buffer = lines[0] if lines else chunk + buffer
+                lines = lines[1:]
+            else:
+                buffer = b""
+            for line in reversed(lines):
+                yield line.decode(errors="replace")
+        if buffer:
+            yield buffer.decode(errors="replace")
+
+
+def _latest_timestamp_in_jsonl(path: Path) -> datetime | None:
+    if not path.exists() or not path.is_file():
+        return None
+    for line in _iter_jsonl_lines_reverse(path):
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        parsed = parse_timestamp(entry.get("timestamp"))
+        if parsed is not None:
+            return parsed[0]
+    return None
+
+
+def _initial_discovery_since(logs_path: Path) -> datetime:
+    latest = None
+    for rel_path in FILTERED_STREAM_SOURCES:
+        ts = _latest_timestamp_in_jsonl(logs_path / rel_path)
+        if ts is not None and (latest is None or ts > latest):
+            latest = ts
+    return (latest or datetime.now()) - INITIAL_DISCOVERY_LOOKBACK
 
 
 def _render_filtered_row(row: FilteredRow) -> str:
@@ -184,10 +255,6 @@ def _draft_context_for_text(drafts: dict[str, MomentCandidate], text: str) -> st
     )
 
 
-def _draft_context(drafts: dict[str, MomentCandidate], chunk: ActivityChunk) -> str:
-    return _draft_context_for_text(drafts, chunk.rendered_text)
-
-
 def _validate_rejected(value: Any) -> list[dict[str, str]]:
     if value is None:
         return []
@@ -246,35 +313,6 @@ def _parse_structured_draft_actions(payload: DraftActionPayload) -> tuple[list[M
     return _parse_draft_action_payload(payload.model_dump(exclude_none=True))
 
 
-def _apply_draft_actions(
-    drafts: dict[str, MomentCandidate],
-    upserts: list[MomentCandidate],
-    remove: list[dict[str, str]],
-) -> list[dict[str, str]]:
-    removed: list[dict[str, str]] = []
-    for item in remove:
-        key = item["id"]
-        matched_id = None
-        for candidate_id, candidate in drafts.items():
-            if key in (candidate_id, candidate.slug):
-                matched_id = candidate_id
-                break
-        if matched_id is None:
-            raise CandidateError(f"unknown draft id or slug for remove: {key}")
-        drafts.pop(matched_id)
-        removed.append({"id": matched_id, "reason": item["reason"]})
-
-    for candidate in upserts:
-        for existing_id, existing in list(drafts.items()):
-            if existing_id == candidate.id:
-                continue
-            if existing.slug == candidate.slug:
-                drafts.pop(existing_id)
-                removed.append({"id": existing_id, "reason": f"replaced by upsert `{candidate.id}` with the same slug"})
-        drafts[candidate.id] = candidate
-    return removed
-
-
 def _parse_reconcile_payload(payload: dict[str, Any]) -> tuple[list[MomentCandidate], list[dict[str, str]], list[dict[str, str]], str]:
     raw_candidates = payload.get("candidates")
     if not isinstance(raw_candidates, list):
@@ -331,16 +369,26 @@ def _run_tool_agent_for_ideation(
     subagent_model: str | None,
     subagent_api_key: str | None,
 ) -> str:
-    agent, _ = build_agent(
-        model,
-        logs_dir,
-        api_key=api_key,
-        subagent_model=subagent_model,
-        subagent_api_key=subagent_api_key,
-    )
+    with _BUILD_AGENT_LOCK:
+        agent, _ = build_agent(
+            model,
+            logs_dir,
+            api_key=api_key,
+            subagent_model=subagent_model,
+            subagent_api_key=subagent_api_key,
+        )
     agent.max_rounds = AGENT_IDEATION_MAX_ROUNDS
     agent.on_round = on_round
-    result = agent.run([{"role": "user", "content": instruction}]).strip()
+    result = agent.run(
+        [{"role": "user", "content": instruction}],
+        final_response_model=IdeaPayload,
+        final_instruction=(
+            "Convert your discovery work into the required structured idea payload. "
+            "Return only ideas that are explicitly supported by the activity context or tool results. "
+            "If there are no grounded ideas, return an empty ideas list and explain why in notes."
+        ),
+        final_metadata_app="moments_ideation",
+    ).strip()
     if not result or result == "(max rounds reached)":
         raise CandidateError("discovery ideation agent did not produce usable notes")
     return result
@@ -348,8 +396,11 @@ def _run_tool_agent_for_ideation(
 
 def _parse_agent_ideas(result: str) -> tuple[list[dict[str, Any]], str]:
     try:
-        payload = extract_json_object(result)
-        parsed = IdeaPayload.model_validate(payload)
+        try:
+            payload = extract_json_object(result)
+            parsed = IdeaPayload.model_validate(payload)
+        except StructuredOpsError:
+            parsed = IdeaPayload.model_validate_json(result)
     except (StructuredOpsError, ValidationError) as exc:
         raise CandidateError(f"discovery ideation agent returned invalid idea JSON: {exc}") from exc
     return _parse_structured_ideas(parsed)
@@ -393,6 +444,7 @@ def _build_instruction(
     now: str,
     mode: str,
     last_discovery: datetime | None,
+    activity_since: datetime | None,
     logs_dir: str,
     tada_dir: Path,
     accepted_moments: str,
@@ -404,9 +456,12 @@ def _build_instruction(
         now=now,
         mode=mode,
         last_discovery_date=last_discovery.strftime("%Y-%m-%d %H:%M") if last_discovery else "never",
+        activity_since_date=activity_since.strftime("%Y-%m-%d %H:%M") if activity_since else "beginning",
         logs_dir=logs_dir,
         tada_dir=str(tada_dir),
         discover_rules=DISCOVER_RULES,
+        shared_executor_capabilities=SHARED_EXECUTOR_CAPABILITIES,
+        shared_quality_bar=SHARED_QUALITY_BAR,
         shared_sources=SHARED_SOURCES.format(logs_dir=logs_dir),
         shared_moments=SHARED_MOMENTS.format(tada_dir=str(tada_dir)),
         accepted_moments=accepted_moments,
@@ -424,7 +479,6 @@ def _build_draft_action_instruction(
     tada_dir: Path,
     accepted_moments: str,
     feedback_state_summary: str,
-    current_drafts: list[MomentCandidate],
     ideas: list[dict[str, Any]],
 ) -> str:
     return DISCOVER_COMPILE_TEMPLATE.format(
@@ -432,12 +486,10 @@ def _build_draft_action_instruction(
         logs_dir=logs_dir,
         tada_dir=str(tada_dir),
         shared_moments=SHARED_MOMENTS.format(tada_dir=str(tada_dir)),
+        shared_executor_capabilities=SHARED_EXECUTOR_CAPABILITIES,
+        shared_quality_bar=SHARED_QUALITY_BAR,
         accepted_moments=accepted_moments,
         feedback_state_summary=feedback_state_summary,
-        draft_context=_draft_context_for_text(
-            {candidate.id: candidate for candidate in current_drafts},
-            json.dumps(ideas, sort_keys=True),
-        ),
         idea_json=json.dumps(ideas, indent=2, sort_keys=True),
     )
 
@@ -456,6 +508,7 @@ def _build_reconcile_instruction(
         logs_dir=logs_dir,
         tada_dir=str(tada_dir),
         reconcile_rules=RECONCILE_RULES,
+        shared_quality_bar=SHARED_QUALITY_BAR,
         shared_moments=SHARED_MOMENTS.format(tada_dir=str(tada_dir)),
         accepted_moments=accepted_moments,
         feedback_state_summary=feedback_state_summary,
@@ -500,6 +553,140 @@ def _reconcile_drafts(
     return parsed
 
 
+def _process_discovery_chunk(
+    *,
+    chunk: ActivityChunk,
+    now: str,
+    mode: str,
+    last_discovery: datetime | None,
+    activity_since: datetime | None,
+    logs_dir: str,
+    tada_dir: Path,
+    accepted_moments: str,
+    feedback_state_summary: str,
+    model: str,
+    api_key: str | None,
+    on_round,
+    subagent_model: str | None,
+    subagent_api_key: str | None,
+) -> ChunkDiscoveryResult:
+    instruction = _build_instruction(
+        now=now,
+        mode=mode,
+        last_discovery=last_discovery,
+        activity_since=activity_since,
+        logs_dir=logs_dir,
+        tada_dir=tada_dir,
+        accepted_moments=accepted_moments,
+        feedback_state_summary=feedback_state_summary,
+        chunk=chunk,
+        draft_context=_draft_context_for_text({}, chunk.rendered_text),
+    )
+    agent_result = _run_tool_agent_for_ideation(
+        instruction=instruction,
+        logs_dir=logs_dir,
+        model=model,
+        api_key=api_key,
+        on_round=on_round,
+        subagent_model=subagent_model,
+        subagent_api_key=subagent_api_key,
+    )
+    ideas, idea_notes = _parse_agent_ideas(agent_result)
+    compiler_instruction = _build_draft_action_instruction(
+        now=now,
+        logs_dir=logs_dir,
+        tada_dir=tada_dir,
+        accepted_moments=accepted_moments,
+        feedback_state_summary=feedback_state_summary,
+        ideas=ideas,
+    )
+    _result, (upserts, chunk_rejected, removed_drafts, compiler_notes) = _run_agent_for_valid_json(
+        instruction=compiler_instruction,
+        model=model,
+        api_key=api_key,
+        on_round=on_round,
+        response_model=DraftActionPayload,
+        metadata_app="moments_draft_compile",
+        parser=_parse_structured_draft_actions,
+    )
+    return ChunkDiscoveryResult(
+        chunk_index=chunk.index,
+        upserts=upserts,
+        rejected=chunk_rejected,
+        removed=removed_drafts,
+        idea_notes=idea_notes,
+        compiler_notes=compiler_notes,
+    )
+
+
+def _process_discovery_chunks(
+    *,
+    chunks: list[ActivityChunk],
+    now: str,
+    mode: str,
+    last_discovery: datetime | None,
+    activity_since: datetime | None,
+    logs_dir: str,
+    tada_dir: Path,
+    accepted_moments: str,
+    feedback_state_summary: str,
+    model: str,
+    api_key: str | None,
+    on_round,
+    subagent_model: str | None,
+    subagent_api_key: str | None,
+) -> list[ChunkDiscoveryResult]:
+    if not chunks:
+        return []
+    max_workers = max(1, min(DISCOVERY_CHUNK_CONCURRENCY, len(chunks)))
+    if max_workers == 1:
+        return [
+            _process_discovery_chunk(
+                chunk=chunk,
+                now=now,
+                mode=mode,
+                last_discovery=last_discovery,
+                activity_since=activity_since,
+                logs_dir=logs_dir,
+                tada_dir=tada_dir,
+                accepted_moments=accepted_moments,
+                feedback_state_summary=feedback_state_summary,
+                model=model,
+                api_key=api_key,
+                on_round=on_round,
+                subagent_model=subagent_model,
+                subagent_api_key=subagent_api_key,
+            )
+            for chunk in chunks
+        ]
+
+    results: list[ChunkDiscoveryResult] = []
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [
+            pool.submit(
+                _process_discovery_chunk,
+                chunk=chunk,
+                now=now,
+                mode=mode,
+                last_discovery=last_discovery,
+                activity_since=activity_since,
+                logs_dir=logs_dir,
+                tada_dir=tada_dir,
+                accepted_moments=accepted_moments,
+                feedback_state_summary=feedback_state_summary,
+                model=model,
+                api_key=api_key,
+                on_round=on_round,
+                subagent_model=subagent_model,
+                subagent_api_key=subagent_api_key,
+            )
+            for chunk in chunks
+        ]
+        for future in as_completed(futures):
+            results.append(future.result())
+    return sorted(results, key=lambda result: result.chunk_index)
+
+
 def run(
     logs_dir: str,
     model: str,
@@ -515,75 +702,57 @@ def run(
     (logs_path / "moments").mkdir(parents=True, exist_ok=True)
     tada_dir.mkdir(parents=True, exist_ok=True)
     migrate_moments_to_cadence(tada_dir)
+    _ensure_sandbox([logs_dir])
 
     last_discovery = read_checkpoint(checkpoint_path)
     mode = "first_run" if last_discovery is None else "incremental"
+    activity_since = last_discovery if last_discovery is not None else _initial_discovery_since(logs_path)
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     accepted_moments = summarize_tada_tasks(tada_dir)
     feedback_summary = _feedback_state_summary(tada_dir)
 
-    drafts: dict[str, MomentCandidate] = {}
+    draft_candidates: list[MomentCandidate] = []
     rejected: list[dict[str, str]] = []
     notes: list[str] = []
-    chunks_processed = 0
 
-    rows = _merged_filtered_rows(logs_path, last_discovery)
-    chunks = _chunk_filtered_rows(rows)
-    for chunk in chunks:
-        chunks_processed += 1
-        instruction = _build_instruction(
-            now=now,
-            mode=mode,
-            last_discovery=last_discovery,
-            logs_dir=logs_dir,
-            tada_dir=tada_dir,
-            accepted_moments=accepted_moments,
-            feedback_state_summary=feedback_summary,
-            chunk=chunk,
-            draft_context=_draft_context(drafts, chunk),
-        )
-        ideas, idea_notes = _parse_agent_ideas(_run_tool_agent_for_ideation(
-            instruction=instruction,
-            logs_dir=logs_dir,
-            model=model,
-            api_key=api_key,
-            on_round=on_round,
-            subagent_model=subagent_model,
-            subagent_api_key=subagent_api_key,
-        ))
-        compiler_instruction = _build_draft_action_instruction(
-            now=now,
-            logs_dir=logs_dir,
-            tada_dir=tada_dir,
-            accepted_moments=accepted_moments,
-            feedback_state_summary=feedback_summary,
-            current_drafts=list(drafts.values()),
-            ideas=ideas,
-        )
-        _result, (upserts, chunk_rejected, removed_drafts, compiler_notes) = _run_agent_for_valid_json(
-            instruction=compiler_instruction,
-            model=model,
-            api_key=api_key,
-            on_round=on_round,
-            response_model=DraftActionPayload,
-            metadata_app="moments_draft_compile",
-            parser=_parse_structured_draft_actions,
-        )
-        rejected.extend(_apply_draft_actions(drafts, upserts, removed_drafts))
-        rejected.extend(chunk_rejected)
+    rows = _merged_filtered_rows(logs_path, activity_since)
+    chunks = list(_chunk_filtered_rows(rows))
+    chunks_processed = len(chunks)
+    chunk_results = _process_discovery_chunks(
+        chunks=chunks,
+        now=now,
+        mode=mode,
+        last_discovery=last_discovery,
+        activity_since=activity_since,
+        logs_dir=logs_dir,
+        tada_dir=tada_dir,
+        accepted_moments=accepted_moments,
+        feedback_state_summary=feedback_summary,
+        model=model,
+        api_key=api_key,
+        on_round=on_round,
+        subagent_model=subagent_model,
+        subagent_api_key=subagent_api_key,
+    )
+    for chunk_result in chunk_results:
+        draft_candidates.extend(chunk_result.upserts)
+        rejected.extend(chunk_result.rejected)
+        rejected.extend(chunk_result.removed)
         chunk_note_parts = []
-        if idea_notes:
-            chunk_note_parts.append(f"ideas: {idea_notes}")
-        if compiler_notes:
-            chunk_note_parts.append(f"compiled: {compiler_notes}")
+        if chunk_result.idea_notes:
+            chunk_note_parts.append(f"ideas: {chunk_result.idea_notes}")
+        if chunk_result.compiler_notes:
+            chunk_note_parts.append(f"compiled: {chunk_result.compiler_notes}")
+        if chunk_result.removed:
+            chunk_note_parts.append(f"ignored {len(chunk_result.removed)} remove ops from parallel chunk compile")
         if chunk_note_parts:
-            notes.append(f"chunk {chunk.index}: " + " | ".join(chunk_note_parts))
+            notes.append(f"chunk {chunk_result.chunk_index}: " + " | ".join(chunk_note_parts))
 
     if chunks_processed == 0:
         mode = "no_new_data"
 
     candidates, reconcile_rejected, updates, reconcile_notes = _reconcile_drafts(
-        drafts=list(drafts.values()),
+        drafts=draft_candidates,
         now=now,
         logs_dir=logs_dir,
         logs_path=logs_path,
@@ -604,8 +773,9 @@ def run(
     write_checkpoint(checkpoint_path)
     summary = [
         f"Mode: {mode}",
+        f"Activity window starts after: {activity_since.strftime('%Y-%m-%d %H:%M')}",
         f"Processed {chunks_processed} discovery chunks.",
-        f"Reconciled {len(drafts)} drafts to {len(candidates)} candidates.",
+        f"Reconciled {len(draft_candidates)} drafts to {len(candidates)} candidates.",
         f"Wrote {len(candidates)} candidates to {candidate_path}",
     ]
     if rejected:

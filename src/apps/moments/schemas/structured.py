@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class StrictModel(BaseModel):
@@ -18,14 +18,8 @@ class CandidatePayload(StrictModel):
     title: str
     description: str
     cadence: Literal["once", "scheduled", "trigger"]
-    schedule: str = Field(
-        min_length=1,
-        description="Use the actual schedule for scheduled cadence; use not_applicable for once or trigger cadence.",
-    )
-    trigger: str = Field(
-        min_length=1,
-        description="Use the actual trigger condition for trigger cadence; use not_applicable for once or scheduled cadence.",
-    )
+    schedule: str = ""
+    trigger: str = ""
     confidence: float
     usefulness: int
     specific_instructions: str
@@ -87,6 +81,16 @@ class PromotionReject(StrictModel):
     reason: str
 
 
+class PromotionRank(StrictModel):
+    id: str
+    score: int
+    reason: str
+
+
 class PromotionPayload(StrictModel):
-    promoted: list[str]
+    ranked: list[PromotionRank]
     rejected: list[PromotionReject] = []
+
+
+class TriggerPayload(StrictModel):
+    fired: list[str] = []

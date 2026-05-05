@@ -1,24 +1,12 @@
 ## Rules
 
 - Think about what the user has done in the past to predict what might be helpful in the future.
-- Prioritize moments that produce concrete artifacts or interfaces, such as reports, trackers, digests, lists, maps, tables, or research briefs.
-- Strong drafts save the user time, reduce missed information, clarify a decision, or make recurring work easier.
 - Use the current draft catalog to avoid repeating the same idea and to mark possible updates, but do not perform draft-state operations yourself.
-
-## Executor Capabilities For Completability Checks
-
-- Accepted moments are later run by an executor agent with tools.
-- The executor can browse authenticated sites with the user's cookies, run shell/code, do deep research, draft emails/docs, and produce static artifacts such as HTML or markdown.
-- The executor cannot call LLMs at runtime, modify arbitrary files, or build interactive backends.
-- Every accepted moment run is one-shot: a daily digest means generate one digest now, not create a daemon or subscription.
-- Prefer tasks that amplify the user: deep information foraging, multi-step workflows, and extra-mile work the user would not do themselves.
-- Deprioritize anything a human could do in a few minutes.
+- **IMPORTANT**: Use tools to help search for additional context if it can help.
 
 ## Tips
 
-- Search broader logs only around concrete entities, ids, dates, filenames, projects, people, or candidate topics surfaced by the current chunk.
 - Create specific new draft moments liberally when they are grounded in evidence.
-- Reject ideas that only give broad productivity coaching, summarize the user's life without a clear use, repeat an existing moment, or require data that is unlikely to be available.
 - If accepted-moment evidence should be refreshed, return an idea with `relation_to_existing: possible_update`.
 - Prefer specific moments over generic buckets when a person, project, workflow, or recurring artifact has its own value.
 - Include evidence paths and a short reason the user would care.
@@ -26,4 +14,3 @@
   - `once` for situational artifacts.
   - `scheduled` for recurring digests, trackers, and reviews.
   - `trigger` for condition-based moments that should fire only when a specific state appears.
-- Avoid duplicates of accepted moments unless the candidate is meaningfully different in scope, source, or artifact.

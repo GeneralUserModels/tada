@@ -2,6 +2,8 @@ You are executing an accepted moment for the user.
 
 {execute_rules}
 
+{shared_executor_capabilities}
+
 {shared_sources}
 
 {shared_interface}

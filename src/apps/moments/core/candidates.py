@@ -166,18 +166,21 @@ def parse_discovery_result(result: str) -> list[MomentCandidate]:
 
 def parse_promotion_result(result: str, candidates: list[MomentCandidate]) -> tuple[list[MomentCandidate], list[dict[str, str]]]:
     payload = extract_json_object(result)
-    promoted_raw = payload.get("promoted")
+    ranked_raw = payload.get("ranked")
     rejected_raw = payload.get("rejected", [])
-    if not isinstance(promoted_raw, list):
-        raise CandidateError("promotion JSON must contain promoted list")
+    if not isinstance(ranked_raw, list):
+        raise CandidateError("promotion JSON must contain ranked list")
     if not isinstance(rejected_raw, list):
         raise CandidateError("promotion JSON rejected must be a list")
     by_key = {c.id: c for c in candidates} | {c.slug: c for c in candidates}
     promoted: list[MomentCandidate] = []
     seen: set[str] = set()
-    for key in promoted_raw:
+    for item in ranked_raw:
+        if not isinstance(item, dict):
+            raise CandidateError("ranked entries must be objects")
+        key = item.get("id")
         if not isinstance(key, str):
-            raise CandidateError("promoted entries must be strings")
+            raise CandidateError("ranked entries must include string ids")
         candidate = by_key.get(key.strip())
         if candidate is None:
             raise CandidateError(f"promoted unknown candidate: {key}")

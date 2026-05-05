@@ -18,12 +18,15 @@ from apps.moments.runtime.verify_refine import verify_and_refine
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 OUTPUT_FILES = ["index.html", "styles.css", "app.js", "data.js", "base.css", "components.js", "meta.json"]
+EXECUTE_WARNING_ROUND = 100
+EXECUTE_MAX_ROUNDS = 150
 
 _PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 INSTRUCTION_TEMPLATE = (_PROMPTS / "execute.txt").read_text()
 UPDATE_INSTRUCTION_TEMPLATE = (_PROMPTS / "execute_update.txt").read_text()
 SHARED_SOURCES = (_PROMPTS / "shared" / "sources.txt").read_text()
 SHARED_INTERFACE = (_PROMPTS / "shared" / "interface.txt").read_text()
+SHARED_EXECUTOR_CAPABILITIES = (_PROMPTS / "shared" / "executor_capabilities.txt").read_text()
 EXECUTE_RULES = (_PROMPTS / "rules" / "execute.txt").read_text()
 EXECUTE_UPDATE_RULES = (_PROMPTS / "rules" / "execute_update.txt").read_text()
 
@@ -144,6 +147,7 @@ def run(
             last_run_at=last_run_str,
             shared_sources=SHARED_SOURCES.format(logs_dir=logs_dir),
             shared_interface=SHARED_INTERFACE,
+            shared_executor_capabilities=SHARED_EXECUTOR_CAPABILITIES,
             execute_update_rules=EXECUTE_UPDATE_RULES.format(output_dir=output_dir, logs_dir=logs_dir),
         ) + feedback_section
     else:
@@ -156,6 +160,7 @@ def run(
             templates_dir=str(TEMPLATES_DIR),
             shared_sources=SHARED_SOURCES.format(logs_dir=logs_dir),
             shared_interface=SHARED_INTERFACE,
+            shared_executor_capabilities=SHARED_EXECUTOR_CAPABILITIES,
             execute_rules=EXECUTE_RULES.format(output_dir=output_dir, logs_dir=logs_dir),
         )
 
@@ -163,7 +168,8 @@ def run(
         model, logs_dir, extra_write_dirs=[output_dir], api_key=api_key,
         subagent_model=subagent_model, subagent_api_key=subagent_api_key,
     )
-    agent.max_rounds = 200
+    agent.max_rounds = EXECUTE_MAX_ROUNDS
+    agent.warning_round = EXECUTE_WARNING_ROUND
     agent.on_round = on_round
     agent.run([{"role": "user", "content": instruction}])
 

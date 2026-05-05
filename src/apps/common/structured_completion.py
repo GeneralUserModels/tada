@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TypeVar
+import json
+from typing import Any, TypeVar
 
 import httpx
 import litellm
@@ -31,6 +32,22 @@ def _litellm_structured_completion(**kwargs):
     return litellm_completion(**kwargs)
 
 
+def _validate_raw_response(raw: Any, response_model: type[T]) -> tuple[str, T] | None:
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = response_model.model_validate_json(raw)
+        except ValidationError:
+            return None
+        return raw, parsed
+    if isinstance(raw, dict):
+        try:
+            parsed = response_model.model_validate(raw)
+        except ValidationError:
+            return None
+        return json.dumps(raw), parsed
+    return None
+
+
 def structured_completion(
     *,
     model: str,
@@ -38,7 +55,7 @@ def structured_completion(
     response_model: type[T],
     api_key: str | None = None,
     metadata_app: str = "structured_completion",
-    max_tokens: int = 16000,
+    max_tokens: int = 32000,
 ) -> tuple[str, T]:
     """Run a single structured LiteLLM call and validate the JSON payload."""
     kwargs = {
@@ -50,19 +67,15 @@ def structured_completion(
     }
     kwargs.update({
         "response_format": response_model,
-        "enable_json_schema_validation": True,
+        "enable_json_schema_validation": False,
     })
     try:
         response = _litellm_structured_completion(**kwargs)
     except litellm.JSONSchemaValidationError as exc:
         raw = getattr(exc, "raw_response", "")
-        if isinstance(raw, str) and raw.strip():
-            try:
-                parsed = response_model.model_validate_json(raw)
-            except ValidationError:
-                pass
-            else:
-                return raw, parsed
+        parsed_raw = _validate_raw_response(raw, response_model)
+        if parsed_raw is not None:
+            return parsed_raw
         raise StructuredOpsError(f"structured output validation failed: {raw}") from exc
     message = response.choices[0].message
     tool_calls = getattr(message, "tool_calls", None) or []
