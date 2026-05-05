@@ -1,0 +1,24 @@
+## Moment Shape
+
+A moment is an accepted automation idea that produces a concrete artifact for the user.
+
+Accepted moments are markdown files under `{tada_dir}/<topic>/<slug>.md` with frontmatter:
+
+```yaml
+---
+title: <title>
+description: <summary>
+cadence: <once|scheduled|trigger>
+schedule: <only for scheduled>
+trigger: <only for trigger>
+confidence: <0.0-1.0>
+usefulness: <1-10>
+---
+```
+
+Cadence semantics:
+- `once`: run once as soon as accepted.
+- `scheduled`: run repeatedly according to `schedule`, such as `daily at 8am` or `Monday at 9am`.
+- `trigger`: run when `trigger` evaluates true.
+
+Use stable kebab-case slugs. Topics are kebab-case folder names. Create specific moments liberally when the entity, workflow, output, or user value is meaningfully distinct.

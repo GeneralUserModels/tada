@@ -11,7 +11,7 @@ from pathlib import Path
 
 from server.feature_flags import is_enabled
 from agent.builder import _ensure_sandbox_async
-from apps.moments.scheduler import is_due
+from apps.moments.runtime.scheduler import is_due
 from server.cost_tracker import init_cost_tracking
 
 logger = logging.getLogger(__name__)
@@ -21,29 +21,53 @@ SCAN_INTERVAL = 60  # seconds between schedule checks
 class MemoryIngest:
     """Ingests new activity logs into the personal knowledge wiki."""
 
-    def __init__(self, logs_dir: str, model: str, api_key: str | None = None):
+    def __init__(
+        self,
+        logs_dir: str,
+        model: str,
+        api_key: str | None = None,
+        subagent_model: str | None = None,
+        subagent_api_key: str | None = None,
+    ):
         self.logs_dir = str(Path(logs_dir).resolve())
         self.model = model
         self.api_key = api_key
+        self.subagent_model = subagent_model
+        self.subagent_api_key = subagent_api_key
 
     def run(self, on_round=None) -> str:
         """Read new logs and update wiki pages. Blocking."""
         from apps.memory.ingest import run as ingest_run
-        return ingest_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
+        return ingest_run(
+            self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
+            subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
+        )
 
 
 class MemoryLint:
     """Audits and maintains wiki health."""
 
-    def __init__(self, logs_dir: str, model: str, api_key: str | None = None):
+    def __init__(
+        self,
+        logs_dir: str,
+        model: str,
+        api_key: str | None = None,
+        subagent_model: str | None = None,
+        subagent_api_key: str | None = None,
+    ):
         self.logs_dir = str(Path(logs_dir).resolve())
         self.model = model
         self.api_key = api_key
+        self.subagent_model = subagent_model
+        self.subagent_api_key = subagent_api_key
 
     def run(self, on_round=None) -> str:
         """Lint the wiki. Blocking."""
         from apps.memory.lint import run as lint_run
-        return lint_run(self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round)
+        return lint_run(
+            self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
+            subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
+        )
 
 
 def _read_last_run(p: Path) -> datetime | None:
@@ -86,13 +110,18 @@ async def run_memory_service(state) -> None:
             cfg = state.config
             model = cfg.memory_agent_model
             api_key = cfg.memory_agent_api_key or cfg.resolve_api_key("agent_api_key")
+            subagent_model = cfg.subagent_model or None
+            subagent_api_key = cfg.resolve_api_key("subagent_api_key") if cfg.subagent_model else None
 
             try:
                 ingest_msg = "Ingesting memories…"
                 await state.broadcast_activity("memory", ingest_msg)
                 on_round = state.make_round_callback("memory", ingest_msg)
                 logger.info("Memory: running ingest")
-                await asyncio.to_thread(MemoryIngest(logs_dir, model, api_key).run, on_round=on_round)
+                await asyncio.to_thread(
+                    MemoryIngest(logs_dir, model, api_key, subagent_model, subagent_api_key).run,
+                    on_round=on_round,
+                )
                 logger.info("Memory: ingest complete")
                 await state.broadcast("memory_updated", {})
 
@@ -103,7 +132,10 @@ async def run_memory_service(state) -> None:
                     await state.broadcast_activity("memory", lint_msg)
                     lint_on_round = state.make_round_callback("memory", lint_msg)
                     logger.info("Memory: running lint (weekly)")
-                    await asyncio.to_thread(MemoryLint(logs_dir, model, api_key).run, on_round=lint_on_round)
+                    await asyncio.to_thread(
+                        MemoryLint(logs_dir, model, api_key, subagent_model, subagent_api_key).run,
+                        on_round=lint_on_round,
+                    )
                     lint_last_run_file.parent.mkdir(parents=True, exist_ok=True)
                     lint_last_run_file.write_text(datetime.now().isoformat())
                     logger.info("Memory: lint complete")

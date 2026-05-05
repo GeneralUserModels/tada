@@ -15,10 +15,20 @@ from agent.builder import build_agent
 INSTRUCTION_TEMPLATE = (Path(__file__).parent / "prompts" / "seek.txt").read_text()
 
 
-def run(logs_dir: str, model: str, api_key: str | None = None, on_round=None) -> str:
+def run(
+    logs_dir: str,
+    model: str,
+    api_key: str | None = None,
+    on_round=None,
+    subagent_model: str | None = None,
+    subagent_api_key: str | None = None,
+) -> str:
     logs_dir = str(Path(logs_dir).resolve())
     Path(logs_dir, "active-conversations").mkdir(parents=True, exist_ok=True)
-    agent, _ = build_agent(model, data_dir=logs_dir, api_key=api_key)
+    agent, _ = build_agent(
+        model, data_dir=logs_dir, api_key=api_key,
+        subagent_model=subagent_model, subagent_api_key=subagent_api_key,
+    )
     agent.max_rounds = 100
     agent.on_round = on_round
     instruction = INSTRUCTION_TEMPLATE.format(logs_dir=logs_dir)

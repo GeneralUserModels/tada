@@ -16,7 +16,7 @@ from user_models.routes import router as user_models_router
 from server.services import start_services, _log_startup_failure
 
 from apps.memory.routes import router as memory_router
-from apps.moments.routes import router as moments_router
+from apps.moments.api.routes import router as moments_router
 from apps.seeker.routes import router as seeker_router
 from apps.chat.routes import router as chat_router
 

@@ -1,0 +1,5 @@
+## Executor Capabilities For Completability Checks
+
+Moment tasks are run by an executor agent with tools. The executor can browse authenticated sites with the user's cookies, run shell/code, do deep research, draft emails/docs, and produce static files. Accepted moment outputs should be static HTML interfaces unless the task explicitly asks for another artifact.
+
+The executor cannot build interactive backends, modify arbitrary files outside allowed locations, or create artifacts that call LLMs at runtime. Every run is one-shot: a daily digest means generate one digest now, not create a daemon or subscription.

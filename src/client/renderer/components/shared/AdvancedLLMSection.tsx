@@ -1,13 +1,14 @@
 import React, { useState } from "react";
 import { ModelDropdown, LLM_MODELS, AGENT_MODELS, ModelOption } from "./ModelDropdown";
 
-export const ADVANCED_ROWS: { label: string; modelKey: string; apiKeyKey: string; group: "llm" | "agent"; options?: ModelOption[] }[] = [
+export const ADVANCED_ROWS: { label: string; modelKey: string; apiKeyKey: string; group: "llm" | "agent" | "subagent"; options?: ModelOption[]; modelPlaceholder?: string; apiKeyPlaceholder?: string }[] = [
   { label: "Reward LM",        modelKey: "reward_llm",            apiKeyKey: "reward_llm_api_key",    group: "llm" },
   { label: "Labeling LM",      modelKey: "label_model",           apiKeyKey: "label_model_api_key",   group: "llm" },
   { label: "Filter LM",        modelKey: "filter_model",          apiKeyKey: "filter_model_api_key",  group: "llm" },
   { label: "Tada LM",          modelKey: "moments_agent_model",   apiKeyKey: "moments_agent_api_key", group: "agent", options: AGENT_MODELS },
   { label: "Memex LM",      modelKey: "memory_agent_model",    apiKeyKey: "memory_agent_api_key",  group: "agent", options: AGENT_MODELS },
   { label: "Seeker LM",        modelKey: "seeker_model",          apiKeyKey: "seeker_api_key",        group: "agent", options: AGENT_MODELS },
+  { label: "Subagent LM",      modelKey: "subagent_model",        apiKeyKey: "subagent_api_key",      group: "subagent", options: AGENT_MODELS, modelPlaceholder: "Use Agent LM", apiKeyPlaceholder: "Use Agent LM key" },
   { label: "Tabracadabra LM",  modelKey: "tabracadabra_model",    apiKeyKey: "tabracadabra_api_key",  group: "llm" },
 ];
 
@@ -90,8 +91,16 @@ export function AdvancedLLMSection({ values, setValues, children }: Props) {
       {open && (
         <div className="advanced-section">
           <p className="advanced-hint">Override model and/or API key per LLM.</p>
-          {ADVANCED_ROWS.map(({ options: rowOptions, ...row }) => (
-            <ModelApiKeyRow key={row.modelKey} {...row} options={rowOptions} values={values} setValues={setValues} modelPlaceholder="Use shared model" />
+          {ADVANCED_ROWS.map(({ options: rowOptions, modelPlaceholder, apiKeyPlaceholder, ...row }) => (
+            <ModelApiKeyRow
+              key={row.modelKey}
+              {...row}
+              options={rowOptions}
+              values={values}
+              setValues={setValues}
+              modelPlaceholder={modelPlaceholder ?? "Use shared model"}
+              apiKeyPlaceholder={apiKeyPlaceholder}
+            />
           ))}
           {children}
         </div>

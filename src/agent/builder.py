@@ -52,7 +52,7 @@ You can read project files and files the user explicitly references. You can wri
 
 You can browse the web using the browser_navigate, browser_read_text, browser_click, browser_type, and browser_screenshot tools. These use the user's Chrome cookies, so you can access authenticated pages (Twitter, Gmail, etc.). Use browser_read_text with a CSS selector to narrow down content on large pages.
 
-When searching files via the terminal, prefer `rg` (ripgrep) over `grep`/`find` — it's installed, respects .gitignore, and is much faster. Use `rg --files | rg <pattern>` to find files by name.
+When searching files via the terminal, prefer `rg` (ripgrep) over `grep`/`find` — it's installed, respects .gitignore, and is much faster. Use `rg --files <specific-dir> | rg <pattern>` to find files by name. Never search from filesystem root or all of `$HOME`; constrain searches to the project, logs, output, or another task-relevant directory.
 
 Plan iteratively:
 - Start by understanding the task, then use PlanWrite to outline your approach and steps.
@@ -112,11 +112,18 @@ def _make_summarizer(model: str, api_key: str | None = None):
 
 def _make_child_agent(model: str, system_prompt: str, api_key: str | None = None):
     def factory(tools):
-        return Agent(model=model, system_prompt=system_prompt, tools=tools, max_rounds=30, web_search=True, api_key=api_key)
+        return Agent(model=model, system_prompt=system_prompt, tools=tools, max_rounds=15, web_search=True, api_key=api_key)
     return factory
 
 
-def build_agent(model: str, data_dir: str, extra_write_dirs: list[str] | None = None, api_key: str | None = None):
+def build_agent(
+    model: str,
+    data_dir: str,
+    extra_write_dirs: list[str] | None = None,
+    api_key: str | None = None,
+    subagent_model: str | None = None,
+    subagent_api_key: str | None = None,
+):
     """Build a fully configured Agent with all tools. Initializes sandbox on first call.
 
     Each agent gets its own PlanState so concurrent runs (e.g. multiple
@@ -141,7 +148,9 @@ def build_agent(model: str, data_dir: str, extra_write_dirs: list[str] | None = 
         else t
         for t in ALL_TOOLS
     ]
-    subagent_tool = SubAgentTool(_make_child_agent(model, system_prompt, api_key), base_tools)
+    child_model = subagent_model or model
+    child_api_key = subagent_api_key or api_key
+    subagent_tool = SubAgentTool(_make_child_agent(child_model, system_prompt, child_api_key), base_tools)
     all_tools = base_tools + [compact_tool, subagent_tool]
     agent = Agent(
         model=model,

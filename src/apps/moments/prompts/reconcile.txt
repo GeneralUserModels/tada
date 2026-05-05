@@ -1,0 +1,29 @@
+Current date and time: **{now}**
+
+{reconcile_rules}
+
+{shared_quality_bar}
+
+{shared_moments}
+
+## Existing Accepted Moments
+
+{accepted_moments}
+
+## Feedback And State Signals
+
+{feedback_state_summary}
+
+## Draft Candidates From Discovery
+
+```json
+{draft_candidate_json}
+```
+
+## Task
+
+Reconcile the draft candidates against each other, existing accepted moments, and feedback. Draft candidates may come from parallel chunks, so merge duplicates and keep the strongest combined evidence.
+
+Return the final candidate list that should be persisted for promotion. Do not promote moments and do not write accepted markdown files.
+
+For candidate cadence fields, use `schedule` only for `scheduled` cadence and `trigger` only for `trigger` cadence.

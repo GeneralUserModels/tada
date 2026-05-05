@@ -1,114 +1,69 @@
-You are analyzing a user's digital activity logs to discover opportunities for an AI agent to augment their workflow.
+Current date and time: **{now}**
 
-The AI agent that will execute these tasks is powerful. It runs in the background and can:
-- Search the web, crawl pages, monitor RSS/arxiv/Twitter feeds, and fetch live data
-- Browse authenticated websites (GitHub, Gmail, Twitter/X, YouTube, Slack, Google Docs, etc.) using the user's Chrome cookies
-- Do deep research and analysis — read papers, compare approaches, synthesize across dozens of sources
-- Read files on the user's machine for context
-- Run shell commands, scripts, git operations, Python/Node code
-- Pre-draft emails, Slack messages, documents, and code for the user to review
-- Generate reports, build slide decks, create static HTML interfaces to present results
-- Spawn subagents to parallelize work across different data sources
-- Maintain persistent context across runs (reading lists, experiment logs, etc.)
+Mode: `{mode}`
+Last discovery checkpoint: **{last_discovery_date}**
+Activity window starts after: **{activity_since_date}**
 
-The agent CANNOT: call LLMs at runtime in its output, modify arbitrary files on the user's machine, or build interactive interfaces that require a backend. It produces static artifacts (HTML, markdown, drafts) that the user reviews.
+{discover_rules}
 
-Your job is to predict WHAT to automate — not HOW. The executing agent is capable and will figure out implementation details on its own.
+{shared_executor_capabilities}
 
-**Prioritize tasks that amplify the user's abilities:**
-- **Information foraging and synthesis** — the agent's biggest advantage is reading, comparing, and synthesizing across many sources faster than any human. Prioritize tasks where the agent does deep research the user wouldn't have time for: surveying a field, comparing tools/approaches, reading papers/docs, compiling structured knowledge.
-- **Complex multi-step workflows** — prefer ambitious tasks that chain together many operations. The agent thrives on tasks that are too tedious or time-consuming for a human to bother with.
-- **"Extra-mile" tasks** — things that would be valuable but the user never gets around to doing. The agent can maintain habits, track things, produce summaries, and do prep work proactively.
+{shared_quality_bar}
 
-Tasks do NOT need to span multiple apps — a single-app workflow that the agent can handle end-to-end is just as valuable.
+{shared_sources}
 
-## Log files to read (all in {logs_dir}/)
+{shared_moments}
 
-**PRIMARY — read these first, they are the most important:**
-- session_*/labels.jsonl — the user's actual screen activity sessions. Fields: text, start_time. Read ALL session directories. Ignore raw_events (mouse noise). This is where the real workflow patterns live. Look for repeated multi-step sequences across sessions.
-- audio/<YYYY-MM-DD_HH-MM-SS>.md — one markdown transcript per recording session of the user's microphone. Each file has time-range headers (e.g. `## 15:01:02 – 15:03:02`) and bracketed-timestamp transcript lines. Read the most recent files for what the user has been saying.
-- memory/ — a wiki of markdown pages about the user (people, projects, interests, habits). Read memory/index.md for a catalog.
-- active-conversations/conversation_*.md — past Seeker conversations where the user directly answered questions about their beliefs, intentions, values, and habits. These reveal what the user cares about, what frustrates them, and what they wish was automated. Use these to prioritize tasks that align with the user's stated goals and preferences.
-- chats/<session_id>/conversation.md — markdown transcripts of the user's prior chats with the Tada assistant (User/Assistant turns). The user's own questions and follow-ups reveal recurring needs — anything they keep asking about is a candidate for an automated recurring task.
+## Existing Accepted Moments
 
-**ALSO IMPORTANT — these can directly motivate tasks, not just provide context:**
-- email/filtered.jsonl — fields: subject, from, date, summary (nested under "source")
-- calendar/filtered.jsonl — fields: summary, start, end, location, description (nested under "source")
-- notifications/filtered.jsonl — fields: app, subtitle, body, summary (nested under "source")
-- filesys/filtered.jsonl — fields: type, path, summary (nested under "source")
+{accepted_moments}
 
-**IGNORE these files — they are internal pipeline data, not user activity:**
-- checkpoints.jsonl, predictions.jsonl, metrics.jsonl, retriever*, raw_events*
+## Feedback And State Signals
 
-Start by reading ALL session_*/labels.jsonl files. These show what the user actually does on their computer. Then read all other sources — emails, calendar, notifications, and filesystem changes can all directly motivate tasks on their own.
+{feedback_state_summary}
 
-## Time awareness
+## Draft State For This Chunk
 
-Consider the current date/time and what's coming up for the user (calendar, emails, etc.) — timely tasks are often more useful than generic ones.
+{draft_context}
 
-## What to look for
+## Activity Chunk Metadata
 
-Look across ALL sources — session logs, emails, calendar, notifications, filesystem. Look for:
-- **Multi-step manual workflows** — the same sequence of 3+ steps repeated across sessions. The task should collapse these into a single command.
-- **Content production drudgery** — manually exporting, downloading, copying, and arranging artifacts. The agent should do the entire pipeline end-to-end.
-- **Information foraging** — searching for, reading, and comparing information from multiple sources. The agent should do the research and present a structured summary.
-- **Communication overhead** — triaging, classifying, and responding to messages. The agent should handle the routine parts, surface what needs human judgment, and prepare drafts the user can review and send in seconds.
-- **Things the user SHOULD do but doesn't** — valuable habits (note-taking, tracking, summarizing) that the user skips. The agent can maintain these proactively.
-- **Learning opportunities** — things the user is working with but could understand more deeply. The agent can teach concepts, explain techniques, surface relevant papers/talks, or create personalized explainers based on what the user is actually doing. Look for tools, libraries, domains, or patterns where a short educational deep-dive would level up the user's work.
+{chunk_metadata}
 
-## Quality bar for tasks
+## Activity Chunk
 
-- A BAD task is vague, single-step, or just a notification. A GOOD task clearly describes what the user needs and why, grounded in observed behavior.
-- Focus on the problem and desired outcome — don't prescribe implementation steps, the executing agent will figure those out.
-- Tasks should be grounded in specific patterns you observed in the logs — not generic productivity advice.
-- Do NOT produce pop-psychology insights like "user has anxiety about builds" or "user switches between deep work and dopamine hits." Focus on concrete workflows the agent can execute.
+{activity_chunk}
 
-## How to work
+## Task
 
-Before diving in, plan your approach using PlanWrite to outline your steps. Use PlanUpdate to track progress as you go.
+You are the creative ideation step for one chronological activity chunk. Use this chunk to propose useful moment ideas.
 
-Use your tools aggressively:
-- **bash**: run Python snippets to compute statistics (most frequent apps, common action sequences, time spent per app, repeated multi-step patterns). Don't just eyeball the logs — quantify.
-- **read_file**: read all log files. Don't skip any session directories.
-- **write_file**: write each task file individually. Do NOT write a Python script to generate task files — use the write_file tool directly for each one so you can craft the content carefully.
-- **subagent**: spawn subagents to analyze different session directories or log sources in parallel. Each subagent can focus on a subset of sessions and report back observations. This is especially useful when there are many session_* directories.
+Return idea cards only. Do not produce patch operations, do not maintain draft state, do not promote moments, and do not write accepted markdown files. A separate compiler step will convert your ideas into draft candidates.
 
-### Workflow
+It is fine to be creative here, but every idea must cite evidence from the activity chunk or targeted source context.
 
-1. **Check existing tasks**: First, check if {logs_dir}/tasks/ already has task files. If so, read them all to understand what's already been proposed. You must not duplicate existing tasks — only add new, different ones.
-2. **Plan**: Use PlanWrite to outline your steps. List all session directories and log files you need to read.
-3. **Read & analyze**: Read ALL log files. Use subagents to parallelize reading across session directories. Run bash commands with Python snippets to compute statistics. Reflect on what you find as you go.
-4. **Write tasks**: Only AFTER completing steps 1-3, write the task files one at a time using write_file. Update your todos as you complete each file.
+For `relation_to_existing`, use:
+- `new` for a distinct new idea.
+- `possible_update` when the idea may refresh an accepted moment or current draft.
+- `duplicate` when it looks covered already.
+- `weak` when it is probably not useful enough.
 
-## Output
-IMPORTANT: All output files MUST be written to {logs_dir}/tasks/. Create this directory first with bash, then use write_file to write each task file there. Write one markdown file per discovered task.
+End with a single fenced JSON block. It must be the last thing in your final message.
 
-Filename: slugified title + .md (e.g., wandb-experiment-monitoring.md)
-
-Each file MUST start with this exact frontmatter format:
----
-title: <title>
-description: <one-line summary>
-frequency: <daily|weekly|once>
-schedule: <specify when e.g. "daily at 8am", "every Monday 9am", "once">
-confidence: <0.0-1.0>
-usefulness: <1-10>
----
-
-After the frontmatter, write the rest of the file in whatever structure best fits the task. Describe what the user needs and the observed behavior that motivates it. Do NOT write implementation instructions for the executing agent — it will figure out how to do it. Every task MUST include a Reasons section citing specific patterns from the logs.
-
-## Rules
-- Every task MUST cite patterns observed in the logs (repeated workflows, app-switching sequences, recurring actions across sessions)
-- Do NOT produce generic productivity advice — every task must be grounded in observed behavior
-- Do NOT produce reactive or trigger-based tasks ("when X happens, do Y"). Every task must be something the agent can execute on a schedule — a batch of work it runs at a fixed time and produces a complete result. No continuous monitoring, no event listeners, no "watch for changes."
-- confidence reflects how strongly the logs support this task existing
-- usefulness reflects how much time/effort/value the automation would provide
-- Do NOT delete any existing files, tasks, or data
-
-### Existing tasks:
-Read ALL existing task files in {logs_dir}/tasks/ — you must not duplicate any existing task. Your job is to find NEW tasks that aren't already covered. If a new session reveals a variation or extension of an existing task, note that in a new task file rather than modifying the existing one.
-
-### User signals on past tadas:
-The user's selected tadas live in {logs_dir}/../logs-tada/. Their results (executed output) are in {logs_dir}/../logs-tada/results/. Read `{logs_dir}/../logs-tada/results/_moment_state.json` to see user signals per tada — thumbs up/down, dismissed, pinned, view counts. Each result directory may also contain `feedback_*.md` files with conversational feedback the user gave about that tada. Use these signals to understand what kinds of tadas the user finds valuable and what they dislike, so you can propose better tasks.
-
-When you are done, run `ls -la {logs_dir}/tasks/` to verify all task files exist and are non-empty. Read a few back to confirm they have real content, not placeholder text.
+```json
+{{
+  "ideas": [
+    {{
+      "title": "Short useful idea title",
+      "topic_hint": "kebab-or-plain-topic",
+      "artifact": "Concrete artifact the executor should produce",
+      "why_useful": "Why this would save time, reduce missed information, clarify a decision, or make recurring work easier",
+      "evidence": ["Evidence item with source path, line/timestamp, or other concrete pointer"],
+      "source_paths": ["relative/source/path"],
+      "cadence_hint": "once",
+      "relation_to_existing": "new"
+    }}
+  ],
+  "notes": "Short note about searches, files, or reasoning that informed the ideas."
+}}
+```

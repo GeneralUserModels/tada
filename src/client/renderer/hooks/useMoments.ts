@@ -114,14 +114,15 @@ export function useMoments() {
     await updateMomentState(slug, { thumbs: newValue });
   }, [results]);
 
-  const editSchedule = useCallback(async (slug: string, frequency: string, schedule: string) => {
-    await updateMomentSchedule(slug, { frequency, schedule });
+  const editSchedule = useCallback(async (slug: string, cadence: string, schedule: string) => {
+    await updateMomentSchedule(slug, { cadence, schedule });
     setResults((prev) =>
       prev.map((r) =>
-        r.slug === slug ? { ...r, frequency_override: frequency, schedule_override: schedule } : r
+        r.slug === slug ? { ...r, cadence_override: cadence, schedule_override: schedule } : r
       )
     );
   }, []);
+
 
   const startView = useCallback((slug: string) => {
     viewStartRef.current = { slug, ts: Date.now() };

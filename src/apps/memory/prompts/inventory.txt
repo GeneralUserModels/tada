@@ -1,0 +1,50 @@
+Current date and time: **{now}**
+
+Mode: `{mode}`
+Last ingest: **{last_ingest_date}**
+
+{inventory_rules}
+
+{shared_wiki_rules}
+
+## Existing Wiki Pages
+
+{existing_pages_list}
+
+## Existing Content Page Metadata
+
+{existing_page_metadata}
+
+## New Inputs Detected
+
+{new_inputs_list}
+
+## Changed Input Preview
+
+{changed_input_preview}
+
+## Task
+
+Plan the ingest using the lists, metadata, previews, and any discovery needed for the current mode.
+
+For first runs, discovery is expected: inspect the available source layout, sample useful source files, and identify the strongest starter pages. For incremental runs, prioritize the new inputs while also naming adjacent existing pages and a small backfill sample when useful. For no-new-data runs, use discovery for enrichment, cross-linking, and coverage checks against the existing wiki.
+
+End with a single fenced JSON block. It must be the last thing in your final message.
+
+```json
+{{
+  "mode": "{mode}",
+  "sources_to_read": ["relative/source/path"],
+  "existing_pages_to_read": ["relative/wiki/page.md"],
+  "likely_pages_to_create": ["Natural Page Title"],
+  "likely_pages_to_update": ["relative/wiki/page.md"],
+  "backfill_sources_to_sample": ["relative/older/source/path"],
+  "rationale": "Brief explanation of the plan."
+}}
+```
+
+Rules:
+- Return only valid JSON in the fenced block.
+- Use paths relative to `{logs_dir}/` for log sources and relative to `{memory_dir}/` for wiki pages.
+- Do not invent files you have not seen unless clearly labeled as likely page titles.
+- Keep discovery purposeful and bounded. Prefer source directories and files relevant to the mode over unrelated filesystem exploration.

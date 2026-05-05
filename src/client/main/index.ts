@@ -109,7 +109,30 @@ function ensureConfigDefaults(): void {
   let cfg: Record<string, unknown> = {};
   try { cfg = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
 
-  const changed = fillMissingDefaults(cfg, defaults);
+  let changed = fillMissingDefaults(cfg, defaults);
+
+  // Deployment-controlled keys: the defaults file is the source of truth, so
+  // on version change overwrite the user's local copy. Anything user-tunable
+  // (e.g. enabled_connectors, model selection, API keys) is intentionally
+  // absent from this list and stays put.
+  const DEPLOYMENT_KEYS = [
+    "supabase_url",
+    "supabase_anon_key",
+    "alpha_supabase_url",
+    "alpha_supabase_anon_key",
+    "feature_flags",
+  ];
+  const currentVersion = app.getVersion();
+  if (cfg._app_version !== currentVersion) {
+    for (const key of DEPLOYMENT_KEYS) {
+      if (key in defaults) {
+        cfg[key] = structuredClone(defaults[key]);
+      }
+    }
+    cfg._app_version = currentVersion;
+    changed = true;
+  }
+
   if (changed) {
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
@@ -495,7 +518,10 @@ app.whenReady().then(async () => {
   }
 
   if (dashboardWindow) {
-    initUpdateChecker(dashboardWindow);
+    initUpdateChecker(dashboardWindow, () => {
+      isQuitting = true;
+      stopServer();
+    });
   }
 
   // Re-send SERVER_READY whenever the SSE (re)connects (covers sleep/wake).

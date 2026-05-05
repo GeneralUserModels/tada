@@ -15,8 +15,14 @@ import { useAppContext } from "../../context/AppContext";
 import { useChat } from "../../context/ChatContext";
 import { FeatureActivityBanner } from "../FeatureActivityBanner";
 import { SimpleDropdown, type DropdownOption } from "../shared/SimpleDropdown";
+import { AGENT_MODELS } from "../shared/ModelDropdown";
 
 const EFFORT_LABELS: Record<string, string> = { low: "Low", medium: "Medium", high: "High" };
+
+const MODEL_LABELS: Record<string, string> = Object.fromEntries(
+  AGENT_MODELS.map((m) => [m.value, m.label]),
+);
+const modelLabel = (m: string) => MODEL_LABELS[m] ?? m.split("/").pop() ?? m;
 
 const WELCOME_SUGGESTIONS = [
   "Catch me up on my week",
@@ -77,6 +83,7 @@ export function ChatAppView() {
     removeSession,
     sendMessage,
     setEffort,
+    setModel,
     abort,
   } = useChat();
 
@@ -214,7 +221,21 @@ export function ChatAppView() {
         <div className="chat-app-header">
           <div className="chat-app-title">{headerTitle}</div>
           <div className="chat-app-header-meta">
-            <span className="chat-badge">{headerModel.split("/").pop()}</span>
+            {options?.models && options.models.length > 1 ? (
+              <SimpleDropdown<string>
+                className="chat-model-dropdown"
+                value={headerModel}
+                options={options.models.map<DropdownOption<string>>((m) => ({
+                  value: m,
+                  label: modelLabel(m),
+                }))}
+                onChange={(v) => setModel(v)}
+                disabled={!!activeId}
+                title={activeId ? "Model can't be changed mid-conversation" : undefined}
+              />
+            ) : (
+              <span className="chat-badge">{modelLabel(headerModel)}</span>
+            )}
             <SimpleDropdown<string>
               className={`chat-effort-dropdown chat-effort-dropdown--${headerEffort}`}
               value={headerEffort}

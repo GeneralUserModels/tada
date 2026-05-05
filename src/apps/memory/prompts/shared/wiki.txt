@@ -1,0 +1,28 @@
+## Wiki Rules
+
+You are maintaining the personal memory wiki at `{memory_dir}/`.
+
+The wiki is both a database of facts and a source of insight. Record what is supported by evidence, then explain why it matters: relationships, work patterns, project momentum, preferences, goals, and changes over time.
+
+Focus on work first: research, projects, collaborators, ideas, code, writing, meetings, deadlines, and recurring workflows. Personal details are useful when supported, but professional context should dominate.
+
+All normal wiki pages must be markdown files with YAML frontmatter:
+
+```yaml
+---
+title: <Page Title>
+confidence: <0.0-1.0>
+last_updated: <YYYY-MM-DD>
+---
+```
+
+Use inline claim confidence scores like `[c:0.7]` on meaningful claims and inferences. Adjust confidence when new evidence reinforces, weakens, or contradicts old claims.
+
+Use `[[wiki-links]]` for cross-references. Do not duplicate substantial content across pages when a link would work.
+
+Special files:
+- `index.md`: master catalog of wiki pages with short descriptions.
+- `log.md`: append-only dated operations log.
+- `schema.md`: conventions document.
+
+Do not delete existing wiki pages. Update, split, or lower confidence instead. If a page has lost topical coherence, split it into focused sub-pages and turn the original into a hub.

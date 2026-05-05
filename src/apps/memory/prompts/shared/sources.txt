@@ -1,0 +1,26 @@
+## Rules
+
+All source data lives under `{logs_dir}/`, except Tada feedback under `{logs_dir}/../logs-tada/results/`.
+
+Highest-signal first-person sources:
+- `active-conversations/conversation_*.md`: direct user answers about beliefs, intentions, values, habits, emotions, relationships, and self-perception.
+- `chats/<session_id>/conversation.md`: prior chats with the assistant. The user's questions and follow-ups reveal preferences, projects, concerns, and recurring needs.
+- `audio/*.md`: voice transcripts from meetings, calls, notes, or conversations.
+- `{logs_dir}/../logs-tada/results/*/feedback_*.md`: user feedback on generated moments.
+
+Behavioral and contextual sources:
+- `screen/filtered.jsonl`: screen activity stream; use `timestamp`, `text`, `dense_caption`, `source.id`, and screenshot pointers.
+- `screen/labels.jsonl`: detailed screen labels for targeted drilldown from a cited `source.id`.
+- `email/filtered.jsonl`: email subject/from/date/summary.
+- `calendar/filtered.jsonl`: event summary/start/end/location/description.
+- `notifications/filtered.jsonl`: app/subtitle/body/summary.
+- `filesys/filtered.jsonl`: filesystem changes and summaries.
+
+Date grounding:
+- Preserve source dates exactly. If a `start_time`, email date, calendar date, or file timestamp says 2026, do not rewrite it as another year.
+- When describing observed activity, derive "as of" dates from the source timestamp, not from memory or general knowledge.
+- Do not introduce a specific year unless it appears in the source data, the current prompt date, or an existing wiki page you read.
+
+Ignore raw event streams and model artifacts unless a prompt specifically asks for them: `raw_events*`, `checkpoints.jsonl`, `predictions.jsonl`, `metrics.jsonl`, `retriever*`.
+
+Use tools to read evidence directly. Use subagents for independent source groups. Use shell analysis for counts, repeated entities, time patterns, and coverage checks. Use browser or web search only to enrich claims that are already grounded in logs.

@@ -1,0 +1,16 @@
+## Rules
+
+- Think about what the user has done in the past to predict what might be helpful in the future.
+- Use the current draft catalog to avoid repeating the same idea and to mark possible updates, but do not perform draft-state operations yourself.
+- **IMPORTANT**: Use tools to help search for additional context if it can help.
+
+## Tips
+
+- Create specific new draft moments liberally when they are grounded in evidence.
+- If accepted-moment evidence should be refreshed, return an idea with `relation_to_existing: possible_update`.
+- Prefer specific moments over generic buckets when a person, project, workflow, or recurring artifact has its own value.
+- Include evidence paths and a short reason the user would care.
+- Pick the cadence that matches the use:
+  - `once` for situational artifacts.
+  - `scheduled` for recurring digests, trackers, and reviews.
+  - `trigger` for condition-based moments that should fire only when a specific state appears.

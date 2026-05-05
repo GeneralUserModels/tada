@@ -589,31 +589,7 @@ body {
   flex-shrink: 0;
 }
 
-/* ── Tada card running state ───────────────────────────────── */
-
-.tada-card--running {
-  border-color: rgba(var(--sage-rgb), 0.2);
-  border-left-color: var(--sage);
-  cursor: default;
-  pointer-events: none;
-  opacity: 0.75;
-  animation: fadeSlideIn 0.25s ease both;
-}
-
-.tada-card--running:hover {
-  transform: none;
-  box-shadow:
-    0 1px 3px var(--glass-shadow),
-    inset 0 1px 0 rgba(255,255,255,0.5);
-}
-
-.tada-card--running .tada-card-actions {
-  display: none;
-}
-
-.tada-card--running .tada-card-schedule {
-  opacity: 0.5;
-}
+/* ── Tada inline running indicator (inside an entry) ─────── */
 
 .tada-card-running {
   margin-top: 8px;
@@ -633,8 +609,8 @@ body {
 .tada-card-running-text {
   flex: 1;
   font-size: 11px;
-  color: var(--sage);
   font-weight: 500;
+  color: var(--sage);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -643,9 +619,10 @@ body {
 .tada-card-running-pct {
   flex-shrink: 0;
   font-size: 11px;
+  font-weight: 600;
   color: var(--sage);
   font-variant-numeric: tabular-nums;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 /* Status bar (top of content) */
@@ -1350,58 +1327,523 @@ button, input, select, textarea, canvas, a, label,
   }
 }
 
-/* ── Tada View ───────────────────────────────────────────── */
+/* ── Tada View ───────────────────────────────────────────────
+   Cards built on .glass-card, system Tahoe sans throughout, sage
+   used as a sparing accent. Topic accordions are quiet hairline
+   chapter dividers; per-entry actions reveal on hover. */
 
-.tada-card {
+/* ── Masthead ─────────────────────────────────────────────── */
+
+.tada-masthead {
+  padding: 4px 2px 18px;
+  margin-bottom: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tada-masthead-lead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tada-masthead-eyebrow {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sage);
+  opacity: 0.85;
+}
+
+.tada-masthead-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tada-masthead-search {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.tada-masthead-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+  transition: color 0.15s;
+}
+
+.tada-masthead-search-input {
+  width: 100%;
+  padding: 10px 36px 10px 38px;
+  font-size: 13.5px;
+  font-family: inherit;
+  font-weight: 450;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  outline: none;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.tada-masthead-search-input::placeholder {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.tada-masthead-search-input:hover {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.tada-masthead-search-input:focus {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(var(--sage-rgb), 0.42);
+  box-shadow: 0 0 0 3px rgba(var(--sage-rgb), 0.10);
+}
+
+.tada-masthead-search:focus-within .tada-masthead-search-icon {
+  color: var(--sage);
+}
+
+.tada-masthead-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(var(--sage-rgb), 0.10);
+  border-radius: 50%;
+  color: var(--text-secondary);
   cursor: pointer;
-  border-left: 2px solid transparent;
-  animation: fadeSlideIn 0.25s ease both;
-  transition: box-shadow 0.2s, border-color 0.2s, transform 0.15s, background 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
-.tada-card:hover {
-  box-shadow:
-    0 2px 6px var(--glass-shadow),
-    0 12px 32px rgba(var(--sage-rgb), 0.08),
-    inset 0 1px 0 rgba(255,255,255,0.6);
-  border-color: rgba(var(--sage-rgb), 0.3);
-  transform: translateY(-1px);
+.tada-masthead-search-clear:hover {
+  background: rgba(var(--sage-rgb), 0.20);
+  color: var(--text);
 }
 
-.tada-card-header {
+.tada-masthead-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--text-tertiary);
+}
+
+.tada-masthead-count--unread {
+  color: var(--sage);
+  font-weight: 600;
+}
+
+.tada-masthead-sep {
+  color: var(--text-tertiary);
+  opacity: 0.45;
+}
+
+.tada-masthead-link {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--text-tertiary);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--glass-border);
+  padding: 5px 13px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.tada-masthead-link:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(var(--sage-rgb), 0.28);
+}
+
+.tada-masthead-link:active {
+  transform: scale(0.97);
+}
+
+.tada-unread-pip {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sage);
+  align-self: center;
+  margin-right: 1px;
+}
+
+/* ── Two-column body (cards + TOC) ────────────────────────── */
+
+.tada-list-body {
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+}
+
+.tada-list-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── TOC sidebar (sticky) ─────────────────────────────────── */
+
+.tada-toc {
+  width: 172px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 4px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--sage-rgb), 0.18) transparent;
+}
+
+.tada-toc::-webkit-scrollbar {
+  width: 4px;
+}
+
+.tada-toc::-webkit-scrollbar-thumb {
+  background: rgba(var(--sage-rgb), 0.18);
+  border-radius: 2px;
+}
+
+.tada-toc-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 4px 12px 10px;
+  opacity: 0.7;
+  font-family: inherit;
+}
+
+.tada-toc-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.12s, color 0.12s;
+  position: relative;
+  color: var(--text-secondary);
+}
+
+.tada-toc-item:hover {
+  background: rgba(var(--sage-rgb), 0.09);
+  color: var(--text);
+}
+
+.tada-toc-item:active {
+  background: rgba(var(--sage-rgb), 0.16);
+}
+
+.tada-toc-item-glyph {
+  flex-shrink: 0;
+  color: var(--sage);
+  align-self: flex-start;
+  margin-top: 5px;
+}
+
+.tada-toc-item-glyph--dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sage);
+}
+
+.tada-toc-item-name {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.45;
+}
+
+.tada-toc-item-count {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+  font-family: inherit;
+  opacity: 0.75;
+}
+
+.tada-toc-item:hover .tada-toc-item-count {
+  opacity: 1;
+}
+
+.tada-toc-item--unread .tada-toc-item-name,
+.tada-toc-item--pinned .tada-toc-item-name {
+  color: var(--sage);
+  font-weight: 500;
+}
+
+.tada-toc-item--unread .tada-toc-item-count,
+.tada-toc-item--pinned .tada-toc-item-count {
+  color: var(--sage);
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.tada-toc-divider {
+  height: 1px;
+  background: rgba(var(--sage-rgb), 0.12);
+  margin: 10px 12px;
+}
+
+/* ── Chapter (topic) section ──────────────────────────────── */
+
+.tada-chapter {
+  display: flex;
+  flex-direction: column;
+  animation: fadeSlideIn 0.3s ease both;
+  margin-top: 28px;
+  scroll-margin-top: 64px;
+}
+
+.tada-chapter:first-of-type { margin-top: 4px; }
+
+/* Collapsed chapters sit much closer together */
+.tada-chapter:not(.open) + .tada-chapter {
+  margin-top: 2px;
+}
+
+.tada-chapter:not(.open) .tada-chapter-header {
+  padding-bottom: 4px;
+}
+
+.tada-chapter-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  width: 100%;
+  padding: 4px 4px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-secondary);
+  font-family: inherit;
+  transition: color 0.15s, padding 0.15s;
 }
 
-.tada-card-title {
-  font-size: 13px;
+.tada-chapter-header:hover { color: var(--text); }
+.tada-chapter-header:hover .tada-chapter-caret { color: var(--sage); }
+
+.tada-chapter-name {
+  font-size: 10.5px;
   font-weight: 650;
-  color: var(--text);
-  letter-spacing: -0.01em;
-  margin: 0;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: inherit;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
 }
 
-.tada-card-schedule {
+.tada-chapter-glyph {
+  flex-shrink: 0;
+  color: var(--sage);
+  align-self: center;
+  position: relative;
+  top: -0.5px;
+}
+
+.tada-chapter-glyph--dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--sage);
+}
+
+.tada-chapter--pinned .tada-chapter-name,
+.tada-chapter--unread .tada-chapter-name {
+  color: var(--sage);
+}
+
+.tada-chapter-count {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.tada-chapter--pinned .tada-chapter-count,
+.tada-chapter--unread .tada-chapter-count {
+  color: var(--sage);
+  opacity: 0.7;
+}
+
+.tada-chapter-unread {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--sage);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding: 1px 7px;
+  border-radius: 20px;
+  background: rgba(var(--sage-rgb), 0.10);
+}
+
+.tada-chapter-caret {
+  color: var(--text-tertiary);
+  opacity: 0.7;
+  transition: transform 0.22s ease, color 0.15s, opacity 0.15s;
+  transform: rotate(0deg);
+  flex-shrink: 0;
+}
+
+.tada-chapter.open .tada-chapter-caret {
+  transform: rotate(90deg);
+  color: var(--sage);
+  opacity: 1;
+}
+
+.tada-chapter-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+  padding: 2px 0 2px;
+  animation: fadeSlideIn 0.25s ease both;
+  align-items: stretch;
+}
+
+/* ── Entry (built on .glass-card) ─────────────────────────── */
+
+.tada-entry {
+  cursor: pointer;
+  padding: 18px 20px 14px;
+  border-radius: var(--r-md);
+  border-left: 2px solid transparent;
+  animation: fadeSlideIn 0.25s ease both;
+  transition: box-shadow 0.2s, border-color 0.2s, transform 0.15s, background 0.2s;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tada-entry:hover {
+  box-shadow:
+    0 2px 6px var(--glass-shadow),
+    0 12px 32px rgba(var(--sage-rgb), 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  border-color: rgba(var(--sage-rgb), 0.28);
+  transform: translateY(-1px);
+}
+
+/* Inner header (title — full width) */
+.tada-entry .tada-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.tada-entry .tada-card-title {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.32;
+  letter-spacing: -0.014em;
+  color: var(--text);
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.tada-entry .tada-card-title-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tada-entry .tada-card-title .tada-pin-indicator,
+.tada-entry .tada-card-title .tada-dismissed-badge,
+.tada-entry .tada-card-title .tada-rerun-failed-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.tada-entry .tada-pin-indicator {
+  flex-shrink: 0;
+  margin-right: 0 !important;
+  align-self: center;
+}
+
+/* Schedule line */
+.tada-entry .tada-card-schedule {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 10px;
+  flex-wrap: nowrap;
+  margin-bottom: 10px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 
-.tada-card-frequency {
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 2px 7px;
-  border-radius: 20px;
-  color: var(--sage);
-  background: rgba(var(--sage-rgb), 0.12);
-}
-
-.tada-card-schedule--clickable {
+.tada-entry .tada-card-schedule--clickable {
   cursor: pointer;
   border-radius: var(--r-sm);
   padding: 2px 4px;
@@ -1409,28 +1851,116 @@ button, input, select, textarea, canvas, a, label,
   transition: background 0.15s;
 }
 
-.tada-card-schedule--clickable:hover {
-  background: var(--glass-hover);
+.tada-entry .tada-card-schedule--clickable:hover {
+  background: rgba(var(--sage-rgb), 0.06);
 }
 
-.tada-card-time {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
+.tada-entry .tada-card-frequency {
   display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.tada-entry .tada-card-frequency-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--sage);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(var(--sage-rgb), 0.12);
+}
+
+.tada-entry .tada-card-frequency[data-freq="once"] .tada-card-frequency-dot {
+  background: var(--text-tertiary);
+  box-shadow: none;
+  opacity: 0.6;
+}
+
+.tada-entry .tada-card-frequency[data-freq="scheduled"] .tada-card-frequency-dot {
+  background: var(--fern);
+}
+
+.tada-entry .tada-card-frequency[data-freq="trigger"] .tada-card-frequency-dot {
+  background: var(--cream);
+}
+
+.tada-entry .tada-card-time {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tada-entry .tada-card-time::before {
+  content: "·";
+  margin-right: 10px;
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+
+.tada-entry .tada-card-date {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+/* Description */
+.tada-entry .tada-card-desc {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+/* Card footer — actions live here, pinned to bottom */
+.tada-entry .tada-card-footer {
+  margin-top: auto;
+  padding-top: 12px;
+  display: flex;
+  justify-content: flex-end;
   align-items: center;
 }
 
-.tada-card-date {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  margin-left: auto;
+/* Unread: sage left border accent (matches existing app vocabulary) */
+.tada-entry--unread {
+  border-left-color: var(--sage);
+}
+.tada-entry--unread .tada-card-title {
+  color: var(--text);
 }
 
-.tada-card-desc {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.45;
+/* Pinned: sage left border + faint sage tint */
+.tada-entry--pinned {
+  border-left-color: var(--sage);
+  background: rgba(var(--sage-rgb), 0.045);
+}
+
+.tada-unread-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sage);
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 /* ── Detail View ───────────────────────────────────────── */
@@ -1455,6 +1985,7 @@ button, input, select, textarea, canvas, a, label,
   border: 1px solid var(--glass-border);
   border-radius: 20px;
   cursor: pointer;
+  font-family: inherit;
   transition: background 0.15s;
 }
 
@@ -1471,6 +2002,82 @@ button, input, select, textarea, canvas, a, label,
   font-weight: 650;
   color: var(--text);
   letter-spacing: -0.01em;
+  line-height: 1.3;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tada-detail-header .tada-card-actions {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.tada-detail-header .tada-card-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  position: relative;
+}
+
+.tada-detail-header .tada-card-action-btn::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--bg-warm);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-sm);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 5;
+}
+
+.tada-detail-header .tada-card-action-btn:hover::after {
+  opacity: 1;
+}
+
+.tada-detail-header .tada-card-action-btn:hover {
+  background: rgba(var(--sage-rgb), 0.10);
+  color: var(--text);
+}
+
+.tada-detail-header .tada-card-action-btn.active {
+  color: var(--sage);
+}
+
+.tada-detail-header .tada-thumbs-up.active { color: var(--sage); }
+.tada-detail-header .tada-thumbs-down.active { color: #c47a7a; }
+
+.tada-detail-header .tada-card-action-btn.rerunning {
+  color: var(--sage);
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.tada-detail-header .tada-card-action-btn.rerunning svg {
+  animation: spin 1s linear infinite;
 }
 
 .tada-detail {
@@ -1516,65 +2123,11 @@ button, input, select, textarea, canvas, a, label,
 }
 
 
-/* ── Tada List Header ──────────────────────────────────── */
+/* ── Inline title indicators ───────────────────────────── */
 
-.tada-tab-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 0 12px;
-  gap: 12px;
-}
-
-.tada-tab-pills {
-  display: flex;
-  gap: 4px;
-  background: rgba(255,255,255,0.45);
-  border: 1px solid var(--glass-border);
-  border-radius: 20px;
-  padding: 3px;
-}
-
-.tada-tab {
-  font-size: 12px;
-  font-weight: 550;
-  color: var(--text-tertiary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 4px 14px;
-  border-radius: 16px;
-  transition: color 0.18s, background 0.18s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.tada-tab:hover {
-  color: var(--text-secondary);
-}
-
-.tada-tab.active {
-  color: var(--text-primary);
-  background: rgba(255,255,255,0.85);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-
-.tada-tab-badge {
-  font-size: 10px;
-  font-weight: 650;
-  min-width: 16px;
-  height: 16px;
-  line-height: 16px;
-  text-align: center;
-  border-radius: 8px;
-  background: rgba(var(--sage-rgb), 0.18);
-  color: var(--sage);
-  padding: 0 5px;
-}
-
-.tada-card--unread {
-  border-left: 3px solid var(--sage);
+.tada-entry .tada-pin-indicator {
+  flex-shrink: 0;
+  margin-right: 4px !important;
 }
 
 .tada-unread-dot {
@@ -1583,9 +2136,9 @@ button, input, select, textarea, canvas, a, label,
   height: 6px;
   border-radius: 50%;
   background: var(--sage);
-  margin-left: 6px;
   vertical-align: middle;
   flex-shrink: 0;
+  align-self: center;
 }
 
 .nav-unread-dot {
@@ -1599,30 +2152,9 @@ button, input, select, textarea, canvas, a, label,
   flex-shrink: 0;
 }
 
-.tada-show-dismissed {
-  font-size: 11px;
-  font-weight: 550;
-  color: var(--text-tertiary);
-  background: rgba(255,255,255,0.6);
-  border: 1px solid var(--glass-border);
-  cursor: pointer;
-  padding: 4px 12px;
-  border-radius: 20px;
-  transition: color 0.15s, background 0.15s;
-}
+/* ── Empty & Loading ───────────────────────────────────── */
 
-.tada-show-dismissed:hover {
-  color: var(--text-secondary);
-  background: rgba(255,255,255,0.85);
-}
-
-.tada-show-dismissed:active {
-  transform: scale(0.97);
-}
-
-/* ── Empty & Loading States ────────────────────────────── */
-
-.tada-empty-state {
+.tada-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1632,6 +2164,8 @@ button, input, select, textarea, canvas, a, label,
   color: var(--text-tertiary);
   font-size: 12.5px;
   font-weight: 550;
+  text-align: center;
+  animation: fadeSlideIn 0.3s ease both;
 }
 
 .tada-empty-icon {
@@ -1639,17 +2173,25 @@ button, input, select, textarea, canvas, a, label,
   opacity: 0.6;
 }
 
+.tada-empty-line {
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text-tertiary);
+}
+
 .tada-empty-hint {
   font-size: 11px;
   font-weight: 400;
   color: var(--text-tertiary);
   opacity: 0.7;
+  max-width: 42ch;
+  line-height: 1.5;
 }
 
 .spinner, .tada-spinner {
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(var(--sage-rgb), 0.15);
+  border: 1.5px solid rgba(var(--sage-rgb), 0.15);
   border-top-color: var(--sage);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -1659,16 +2201,24 @@ button, input, select, textarea, canvas, a, label,
   margin-bottom: 4px;
 }
 
-/* ── Card Actions (pin / edit / dismiss) ───────────────── */
+/* ── Entry actions — quiet, hover-revealed ─────────────── */
 
-.tada-card-actions {
+.tada-entry .tada-card-actions {
   display: flex;
   align-items: center;
   gap: 2px;
-  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity 0.18s ease;
 }
 
-.tada-card-action-btn {
+.tada-entry:hover .tada-card-actions,
+.tada-entry:focus-within .tada-card-actions,
+.tada-entry:has(.tada-card-action-btn.active) .tada-card-actions {
+  opacity: 1;
+}
+
+.tada-entry .tada-card-action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1676,7 +2226,7 @@ button, input, select, textarea, canvas, a, label,
   height: 26px;
   padding: 0;
   border: none;
-  border-radius: var(--r-sm);
+  border-radius: 6px;
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
@@ -1684,7 +2234,7 @@ button, input, select, textarea, canvas, a, label,
   position: relative;
 }
 
-.tada-card-action-btn::after {
+.tada-entry .tada-card-action-btn::after {
   content: attr(title);
   position: absolute;
   bottom: calc(100% + 6px);
@@ -1701,91 +2251,104 @@ button, input, select, textarea, canvas, a, label,
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s;
+  z-index: 5;
 }
 
-.tada-card-action-btn:hover::after {
+.tada-entry .tada-card-action-btn:hover::after {
   opacity: 1;
 }
 
-.tada-card-action-btn:hover {
-  background: var(--glass-hover);
+.tada-entry .tada-card-action-btn:hover {
+  background: rgba(var(--sage-rgb), 0.10);
   color: var(--text);
 }
 
-.tada-card-action-btn.active {
+.tada-entry .tada-card-action-btn.active {
   color: var(--sage);
 }
 
-.tada-thumbs-up.active {
+.tada-entry .tada-thumbs-up.active {
   color: var(--sage);
 }
 
-.tada-thumbs-down.active {
+.tada-entry .tada-thumbs-down.active {
   color: #c47a7a;
 }
 
-/* ── Pinned / Dismissed card modifiers ─────────────────── */
+/* ── Dismissed entry — single-column collapsed sliver ─── */
 
-.tada-card--pinned {
-  border-left-color: var(--sage);
-  background: rgba(var(--sage-rgb), 0.03);
+.tada-chapter--topic .tada-chapter-body:has(.tada-entry--dismissed) {
+  grid-template-columns: 1fr;
 }
 
-.tada-card--dismissed {
+.tada-entry--dismissed {
+  grid-column: 1 / -1;
   padding: 9px 14px;
   background: rgba(var(--sage-rgb), 0.025);
   border-color: rgba(var(--sage-rgb), 0.08);
   box-shadow: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
 }
 
-.tada-card--dismissed:hover {
+.tada-entry--dismissed .tada-card-header {
+  flex: 1;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.tada-entry--dismissed .tada-card-footer {
+  margin-top: 0;
+  padding-top: 0;
+  flex-shrink: 0;
+}
+
+.tada-entry--dismissed:hover {
   background: rgba(var(--sage-rgb), 0.05);
   border-color: rgba(var(--sage-rgb), 0.15);
   box-shadow: 0 1px 3px var(--glass-shadow);
   transform: none;
 }
 
-.tada-card--dismissed .tada-card-header {
+.tada-entry--dismissed .tada-card-header {
   margin-bottom: 0;
   align-items: center;
   gap: 10px;
 }
 
-.tada-card--dismissed .tada-card-title {
+.tada-entry--dismissed .tada-card-title {
   font-size: 12px;
   font-weight: 550;
   line-height: 1.4;
-  min-width: 0;
-  flex: 1 1 auto;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
   color: var(--text-secondary);
   letter-spacing: -0.005em;
 }
 
-.tada-card--dismissed .tada-card-actions {
-  flex-shrink: 0;
+.tada-entry--dismissed .tada-card-actions {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
   gap: 1px;
+  flex-shrink: 0;
 }
 
-.tada-card--dismissed .tada-card-action-btn {
+.tada-entry--dismissed .tada-card-action-btn {
   width: 22px;
   height: 22px;
   color: var(--text-tertiary);
 }
 
-.tada-card--dismissed .tada-card-action-btn:hover {
+.tada-entry--dismissed .tada-card-action-btn:hover {
   color: var(--text-secondary);
 }
 
-.tada-card--dismissed .tada-card-schedule,
-.tada-card--dismissed .tada-card-desc {
+.tada-entry--dismissed .tada-card-schedule,
+.tada-entry--dismissed .tada-card-desc {
   display: none;
 }
 
-.tada-card--dismissed .tada-dismissed-badge {
+.tada-entry--dismissed .tada-dismissed-badge {
   font-size: 8.5px;
   padding: 1px 5px;
   letter-spacing: 0.06em;
@@ -1807,22 +2370,22 @@ button, input, select, textarea, canvas, a, label,
 
 /* ── Rerunning state ─────────────────────────────────── */
 
-.tada-card-action-btn.rerunning {
+.tada-entry .tada-card-action-btn.rerunning {
   color: var(--sage);
   pointer-events: none;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
-.tada-card-action-btn.rerunning svg {
+.tada-entry .tada-card-action-btn.rerunning svg {
   animation: spin 1s linear infinite;
 }
 
-.tada-card--rerunning {
+.tada-entry--rerunning {
   opacity: 0.7;
   pointer-events: none;
 }
 
-.tada-card--rerunning .tada-card-desc::after {
+.tada-entry--rerunning .tada-card-desc::after {
   content: "Rerunning\2026";
   display: block;
   margin-top: 4px;
@@ -1846,10 +2409,33 @@ button, input, select, textarea, canvas, a, label,
   animation: fadeSlideIn 0.25s ease both;
 }
 
+/* ── Running entry (placeholder for in-flight tadas) ─────── */
+
+.tada-entry--running {
+  border-left-color: var(--sage);
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.78;
+}
+
+.tada-entry--running:hover {
+  transform: none;
+  box-shadow:
+    0 1px 3px var(--glass-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  border-color: var(--glass-border);
+  border-left-color: var(--sage);
+}
+
+.tada-entry--running .tada-card-actions {
+  display: none;
+}
+
 /* ── Schedule Editor ───────────────────────────────────── */
 
-.tada-card:has(.tada-schedule-editor) {
+.tada-entry:has(.tada-schedule-editor) {
   z-index: 10;
+  grid-column: 1 / -1;
 }
 
 .tada-schedule-editor {
@@ -2998,6 +3584,7 @@ button, input, select, textarea, canvas, a, label,
 .chat-app-header-meta {
   display: flex;
   gap: 6px;
+  align-items: center;
 }
 
 .chat-badge {
@@ -3011,6 +3598,34 @@ button, input, select, textarea, canvas, a, label,
 
 .chat-badge--effort {
   background: rgba(255, 165, 0, 0.10);
+}
+
+/* Compact model picker in the chat header — matches the effort pill. */
+.chat-model-dropdown .tada-dropdown-trigger {
+  padding: 3px 8px;
+  border-radius: 9px;
+  font-size: 10.5px;
+  width: auto;
+  min-width: 130px;
+  gap: 4px;
+  background: rgba(var(--sage-rgb), 0.10);
+  border-color: rgba(var(--sage-rgb), 0.22);
+  color: var(--text-secondary);
+  transition: background 0.15s, border-color 0.15s;
+}
+.chat-model-dropdown .tada-dropdown-trigger:hover {
+  background: rgba(var(--sage-rgb), 0.18);
+  border-color: rgba(var(--sage-rgb), 0.36);
+}
+
+.chat-model-dropdown .tada-dropdown-menu {
+  font-size: 11.5px;
+  min-width: 180px;
+}
+
+.chat-model-dropdown .tada-dropdown-item {
+  padding: 5px 9px;
+  font-size: 11.5px;
 }
 
 .chat-app-messages {

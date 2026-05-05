@@ -1,0 +1,12 @@
+## Rules
+
+- Promote only candidates that are clearly useful and executable.
+- Rank the best candidates first. A top-ranked candidate must have a concrete artifact, specific sources, and a clear user benefit.
+- Keep lower-priority but still viable candidates in `ranked`; Python applies the top-K cutoff.
+
+## Tips
+
+- Python deterministically routes candidates whose slug matches an existing accepted moment as updates to that moment.
+- Promote an update candidate only when its new evidence, scope, instructions, or artifact would make the accepted moment better.
+- Reject near-duplicates that use a different slug from an accepted moment unless they are meaningfully distinct.
+- Do not call tools. Do not read files, run shell commands, or write accepted markdown. Python will persist top-ranked moments after parsing your JSON.

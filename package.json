@@ -1,6 +1,6 @@
 {
   "name": "tada",
-  "version": "0.0.6-alpha",
+  "version": "0.0.7-alpha",
   "description": "Tada — predict what you'll do next",
   "author": "Tada",
   "main": "dist/main/index.js",
@@ -43,7 +43,6 @@
   "build": {
     "appId": "com.generalusermodels.tada",
     "productName": "Tada",
-    "generateUpdatesFilesForAllChannels": true,
     "afterSign": "scripts/notarize.cjs",
     "directories": {
       "output": "release"

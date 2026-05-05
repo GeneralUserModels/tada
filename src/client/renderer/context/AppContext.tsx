@@ -25,7 +25,7 @@ export interface AgentActivityInfo {
   agent: string;
   message: string;
   slug?: string;
-  frequency?: string;
+  cadence?: string;
   numTurns: number | null;
   maxTurns: number | null;
 }
@@ -78,7 +78,7 @@ type AppAction =
   | { type: "UPDATE_INSTALLING" }
   | { type: "UPDATE_ERROR"; message: string }
   | { type: "UPDATE_DISMISSED" }
-  | { type: "AGENT_ACTIVITY"; data: { agent: string; message: string | null; slug?: string | null; frequency?: string | null; num_turns?: number | null; max_turns?: number | null } }
+  | { type: "AGENT_ACTIVITY"; data: { agent: string; message: string | null; slug?: string | null; cadence?: string | null; num_turns?: number | null; max_turns?: number | null } }
   | { type: "SET_AGENT_ACTIVITIES"; activities: Record<string, AgentActivity> };
 
 let historyCounter = 0;
@@ -257,7 +257,7 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, memexHasNew: true };
 
     case "AGENT_ACTIVITY": {
-      const { agent, message, slug, frequency, num_turns, max_turns } = action.data;
+      const { agent, message, slug, cadence, num_turns, max_turns } = action.data;
       if (!message) {
         const { [agent]: _, ...rest } = state.agentActivities;
         return { ...state, agentActivities: rest };
@@ -270,7 +270,7 @@ function reducer(state: AppState, action: AppAction): AppState {
             agent,
             message,
             slug: slug ?? undefined,
-            frequency: frequency ?? undefined,
+            cadence: cadence ?? undefined,
             numTurns: num_turns ?? null,
             maxTurns: max_turns ?? null,
           },
@@ -286,7 +286,7 @@ function reducer(state: AppState, action: AppAction): AppState {
           agent,
           message: info.message,
           slug: info.slug ?? undefined,
-          frequency: info.frequency ?? undefined,
+          cadence: info.cadence ?? undefined,
           numTurns: info.num_turns ?? null,
           maxTurns: info.max_turns ?? null,
         };
@@ -334,7 +334,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sse.on("seeker_questions_ready", () => dispatch({ type: "SEEKER_QUESTIONS_READY" }));
     sse.on("moment_completed", () => dispatch({ type: "TADA_NEW_MOMENT" }));
     sse.on("memory_updated", () => dispatch({ type: "MEMEX_UPDATED" }));
-    sse.on<{ agent: string; message: string | null; slug?: string | null; frequency?: string | null; num_turns?: number | null; max_turns?: number | null }>(
+    sse.on<{ agent: string; message: string | null; slug?: string | null; cadence?: string | null; num_turns?: number | null; max_turns?: number | null }>(
       "agent_activity",
       (data) => {
         console.log("[sse] agent_activity", data);

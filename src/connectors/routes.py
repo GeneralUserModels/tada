@@ -83,8 +83,10 @@ async def update_connector(name: str, update: ConnectorUpdate, request: Request)
 
     # Handle virtual audio connectors
     if name in _AUDIO_VIRTUAL:
+        logger.info("audio-toggle: %s → enabled=%s", name, update.enabled)
         audio_conn = state.connectors.get("audio")
         if audio_conn is None:
+            logger.error("audio-toggle: audio connector not in state.connectors")
             raise HTTPException(status_code=404, detail=f"Audio connector not available")
 
         if update.enabled:
@@ -101,6 +103,10 @@ async def update_connector(name: str, update: ConnectorUpdate, request: Request)
         # Was any source already on BEFORE this toggle?
         other = "system_audio" if name == "microphone" else "microphone"
         was_any_on = other in config.enabled_connectors
+        logger.info(
+            "audio-toggle: post-config mic_on=%s sys_on=%s was_any_on=%s session_alive=%s",
+            mic_on, sys_on, was_any_on, audio_conn._session is not None,
+        )
 
         # Update env vars
         audio_conn._server_params.env["TADA_MIC_ENABLED"] = "1" if mic_on else "0"
@@ -108,6 +114,7 @@ async def update_connector(name: str, update: ConnectorUpdate, request: Request)
 
         if not mic_on and not sys_on:
             # Both off — flush remaining audio, then stop
+            logger.info("audio-toggle: both off → flush + stop")
             if audio_conn._session is not None:
                 await audio_conn._session.call_tool("flush_audio", {})
             audio_conn.stop()
@@ -124,20 +131,24 @@ async def update_connector(name: str, update: ConnectorUpdate, request: Request)
                 session_file.write_text(f"# Audio Transcript — {dt.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
                 session_file_str = str(session_file)
                 audio_conn._server_params.env["TADA_SESSION_FILE"] = session_file_str
-                logger.info("audio: new session transcript file %s", session_file)
+                logger.info("audio-toggle: new session transcript file %s", session_file)
 
             if audio_conn._session is not None:
                 # Server already running — toggle sources in-place, no restart needed
                 args: dict = {"mic_enabled": mic_on, "sys_enabled": sys_on}
                 if session_file_str is not None:
                     args["session_file"] = session_file_str
+                logger.info("audio-toggle: server already running → calling configure_sources(%s)", args)
                 await audio_conn._session.call_tool("configure_sources", args)
+                logger.info("audio-toggle: configure_sources returned")
             else:
                 # Server not running yet — restart so it picks up env vars
+                logger.info("audio-toggle: no live session → stop + delayed resume to spawn child")
                 audio_conn.stop()
 
                 async def _delayed_resume():
                     await asyncio.sleep(2)
+                    logger.info("audio-toggle: delayed resume firing")
                     audio_conn.resume()
 
                 asyncio.create_task(_delayed_resume())

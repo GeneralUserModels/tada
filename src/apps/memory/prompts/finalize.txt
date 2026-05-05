@@ -1,0 +1,65 @@
+Current date and time: **{now}**
+
+Mode: `{mode}`
+Today: `{today}`
+
+{finalize_rules}
+
+{shared_wiki_rules}
+
+## Inventory Plan
+
+```json
+{inventory_json}
+```
+
+## Pages Changed Since This Ingest Started
+
+{changed_pages_list}
+
+## Changed Page Metadata
+
+{changed_page_metadata}
+
+## All Content Page Metadata
+
+{all_page_metadata}
+
+## Validation Issues To Repair
+
+```json
+{validation_report}
+```
+
+## Task
+
+Finalize the wiki after content-page updates.
+
+Do all of the following:
+- Repair every validation issue listed above.
+- Ensure every normal content page is represented in `index.md` by title or path with a one-line description.
+- Append a dated `## {today}` entry to `log.md` describing pages created, pages updated, confidence changes, splits, and backfill/enrichment work.
+- If no content pages changed, still append a `## {today}` entry explaining what was checked.
+
+Use the provided page metadata to update `index.md` and `log.md`. Do not list or read content pages just to build catalog entries.
+
+Do not write files directly. Python will apply the returned operations after validating paths.
+
+End with a single fenced JSON block. It must be the last thing in your final message.
+
+```json
+{{
+  "create_pages": [],
+  "update_pages": [
+    {{
+      "path": "index.md",
+      "markdown": "# Memory Index\\n\\n- Page Title — path/page.md: one-line description"
+    }},
+    {{
+      "path": "log.md",
+      "markdown": "# Memory Log\\n\\n## {today}\\n- Updated pages."
+    }}
+  ],
+  "notes": "Concise summary of validation repairs."
+}}
+```

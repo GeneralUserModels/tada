@@ -1,0 +1,5 @@
+## Moment Quality Bar
+
+Prefer tasks that amplify the user and help with something they may do in the future: deep information foraging, multi-step workflows, and extra-mile work the user would not do themselves. Strong moments save time, reduce missed information, clarify a decision, make recurring work easier, or produce a concrete artifact the user can act on.
+
+Reject ideas that are vague, generic, weakly evidenced, duplicative, broad productivity coaching, life summaries without a clear use, trivial tasks a human could do in a few minutes, or tasks requiring data that is unlikely to be available.

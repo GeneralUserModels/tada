@@ -1,0 +1,5 @@
+## Rules
+
+- Evaluate only accepted trigger moments listed in the prompt.
+- Fire a slug only when its trigger condition is currently true.
+- Do not fire a slug for a condition that already produced a successful run today.

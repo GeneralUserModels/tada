@@ -1,0 +1,24 @@
+## Sources
+
+The user's activity logs are under `{logs_dir}/`.
+
+Primary discovery sources are connector `filtered.jsonl` streams:
+
+- `screen/filtered.jsonl`: high-volume screen activity. Use `timestamp`, `text`, `dense_caption`, `source.id`, `source.summary`, `source.screenshot_path`, and `img_path`.
+- `email/filtered.jsonl`: email activity summaries. Prefer `text`; if empty, inspect `source.summary` or original source fields when present.
+- `calendar/filtered.jsonl`: calendar events. Use `source.summary`, `source.start`, `source.end`, `source.description`, and `source.location`.
+- `notifications/filtered.jsonl`: notification summaries. Use `text` and `source.summary`.
+- `filesys/filtered.jsonl`: filesystem activity summaries. Use `text`, `source.summary`, and available path/type fields.
+
+Drilldown sources:
+
+- `screen/labels.jsonl`: detailed screen-label source for a cited `source.id`.
+- `screen/labeled_screenshots/*.png`: visual evidence. Inspect only if image-reading capability is available and visual details materially affect the candidate.
+- `memory/`: personal wiki. Start with `memory/index.md` when present.
+- `active-conversations/conversation_*.md`: first-person answers from seeker conversations.
+- `chats/*/conversation.md`: previous assistant chats.
+- `audio/*.md`: transcripts from meetings, calls, voice notes, and recordings.
+
+Ignore internal files such as `checkpoints.jsonl`, `predictions.jsonl`, `metrics.jsonl`, `retriever*`, `raw_events*`, and other pipeline artifacts.
+
+`raw_events` are omitted from default discovery context. Inspect them only when detailed interaction mechanics are necessary.

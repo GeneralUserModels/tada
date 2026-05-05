@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from server.services import start_services, _log_startup_failure
-from connectors.screen.napsack.recorder import TABRACADABRA_LATEST_FRAME_PNG
+from connectors.screen.napsack.recorder import SCREEN_FRAME_HEARTBEAT
 
 router = APIRouter(prefix="/api", tags=["onboarding"])
 
@@ -70,15 +70,22 @@ async def services_status(request: Request):
     """Readiness probe for the getting_ready step's polling loop."""
     state = request.app.state.server
     try:
-        st = os.stat(TABRACADABRA_LATEST_FRAME_PNG)
+        st = os.stat(SCREEN_FRAME_HEARTBEAT)
         screen_frame_fresh = (time.time() - st.st_mtime) < _FRAME_FRESH_S
     except OSError:
         screen_frame_fresh = False
     service = state.tabracadabra_service
+    # screen_paused: true when the connector is paused (toggled off or
+    # error-paused). The boot gate uses this to skip the screen-frame check
+    # rather than relying on the persisted `enabled_connectors` setting (which
+    # loads async on the renderer and can be stale relative to runtime state).
+    screen_conn = state.connectors.get("screen")
+    screen_paused = screen_conn is None or screen_conn.paused
     return {
         "services_started": bool(state.services_started),
         "tabracadabra_ready": service is not None and service.is_ready(),
         "screen_frame_fresh": screen_frame_fresh,
+        "screen_paused": screen_paused,
     }
 
 

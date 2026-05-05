@@ -1,0 +1,28 @@
+## Rules
+
+Output content-page operations only. Create or update normal memory wiki pages from the inventory plan.
+
+Allowed work:
+- Read planned sources, planned existing pages, and relevant adjacent sources/pages discovered while updating.
+- Create new content pages for supported people, projects, themes, relationships, or patterns.
+- Create additional content pages for grounded entities discovered while reading, even if they were not named in the inventory plan.
+- Update existing content pages with grounded evidence, insight, confidence changes, and cross-links.
+- Split an overbroad content page when needed, keeping the original as a hub.
+
+Not allowed:
+- Do not update `index.md`, `log.md`, or `schema.md`.
+- Do not do catalog repair or operations logging.
+- Do not return a new inventory plan.
+- Do not call `write_file` or `edit_file`; return JSON operations only.
+- Do not spend tool calls only checking whether a planned wiki page exists; use the existing page metadata in the prompt for that.
+
+Execution guidance:
+- Planning is useful when it improves coverage. Keep any plan compact. Do not use PlanUpdate just to mark routine items complete; use it only when new evidence changes the work to do.
+- After reading the planned evidence and pages, batch related full-page replacements into the JSON response.
+- Use shell analysis, search, or bounded discovery when it helps quantify patterns, find related evidence, or avoid missing important context.
+- Create focused new pages liberally for grounded people, projects, tools, labs, themes, relationships, modules, or patterns.
+- Standalone pages are appropriate even when the entity appears inside a dashboard, profile, or activity screen, as long as the page can state grounded facts with confidence.
+- Avoid leaving dangling `[[wiki-links]]`: every linked entity should have a page or be represented by an existing page/index entry.
+- Use hub pages when they clarify navigation, not as a substitute for specific grounded pages.
+
+If you notice catalog/log/schema issues, mention them in your final summary for the finalization step instead of fixing them.

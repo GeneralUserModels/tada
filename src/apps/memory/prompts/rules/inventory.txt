@@ -1,0 +1,16 @@
+## Rules
+
+Output only a source/page work plan. Do not create, edit, or repair wiki files.
+
+Allowed work:
+- Use the provided existing-page metadata, new-input lists, and changed-input previews to choose what the update step should read.
+- Choose focused source files, existing pages, likely new pages, likely updated pages, and a small backfill sample.
+- On first runs, inspect the source layout and sample available source files before planning starter pages.
+- On no-new-data runs, inspect existing wiki coverage and sample older sources when useful for backfill.
+- On incremental runs, start from the changed-input list, then do bounded adjacent discovery if the preview is insufficient or context is missing.
+
+Not allowed:
+- Do not write or edit `index.md`, `log.md`, `schema.md`, or content pages.
+- Do not perform the memory synthesis itself.
+- Do not wander through unrelated files or raw model artifacts.
+- Do not produce prose after the required JSON block.

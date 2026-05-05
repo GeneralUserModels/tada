@@ -23,18 +23,16 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   const tabracadabraFlag = useFeatureFlag("tabracadabra");
   const tabracadabraSettingOff = app.settings.tabracadabra_enabled === false;
   const requireTabracadabra = tabracadabraFlag && !tabracadabraSettingOff;
-  // Same logic for the screen recorder: when the user hasn't enabled the
-  // screen connector (no permission, or disabled in settings), the recorder
-  // never publishes a frame so we'd wait forever for `screen_frame_fresh`.
-  const enabledConnectors = (app.settings.enabled_connectors as string[] | undefined) ?? [];
-  const requireScreen = enabledConnectors.includes("screen");
+  // The screen-frame check is gated on the live `screen_paused` flag from
+  // the status response — a connector that was paused on app close (toggled
+  // off, or error-paused) never publishes a frame, so requiring
+  // `screen_frame_fresh` would hang the boot gate forever.
   // Only start polling once the renderer is wired up to the server. Before
   // SERVER_READY fires the api client has no URL and getServicesStatus would
   // just throw on every poll.
   const { status, ready } = useWaitForServices({
     enabled: app.connected,
     requireTabracadabra,
-    requireScreen,
   });
 
   if (ready) return <>{children}</>;
@@ -52,7 +50,6 @@ export function BootGate({ children }: { children: React.ReactNode }) {
             status={status}
             ready={ready}
             requireTabracadabra={requireTabracadabra}
-            requireScreen={requireScreen}
           />
         </div>
       </div>

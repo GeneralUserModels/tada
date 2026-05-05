@@ -1,0 +1,31 @@
+Current date and time: **{now}**
+
+{promote_rules}
+
+{shared_executor_capabilities}
+
+{shared_quality_bar}
+
+{shared_moments}
+
+## Existing Accepted Moments
+
+{accepted_moments}
+
+## Feedback And State Signals
+
+{feedback_state_summary}
+
+## Candidate Moments
+
+```json
+{candidate_json}
+```
+
+## Task
+
+Rank all candidates by promotion priority. Do not call tools. Python will deterministically promote the top K ranked candidates and write the accepted markdown files.
+
+Use `ranked` for every candidate that is promotable, ordered from strongest to weakest. Give each ranked item an integer `score` from 1 to 10 and a short `reason`.
+
+Use `rejected` only for candidates that should not be promoted at any rank because they are vague, duplicative, weakly evidenced, not useful enough, or not executable.

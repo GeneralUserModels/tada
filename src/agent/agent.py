@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 import httpx
 import litellm
+from pydantic import BaseModel, ValidationError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential_jitter
 
 from .tools.base_tool import BaseTool
@@ -14,7 +16,21 @@ from .tools.compact import CompactTool
 from .tools.background import BackgroundManager
 from .tools.todo import PlanState, PlanWriteTool, PlanUpdateTool
 
-TOKEN_THRESHOLD = 64_000
+TOKEN_THRESHOLD = 128_000
+logger = logging.getLogger(__name__)
+
+
+def _log_llm_retry(retry_state) -> None:
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    sleep = getattr(retry_state.next_action, "sleep", None)
+    print(
+        "  [llm retry] "
+        f"attempt={retry_state.attempt_number} "
+        f"sleep={sleep:.1f}s "
+        f"error={type(exc).__name__ if exc else 'unknown'}: {exc}",
+        flush=True,
+    )
+    logger.warning("LLM call retry", exc_info=exc)
 
 
 class Agent:
@@ -34,6 +50,9 @@ class Agent:
         on_round_end: Callable[[int, bool], None] | None = None,
         should_stop: Callable[[], bool] | None = None,
         max_output_tokens: int | None = None,
+        warning_round: int | None = None,
+        llm_timeout_s: float | None = 120,
+        llm_max_tokens: int = 16000,
     ):
         self.model = model
         self.api_key = api_key or None
@@ -47,6 +66,9 @@ class Agent:
         self.should_stop = should_stop
         self._compact = compact_tool
         self._bg = bg_manager
+        self.warning_round = warning_round
+        self.llm_timeout_s = llm_timeout_s
+        self.llm_max_tokens = llm_max_tokens
         if web_search is True:
             self._web_search_options = {"search_context_size": "medium"}
         elif isinstance(web_search, dict):
@@ -63,7 +85,13 @@ class Agent:
         plan_tools = [t for t in tools if isinstance(t, (PlanWriteTool, PlanUpdateTool))]
         self._plan_state = plan_tools[0]._state if plan_tools else None
 
-    def run(self, messages: list) -> str:
+    def run(
+        self,
+        messages: list,
+        final_response_model: type[BaseModel] | None = None,
+        final_instruction: str | None = None,
+        final_metadata_app: str = "agent_final",
+    ) -> str:
         rounds_without_plan = 0
         output_tokens_used = 0
         warned_80 = False
@@ -78,6 +106,17 @@ class Agent:
                     self.on_round(round_num + 1, self.max_rounds)
                 except Exception as e:
                     print(f"  [on_round callback error] {e}")
+
+            if self.warning_round and round_num + 1 == self.warning_round:
+                print(f"  [agent] warning round reached ({self.warning_round}/{self.max_rounds})")
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        f"<warning>You have reached turn {self.warning_round}/{self.max_rounds}. "
+                        "Stop broad research and avoid optional tool calls. Use the evidence already gathered "
+                        "to write or repair the final artifact now.</warning>"
+                    ),
+                })
 
             # compression
             if self._compact:
@@ -101,10 +140,12 @@ class Agent:
 
             # LLM call
             print(f"  [round {round_num+1}/{self.max_rounds}] calling {self.model}...")
+            call_started = time.monotonic()
             if self.on_token:
                 response = self._call_llm_streaming(messages, round_num)
             else:
                 response = self._call_llm(messages)
+            print(f"  [round {round_num+1}] model call returned in {time.monotonic() - call_started:.1f}s")
             usage = getattr(response, "usage", None)
             if usage:
                 cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
@@ -160,6 +201,8 @@ class Agent:
 
             if is_final_round:
                 print(f"  [round {round_num+1}] no tool calls, finishing (reason={choice.finish_reason})")
+                if final_response_model is not None:
+                    return self._finalize_structured(messages, final_response_model, final_instruction, final_metadata_app)
                 return assistant_msg.content or ""
 
             # tool dispatch — subagent calls run in parallel, everything else sequential
@@ -261,6 +304,8 @@ class Agent:
                 messages[:] = self._compact.auto_compact(messages)
 
         print(f"  [agent] max rounds ({self.max_rounds}) reached")
+        if final_response_model is not None:
+            return self._finalize_structured(messages, final_response_model, final_instruction, final_metadata_app)
         return "(max rounds reached)"
 
     def _build_llm_kwargs(self, messages: list) -> dict:
@@ -286,11 +331,13 @@ class Agent:
             model=self.model,
             messages=[{"role": "system", "content": system_blocks}] + conv_messages,
             tools=self._tool_schemas if self._tool_schemas else None,
-            max_tokens=16000,
+            max_tokens=self.llm_max_tokens,
             metadata={"app": "agent"},
         )
         if self.api_key:
             kwargs["api_key"] = self.api_key
+        if self.llm_timeout_s:
+            kwargs["timeout"] = self.llm_timeout_s
         if self._web_search_options:
             if self.model.startswith(("openai/", "gpt-", "o1-", "o3-", "o4-")):
                 # OpenAI uses web search as a tool, not a top-level param
@@ -306,10 +353,76 @@ class Agent:
                     kwargs["include_server_side_tool_invocations"] = True
         return kwargs
 
+    def _build_structured_final_kwargs(
+        self,
+        messages: list,
+        response_model: type[BaseModel],
+        final_instruction: str | None,
+        metadata_app: str,
+    ) -> dict:
+        instruction = final_instruction or (
+            "Convert the prior agent work into the required structured final response. "
+            "Use only information from the conversation and tool results."
+        )
+        kwargs = dict(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": self.system_prompt},
+                *messages,
+                {"role": "user", "content": instruction},
+            ],
+            response_format=response_model,
+            enable_json_schema_validation=False,
+            max_tokens=self.llm_max_tokens,
+            metadata={"app": metadata_app},
+        )
+        if self.api_key:
+            kwargs["api_key"] = self.api_key
+        if self.llm_timeout_s:
+            kwargs["timeout"] = self.llm_timeout_s
+        return kwargs
+
     @retry(
         stop=stop_after_attempt(5),
         wait=wait_exponential_jitter(initial=1, max=30, jitter=3),
         retry=retry_if_exception_type((litellm.RateLimitError, litellm.APIConnectionError, litellm.InternalServerError, litellm.Timeout, httpx.ReadTimeout)),
+        before_sleep=_log_llm_retry,
+    )
+    def _call_structured_final(self, **kwargs):
+        return litellm.completion(**kwargs)
+
+    def _finalize_structured(
+        self,
+        messages: list,
+        response_model: type[BaseModel],
+        final_instruction: str | None,
+        metadata_app: str,
+    ) -> str:
+        print(f"  [final] structured response with {response_model.__name__}")
+        kwargs = self._build_structured_final_kwargs(messages, response_model, final_instruction, metadata_app)
+        try:
+            response = self._call_structured_final(**kwargs)
+        except litellm.JSONSchemaValidationError as exc:
+            raw = getattr(exc, "raw_response", "")
+            if isinstance(raw, str) and raw.strip():
+                try:
+                    response_model.model_validate_json(raw)
+                except ValidationError:
+                    pass
+                else:
+                    return raw
+            raise
+        message = response.choices[0].message
+        tool_calls = getattr(message, "tool_calls", None) or []
+        text = tool_calls[0].function.arguments if tool_calls else (message.content or "")
+        response_model.model_validate_json(text)
+        return text
+
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential_jitter(initial=1, max=30, jitter=3),
+        retry=retry_if_exception_type((litellm.RateLimitError, litellm.APIConnectionError, litellm.InternalServerError, litellm.Timeout, httpx.ReadTimeout)),
+        before_sleep=_log_llm_retry,
     )
     def _call_llm(self, messages: list):
         return litellm.completion(**self._build_llm_kwargs(messages))
@@ -318,6 +431,7 @@ class Agent:
         stop=stop_after_attempt(5),
         wait=wait_exponential_jitter(initial=1, max=30, jitter=3),
         retry=retry_if_exception_type((litellm.RateLimitError, litellm.APIConnectionError, litellm.InternalServerError, litellm.Timeout, httpx.ReadTimeout)),
+        before_sleep=_log_llm_retry,
     )
     def _call_llm_streaming(self, messages: list, round_num: int):
         kwargs = self._build_llm_kwargs(messages)

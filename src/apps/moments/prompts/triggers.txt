@@ -1,0 +1,19 @@
+Current date and time: **{now}**
+
+{trigger_rules}
+
+{shared_sources}
+
+## Accepted Trigger Moments
+
+{triggered_tasks_list}
+
+## Task
+
+Inspect relevant recent sources and decide which trigger moments should fire now.
+
+End with a single fenced JSON block. It must be the last thing in your final message.
+
+```json
+{{"fired": ["slug"]}}
+```

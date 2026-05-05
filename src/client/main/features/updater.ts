@@ -7,18 +7,51 @@ import { IPC } from "../ipc";
 let mainWindow: BrowserWindow | null = null;
 let pendingVersion: string | null = null;
 let pendingDownloaded = false;
+let beforeInstall: () => void = () => {};
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
-autoUpdater.autoDownload = true;
+// Strict channel siloing: alpha builds only see alpha releases, beta only beta,
+// stable only stable. The GitHub provider would otherwise cascade alpha → beta
+// → latest, surfacing higher-channel versions to lower-channel users.
+function channelOfVersion(v: string): string {
+  const m = v.match(/-([a-z]+)/i);
+  return m?.[1]?.toLowerCase() ?? "latest";
+}
+
+const ourChannel = channelOfVersion(app.getVersion());
+
+// We gate downloads ourselves in `update-available` so cross-channel updates
+// are dropped before any bytes are pulled.
+autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = true;
-autoUpdater.channel = app.getVersion().split("-")[1] ?? "latest";
+autoUpdater.channel = ourChannel;
+// Setting `channel` flips this to true; we want strict forward-only updates.
+autoUpdater.allowDowngrade = false;
+
+// Local QA: point at a generic feed (e.g. `python -m http.server` over the
+// release/ dir) instead of GitHub. Set TADA_UPDATE_FEED_URL when launching the
+// installed binary to test updates end-to-end without publishing.
+if (process.env.TADA_UPDATE_FEED_URL) {
+  autoUpdater.setFeedURL({
+    provider: "generic",
+    url: process.env.TADA_UPDATE_FEED_URL,
+    channel: ourChannel,
+  });
+  console.log(`[updater] using local feed: ${process.env.TADA_UPDATE_FEED_URL}`);
+}
 
 autoUpdater.on("update-available", (info) => {
+  const incomingChannel = channelOfVersion(info.version);
+  if (incomingChannel !== ourChannel) {
+    console.log(`[updater] skipping cross-channel update ${info.version} (${incomingChannel} != ${ourChannel})`);
+    return;
+  }
   pendingVersion = info.version;
   pendingDownloaded = false;
   console.log(`[updater] update available: ${pendingVersion}`);
   mainWindow?.webContents.send(IPC.UPDATE_AVAILABLE, { version: pendingVersion });
+  autoUpdater.downloadUpdate().catch((e) => console.log(`[updater] download failed:`, e?.message));
 });
 
 autoUpdater.on("download-progress", (progress) => {
@@ -59,13 +92,18 @@ export function checkForUpdates(): void {
 }
 
 export function installUpdate(): void {
-  // Force isSilent=false so electron-updater calls app.quit() internally,
-  // and isForceRunAfter=true so the new version launches after install.
+  // Squirrel.Mac closes windows but does not synthesise `before-quit`, so the
+  // dashboard window's close handler (which calls preventDefault unless
+  // isQuitting=true) would swallow the close and leave the app hidden while
+  // Squirrel waits forever to install. The callback flips that flag and stops
+  // the Python server before we hand control to the native updater.
+  beforeInstall();
   autoUpdater.quitAndInstall(false, true);
 }
 
-export function initUpdateChecker(win: BrowserWindow): void {
+export function initUpdateChecker(win: BrowserWindow, onBeforeInstall: () => void): void {
   mainWindow = win;
+  beforeInstall = onBeforeInstall;
   checkForUpdates();
   setInterval(() => {
     resendPendingUpdate();

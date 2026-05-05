@@ -13,7 +13,7 @@ from connectors.service import run_context_logging_service
 from user_models.training import init_model, run_training_service
 from server.cost_tracker import init_cost_tracking, run_cost_logger
 from user_models.data_manager import DataManager
-from connectors.screen.napsack.recorder import TABRACADABRA_LATEST_FRAME_PNG
+from connectors.screen.napsack.recorder import SCREEN_FRAME_HEARTBEAT
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,11 @@ async def _wait_for_boot_ready(state: ServerState) -> None:
         and is_enabled(state.config, "tabracadabra")
         and state.config.tabracadabra_enabled
     )
-    require_screen = "screen" in state.config.enabled_connectors
+    # Read the live connector state, not enabled_connectors: a connector that
+    # was paused on app close (toggled off, or error-paused) shouldn't gate boot
+    # readiness — no recorder is running, so no frame will ever land.
+    screen_conn = state.connectors.get("screen")
+    require_screen = screen_conn is not None and not screen_conn.paused
 
     while True:
         tabra_ok = (
@@ -55,7 +59,7 @@ async def _wait_for_boot_ready(state: ServerState) -> None:
         )
         try:
             screen_ok = (not require_screen) or (
-                (time.time() - os.stat(TABRACADABRA_LATEST_FRAME_PNG).st_mtime) < _BOOT_FRAME_FRESH_S
+                (time.time() - os.stat(SCREEN_FRAME_HEARTBEAT).st_mtime) < _BOOT_FRAME_FRESH_S
             )
         except OSError:
             screen_ok = not require_screen
@@ -128,8 +132,8 @@ async def start_services(state: ServerState) -> None:
         state.memory_task = asyncio.create_task(run_memory_service(state))
 
     if is_enabled(state.config, "moments") and state.config.moments_enabled:
-        from apps.moments.scheduler import run_moments_scheduler
-        from apps.moments.discovery import run_moments_discovery
+        from apps.moments.runtime.scheduler import run_moments_scheduler
+        from apps.moments.runtime.discovery import run_moments_discovery
         state.moments_scheduler_task = asyncio.create_task(run_moments_scheduler(state))
         state.moments_discovery_task = asyncio.create_task(run_moments_discovery(state))
 

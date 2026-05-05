@@ -74,6 +74,8 @@ async def run_seeker_scheduler(state) -> None:
             log_dir = str(Path(cfg.log_dir).resolve())
             model = cfg.seeker_model
             api_key = cfg.seeker_api_key or cfg.moments_agent_api_key or cfg.resolve_api_key("agent_api_key")
+            subagent_model = cfg.subagent_model or None
+            subagent_api_key = cfg.resolve_api_key("subagent_api_key") if cfg.subagent_model else None
 
             # Record timestamp before running so failures don't cause retries within the same day
             seeker_state = _load_seeker_state(state)
@@ -84,7 +86,12 @@ async def run_seeker_scheduler(state) -> None:
                 seek_msg = "Generating questions…"
                 await state.broadcast_activity("seeker", seek_msg)
                 on_round = state.make_round_callback("seeker", seek_msg)
-                await asyncio.to_thread(_run_seek, log_dir, model, api_key, on_round=on_round)
+                await asyncio.to_thread(
+                    _run_seek, log_dir, model, api_key,
+                    on_round=on_round,
+                    subagent_model=subagent_model,
+                    subagent_api_key=subagent_api_key,
+                )
             finally:
                 await state.broadcast_activity("seeker")
 
@@ -99,7 +106,17 @@ async def run_seeker_scheduler(state) -> None:
             await asyncio.sleep(300)
 
 
-def _run_seek(logs_dir: str, model: str, api_key: str | None, on_round=None):
+def _run_seek(
+    logs_dir: str,
+    model: str,
+    api_key: str | None,
+    on_round=None,
+    subagent_model: str | None = None,
+    subagent_api_key: str | None = None,
+):
     """Wrapper to import and run seek in a thread."""
     from apps.seeker.seek import run as seek_run
-    return seek_run(logs_dir, model, api_key=api_key, on_round=on_round)
+    return seek_run(
+        logs_dir, model, api_key=api_key, on_round=on_round,
+        subagent_model=subagent_model, subagent_api_key=subagent_api_key,
+    )
