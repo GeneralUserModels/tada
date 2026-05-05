@@ -365,7 +365,6 @@ def _run_tool_agent_for_ideation(
     logs_dir: str,
     model: str,
     api_key: str | None,
-    on_round,
     subagent_model: str | None,
     subagent_api_key: str | None,
 ) -> str:
@@ -378,7 +377,6 @@ def _run_tool_agent_for_ideation(
             subagent_api_key=subagent_api_key,
         )
     agent.max_rounds = AGENT_IDEATION_MAX_ROUNDS
-    agent.on_round = on_round
     result = agent.run(
         [{"role": "user", "content": instruction}],
         final_response_model=IdeaPayload,
@@ -418,13 +416,10 @@ def _run_agent_for_valid_json(
     instruction: str,
     model: str,
     api_key: str | None,
-    on_round,
     response_model: type[BaseModel],
     metadata_app: str,
     parser,
 ):
-    if on_round:
-        on_round(1, 1)
     try:
         result, payload = structured_completion(
             model=model,
@@ -527,7 +522,6 @@ def _reconcile_drafts(
     feedback_state_summary: str,
     model: str,
     api_key: str | None,
-    on_round,
     subagent_model: str | None,
     subagent_api_key: str | None,
 ) -> tuple[list[MomentCandidate], list[dict[str, str]], list[dict[str, str]], str]:
@@ -545,7 +539,6 @@ def _reconcile_drafts(
         instruction=instruction,
         model=model,
         api_key=api_key,
-        on_round=on_round,
         response_model=ReconcilePayload,
         metadata_app="moments_reconcile",
         parser=_parse_structured_reconcile,
@@ -566,7 +559,6 @@ def _process_discovery_chunk(
     feedback_state_summary: str,
     model: str,
     api_key: str | None,
-    on_round,
     subagent_model: str | None,
     subagent_api_key: str | None,
 ) -> ChunkDiscoveryResult:
@@ -587,7 +579,6 @@ def _process_discovery_chunk(
         logs_dir=logs_dir,
         model=model,
         api_key=api_key,
-        on_round=on_round,
         subagent_model=subagent_model,
         subagent_api_key=subagent_api_key,
     )
@@ -604,7 +595,6 @@ def _process_discovery_chunk(
         instruction=compiler_instruction,
         model=model,
         api_key=api_key,
-        on_round=on_round,
         response_model=DraftActionPayload,
         metadata_app="moments_draft_compile",
         parser=_parse_structured_draft_actions,
@@ -632,7 +622,6 @@ def _process_discovery_chunks(
     feedback_state_summary: str,
     model: str,
     api_key: str | None,
-    on_round,
     subagent_model: str | None,
     subagent_api_key: str | None,
 ) -> list[ChunkDiscoveryResult]:
@@ -653,7 +642,6 @@ def _process_discovery_chunks(
                 feedback_state_summary=feedback_state_summary,
                 model=model,
                 api_key=api_key,
-                on_round=on_round,
                 subagent_model=subagent_model,
                 subagent_api_key=subagent_api_key,
             )
@@ -676,7 +664,6 @@ def _process_discovery_chunks(
                 feedback_state_summary=feedback_state_summary,
                 model=model,
                 api_key=api_key,
-                on_round=on_round,
                 subagent_model=subagent_model,
                 subagent_api_key=subagent_api_key,
             )
@@ -691,7 +678,6 @@ def run(
     logs_dir: str,
     model: str,
     api_key: str | None = None,
-    on_round=None,
     subagent_model: str | None = None,
     subagent_api_key: str | None = None,
 ) -> str:
@@ -730,7 +716,6 @@ def run(
         feedback_state_summary=feedback_summary,
         model=model,
         api_key=api_key,
-        on_round=on_round,
         subagent_model=subagent_model,
         subagent_api_key=subagent_api_key,
     )
@@ -761,7 +746,6 @@ def run(
         feedback_state_summary=feedback_summary,
         model=model,
         api_key=api_key,
-        on_round=on_round,
         subagent_model=subagent_model,
         subagent_api_key=subagent_api_key,
     )
