@@ -63,7 +63,7 @@ async def create_session_endpoint(body: CreateSessionBody, request: Request):
     state = request.app.state.server
     return service.create_session(
         state,
-        model=body.model or service.default_model(state.config),
+        model=service.default_model(state.config),
         effort=body.effort or service.DEFAULT_EFFORT,
         title=body.title,
     )

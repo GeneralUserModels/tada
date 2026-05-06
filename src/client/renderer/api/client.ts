@@ -79,7 +79,7 @@ export const getChatOptions = () =>
   request("GET", "/api/chat/options") as Promise<ChatOptions>;
 export const listChatSessions = () =>
   request("GET", "/api/chat/sessions") as Promise<ChatSessionMeta[]>;
-export const createChatSession = (body: { model: string; effort: string; title?: string }) =>
+export const createChatSession = (body: { model?: string; effort: string; title?: string }) =>
   request("POST", "/api/chat/sessions", body) as Promise<ChatSessionMeta>;
 export const getChatSession = (id: string) =>
   request("GET", `/api/chat/sessions/${id}`) as Promise<{ meta: ChatSessionMeta; messages: ChatItem[] }>;

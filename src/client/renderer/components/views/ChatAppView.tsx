@@ -83,7 +83,6 @@ export function ChatAppView() {
     removeSession,
     sendMessage,
     setEffort,
-    setModel,
     abort,
   } = useChat();
 
@@ -164,7 +163,7 @@ export function ChatAppView() {
     }
   };
 
-  const headerModel = activeMeta?.model ?? draftModel;
+  const headerModel = activeMeta?.model ?? options?.default_model ?? draftModel;
   const headerEffort = activeMeta?.effort ?? draftEffort;
   const headerTitle = activeMeta?.title ?? "New chat";
 
@@ -221,21 +220,7 @@ export function ChatAppView() {
         <div className="chat-app-header">
           <div className="chat-app-title">{headerTitle}</div>
           <div className="chat-app-header-meta">
-            {options?.models && options.models.length > 1 ? (
-              <SimpleDropdown<string>
-                className="chat-model-dropdown"
-                value={headerModel}
-                options={options.models.map<DropdownOption<string>>((m) => ({
-                  value: m,
-                  label: modelLabel(m),
-                }))}
-                onChange={(v) => setModel(v)}
-                disabled={!!activeId}
-                title={activeId ? "Model can't be changed mid-conversation" : undefined}
-              />
-            ) : (
-              <span className="chat-badge">{modelLabel(headerModel)}</span>
-            )}
+            <span className="chat-badge">{modelLabel(headerModel)}</span>
             <SimpleDropdown<string>
               className={`chat-effort-dropdown chat-effort-dropdown--${headerEffort}`}
               value={headerEffort}

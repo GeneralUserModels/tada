@@ -17,10 +17,8 @@ import {
 } from "../api/client";
 import { useAppContext } from "../context/AppContext";
 
-// Persist the last-chosen draft model/effort across app launches. Stored in
-// renderer localStorage so it survives quit; validated against the server's
-// option list on load in case a model is removed.
-const STORAGE_KEY_MODEL = "chat.draftModel";
+// Persist the last-chosen draft effort across app launches. Chat model is not
+// renderer state: new sessions always use the backend's configured agent_model.
 const STORAGE_KEY_EFFORT = "chat.draftEffort";
 
 export function useChatApp() {
@@ -33,11 +31,10 @@ export function useChatApp() {
   const [unreadSessions, setUnreadSessions] = useState<Set<string>>(new Set());
   const [options, setOptions] = useState<ChatOptions | null>(null);
   const [loadingSession, setLoadingSession] = useState(false);
-  // Draft model+effort, used when no session is selected. Hydrated from
-  // localStorage so the user's last pick survives an app quit.
-  const [draftModel, setDraftModel] = useState<string>(
-    () => localStorage.getItem(STORAGE_KEY_MODEL) ?? "",
-  );
+  // Draft model mirrors the server-provided agent_model default for display
+  // only. It is not stored locally and is not sent during session creation.
+  const [draftModel, setDraftModel] = useState<string>("");
+  // Draft effort is still user-selectable and can survive app quit.
   const [draftEffort, setDraftEffort] = useState<string>(
     () => localStorage.getItem(STORAGE_KEY_EFFORT) ?? "medium",
   );
@@ -56,15 +53,11 @@ export function useChatApp() {
   const loadOptions = useCallback(async () => {
     const o = await getChatOptions();
     setOptions(o);
-    // Drop any persisted value the server no longer offers.
-    setDraftModel((m) => (m && o.models.includes(m) ? m : o.default_model));
+    setDraftModel(o.default_model);
     setDraftEffort((e) => (e && o.efforts.includes(e) ? e : o.default_effort));
   }, []);
 
-  // Persist draft model/effort so the last-chosen pair survives app quit.
-  useEffect(() => {
-    if (draftModel) localStorage.setItem(STORAGE_KEY_MODEL, draftModel);
-  }, [draftModel]);
+  // Persist draft effort so the last-chosen budget survives app quit.
   useEffect(() => {
     if (draftEffort) localStorage.setItem(STORAGE_KEY_EFFORT, draftEffort);
   }, [draftEffort]);
@@ -76,7 +69,6 @@ export function useChatApp() {
 
   const newDraft = useCallback(() => {
     if (activeMeta) {
-      setDraftModel(activeMeta.model);
       setDraftEffort(activeMeta.effort);
     }
     setActiveIdState(null);
@@ -142,14 +134,6 @@ export function useChatApp() {
     [activeId, activeMeta, loadSessions],
   );
 
-  const setModel = useCallback(
-    async (model: string) => {
-      if (!activeId) setDraftModel(model);
-      // Mid-conversation model change is not supported (would need a new endpoint).
-    },
-    [activeId],
-  );
-
   const sendMessage = useCallback(
     async (content: string) => {
       // If the active session already has a pending stream, ignore.
@@ -159,7 +143,7 @@ export function useChatApp() {
       let currentId = activeId;
       let currentMeta = activeMeta;
       if (!currentId) {
-        const meta = await createChatSession({ model: draftModel, effort: draftEffort });
+        const meta = await createChatSession({ effort: draftEffort });
         currentId = meta.id;
         currentMeta = meta;
         // Only switch the user to the new session if they're still on the
@@ -342,7 +326,7 @@ export function useChatApp() {
       void currentMeta;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeId, activeMeta, pendingSessions, draftModel, draftEffort, loadSessions],
+    [activeId, activeMeta, pendingSessions, draftEffort, loadSessions],
   );
 
   const abort = useCallback(() => {
@@ -385,7 +369,6 @@ export function useChatApp() {
     removeSession,
     sendMessage,
     setEffort,
-    setModel,
     abort,
   };
 }

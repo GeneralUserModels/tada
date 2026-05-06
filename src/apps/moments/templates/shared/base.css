@@ -121,6 +121,41 @@ a:hover { text-decoration: underline; }
   background: rgba(var(--mint-rgb), 0.2);
 }
 
+/* Tabs */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+  border-bottom: 1px solid rgba(var(--sage-rgb), 0.14);
+  margin-bottom: 16px;
+}
+.tab-btn {
+  appearance: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 10px 9px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.tab-btn:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.35);
+}
+.tab-btn.active {
+  color: var(--sage);
+  border-bottom-color: var(--sage);
+}
+.tab-btn:focus-visible {
+  outline: 2px solid rgba(var(--sage-rgb), 0.35);
+  outline-offset: 2px;
+}
+
 /* Search */
 .search-input {
   padding: 6px 14px;
