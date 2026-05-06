@@ -93,7 +93,7 @@ async def run_moments_discovery(state) -> None:
     tada_dir = str(Path(state.config.tada_dir).resolve())
     await _ensure_sandbox_async([logs_dir, tada_dir])
 
-    last_run_file = Path(state.config.log_dir).resolve() / ".discovery_last_run"
+    last_run_file = Path(state.config.log_dir).resolve() / "moments" / ".discovery_last_run"
 
     while True:
         try:

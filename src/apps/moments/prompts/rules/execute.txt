@@ -3,7 +3,7 @@
 - Execute the task; do not merely describe how to do it.
 - Be very thorough: inspect the cited evidence, search adjacent relevant sources, and pursue enough independent context to produce an artifact the user could not have made from a quick skim.
 - Add things like evidence, comparisons, edge cases, caveats, or whatever else may be relevant. 
-- The final built artifact should be a comprehensive interface that a user can still easily navigate.
+- The final built artifact should be a comprehensive interface that a user can still easily navigate. Be creative in your design.
 - Preserve the selected template structure. Copy template files first, then modify primarily `app.js` data/content. Do not replace template `index.html`, shared asset paths, or design-system CSS unless the task explicitly requires a new layout.
 - Do not keep researching indefinitely after the artifact has enough support.
 - Use subagents for independent source reads, research threads, and verification.

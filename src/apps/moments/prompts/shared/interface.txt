@@ -6,8 +6,10 @@ Write separate files:
 - `index.html`
 - `styles.css`
 - `app.js`
+- `base.css`
+- `components.js`
 - `meta.json`
 
-Use the provided templates and shared component library. Keep `index.html` small. Put data and rendering in JavaScript. Verify JavaScript with `node --check`.
+Use the provided templates and shared component library. Keep `index.html` small. Put data and rendering in JavaScript. The executor pre-seeds `base.css` and `components.js` in the output directory as siblings of `index.html`; reference them as `base.css` and `components.js`, and do not modify them. Verify JavaScript with `node --check`.
 
 The interface should make the output easy to scan, filter, compare, and act on. Avoid plain markdown dumps.

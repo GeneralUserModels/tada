@@ -1617,12 +1617,14 @@ button, input, select, textarea, canvas, a, label,
 }
 
 .tada-toc-item--unread .tada-toc-item-name,
+.tada-toc-item--running .tada-toc-item-name,
 .tada-toc-item--pinned .tada-toc-item-name {
   color: var(--sage);
   font-weight: 500;
 }
 
 .tada-toc-item--unread .tada-toc-item-count,
+.tada-toc-item--running .tada-toc-item-count,
 .tada-toc-item--pinned .tada-toc-item-count {
   color: var(--sage);
   font-weight: 600;
@@ -1646,6 +1648,12 @@ button, input, select, textarea, canvas, a, label,
 }
 
 .tada-chapter:first-of-type { margin-top: 4px; }
+
+.tada-chapter--running + .tada-chapter,
+.tada-chapter--unread + .tada-chapter,
+.tada-chapter--pinned + .tada-chapter {
+  margin-top: 24px;
+}
 
 /* Collapsed chapters sit much closer together */
 .tada-chapter:not(.open) + .tada-chapter {
@@ -1702,6 +1710,21 @@ button, input, select, textarea, canvas, a, label,
   background: var(--sage);
 }
 
+.tada-chapter-glyph--running,
+.tada-toc-item-glyph--running {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sage);
+  box-shadow: 0 0 0 3px rgba(var(--sage-rgb), 0.12);
+}
+
+.tada-toc-item-glyph--running {
+  margin-top: 5px;
+}
+
+.tada-chapter--running .tada-chapter-name,
 .tada-chapter--pinned .tada-chapter-name,
 .tada-chapter--unread .tada-chapter-name {
   color: var(--sage);
@@ -1718,6 +1741,7 @@ button, input, select, textarea, canvas, a, label,
 }
 
 .tada-chapter--pinned .tada-chapter-count,
+.tada-chapter--running .tada-chapter-count,
 .tada-chapter--unread .tada-chapter-count {
   color: var(--sage);
   opacity: 0.7;

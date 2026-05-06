@@ -56,6 +56,15 @@ class OnlineRecorder(ScreenRecorder):
                      Valid values: "move", "scroll", "click", "key"
                      Pass empty list [] to enable all event types.
         """
+        # Compute the raw recorder session path before calling the parent
+        # constructor. ScreenRecorder creates its session directory during
+        # __init__, so passing this up front avoids stray logs/session_* dirs.
+        base = Path(log_dir) if log_dir else self.DEFAULT_LOG_DIR
+        sessions_base = base / "screen" / "sessions"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_dir = sessions_base / f"session_{timestamp}"
+        kwargs["session_dir"] = str(session_dir)
+
         # Calculate scale from target DPI if not explicitly provided
         if "scale" not in kwargs and target_dpi is not None:
             monitor_dpis = get_monitor_dpis()
@@ -77,10 +86,7 @@ class OnlineRecorder(ScreenRecorder):
         # Always keep raw recorder sessions under the screen connector's area.
         # Assistant-facing streams stay at logs/screen/{labels,filtered}.jsonl;
         # these per-run folders contain raw screenshots/events/aggregations.
-        base = Path(log_dir) if log_dir else self.DEFAULT_LOG_DIR
-        sessions_base = base / "screen" / "sessions"
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.session_dir = sessions_base / f"session_{timestamp}"
+        self.session_dir = session_dir
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self.save_worker.session_dir = self.session_dir
         self.save_worker.screenshots_dir = self.session_dir / "screenshots"

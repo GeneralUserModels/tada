@@ -203,6 +203,13 @@ export function TadaView() {
     return out;
   }, [state.agentActivities]);
   const runActivities = useMemo(() => Object.values(runActivitiesBySlug), [runActivitiesBySlug]);
+  const runningSlugs = useMemo(() => {
+    const slugs = new Set<string>();
+    for (const act of runActivities) {
+      if (act.slug) slugs.add(act.slug);
+    }
+    return slugs;
+  }, [runActivities]);
   const {
     results, loading, load, showDismissed, toggleShowDismissed,
     dismiss, restore, pin, unpin, thumbs, editSchedule, startView, endView, rerun,
@@ -235,9 +242,38 @@ export function TadaView() {
     );
   }, [results, showDismissed, query]);
 
+  const rawUnreadItems = useMemo(
+    () => visibleResults.filter((r) => isUnread(r)),
+    [visibleResults], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const runningItems = useMemo(
+    () => showDismissed ? [] : visibleResults.filter((r) => runningSlugs.has(r.slug)),
+    [showDismissed, visibleResults, runningSlugs],
+  );
+  const unreadItems = useMemo(
+    () => showDismissed
+      ? []
+      : rawUnreadItems.filter((r) => !runningSlugs.has(r.slug)),
+    [showDismissed, rawUnreadItems, runningSlugs],
+  );
+  const pinnedItems = useMemo(
+    () => showDismissed
+      ? []
+      : visibleResults.filter((r) => r.pinned && !r.dismissed && !runningSlugs.has(r.slug) && !isUnread(r)),
+    [showDismissed, visibleResults, runningSlugs], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const topicResults = useMemo(() => {
+    if (showDismissed) return visibleResults;
+    return visibleResults.filter((r) =>
+      !runningSlugs.has(r.slug) &&
+      !isUnread(r) &&
+      !(r.pinned && !r.dismissed)
+    );
+  }, [showDismissed, visibleResults, runningSlugs]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const groupedByTopic = useMemo(() => {
     const out: Record<string, MomentResult[]> = {};
-    for (const r of visibleResults) {
+    for (const r of topicResults) {
       const t = r.topic || UNCATEGORIZED;
       (out[t] ??= []).push(r);
     }
@@ -250,7 +286,7 @@ export function TadaView() {
       });
     }
     return out;
-  }, [visibleResults, runActivitiesBySlug]);
+  }, [topicResults, runActivitiesBySlug]);
 
   const topicOrder = useMemo(() => {
     const topics = Object.keys(groupedByTopic);
@@ -283,15 +319,6 @@ export function TadaView() {
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }, []);
-
-  const pinnedItems = useMemo(
-    () => visibleResults.filter((r) => r.pinned && !r.dismissed),
-    [visibleResults],
-  );
-  const unreadItems = useMemo(
-    () => visibleResults.filter((r) => isUnread(r)),
-    [visibleResults], // eslint-disable-line react-hooks/exhaustive-deps
-  );
 
   const placeholderActivities = useMemo(() => {
     if (loading) return [];
@@ -495,7 +522,8 @@ export function TadaView() {
 
   // List view
   const totalTadas = visibleResults.length;
-  const totalUnread = unreadItems.length;
+  const totalUnread = rawUnreadItems.length;
+  const totalRunning = showDismissed ? 0 : runningItems.length + placeholderActivities.length;
   const todayLabel = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 
   return (
@@ -557,21 +585,12 @@ export function TadaView() {
 
       <div className="tada-list-body">
         <main className="tada-list-main">
-          {placeholderActivities.map((act) => (
-            <article key={`placeholder-${act.slug}`} className="glass-card tada-entry tada-entry--running">
-              <div className="tada-card-header">
-                <h3 className="tada-card-title">{act.message.replace(/^Running:\s*/, "")}</h3>
-              </div>
-              <RunningIndicator pct={activityPercent(act)} />
-            </article>
-          ))}
-
           {loading ? (
             <div className="tada-empty">
               <div className="tada-spinner" />
               <span className="tada-empty-line">Loading tadas…</span>
             </div>
-          ) : topicOrder.length === 0 && placeholderActivities.length === 0 ? (
+          ) : topicOrder.length === 0 && totalRunning === 0 && unreadItems.length === 0 && pinnedItems.length === 0 ? (
             query.trim() ? (
               <div className="tada-empty">
                 <span className="tada-empty-line">No matches for "{query.trim()}"</span>
@@ -595,6 +614,40 @@ export function TadaView() {
             )
           ) : (
             <>
+              {!showDismissed && totalRunning > 0 && (
+                <section
+                  id="tada-chapter-__running"
+                  className={`tada-chapter tada-chapter--running${closedTopics.has("__running") ? "" : " open"}${runningItems.some(isUnread) ? " has-unread" : ""}`}
+                >
+                  <button className="tada-chapter-header" onClick={() => toggleTopic("__running")} type="button">
+                    <span className="tada-chapter-name">
+                      <span className="tada-chapter-glyph tada-chapter-glyph--running" />
+                      Running
+                      <span className="tada-chapter-count">{totalRunning}</span>
+                    </span>
+                    <svg className="tada-chapter-caret" width="9" height="9" viewBox="0 0 10 10" fill="none">
+                      <path d="M3.5 2L7 5L3.5 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                  {!closedTopics.has("__running") && (
+                    <div className="tada-chapter-body">
+                      {placeholderActivities.map((act, i) => (
+                        <article
+                          key={`placeholder-${act.slug}`}
+                          className="glass-card tada-entry tada-entry--running"
+                          style={{ animationDelay: `${i * 0.04}s` }}
+                        >
+                          <div className="tada-card-header">
+                            <h3 className="tada-card-title">{act.message.replace(/^Running:\s*/, "")}</h3>
+                          </div>
+                          <RunningIndicator pct={activityPercent(act)} />
+                        </article>
+                      ))}
+                      {runningItems.map((r, i) => renderEntry(r, i + placeholderActivities.length))}
+                    </div>
+                  )}
+                </section>
+              )}
               {!showDismissed && unreadItems.length > 0 && (
                 <ChapterSection
                   keyName="__unread"
@@ -642,9 +695,20 @@ export function TadaView() {
           <div style={{ minHeight: 24, flexShrink: 0 }} />
         </main>
 
-        {!loading && (topicOrder.length > 0 || (!showDismissed && (pinnedItems.length > 0 || unreadItems.length > 0))) && (
+        {!loading && (topicOrder.length > 0 || (!showDismissed && (totalRunning > 0 || pinnedItems.length > 0 || unreadItems.length > 0))) && (
           <aside className="tada-toc" aria-label="Jump to section">
             <div className="tada-toc-label">Jump to</div>
+            {!showDismissed && totalRunning > 0 && (
+              <button
+                type="button"
+                className="tada-toc-item tada-toc-item--running"
+                onClick={() => jumpToChapter("__running")}
+              >
+                <span className="tada-toc-item-glyph tada-toc-item-glyph--running" />
+                <span className="tada-toc-item-name">Running</span>
+                <span className="tada-toc-item-count">{totalRunning}</span>
+              </button>
+            )}
             {!showDismissed && unreadItems.length > 0 && (
               <button
                 type="button"
@@ -670,7 +734,7 @@ export function TadaView() {
                 <span className="tada-toc-item-count">{pinnedItems.length}</span>
               </button>
             )}
-            {(unreadItems.length > 0 || pinnedItems.length > 0) && topicOrder.length > 0 && (
+            {(totalRunning > 0 || unreadItems.length > 0 || pinnedItems.length > 0) && topicOrder.length > 0 && (
               <div className="tada-toc-divider" aria-hidden="true" />
             )}
             {topicOrder.map((topic) => (

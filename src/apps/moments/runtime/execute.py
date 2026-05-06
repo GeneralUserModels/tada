@@ -6,7 +6,9 @@ import json
 import shutil
 import subprocess
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from dotenv import load_dotenv
 
@@ -20,6 +22,10 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 OUTPUT_FILES = ["index.html", "styles.css", "app.js", "data.js", "base.css", "components.js", "meta.json"]
 EXECUTE_WARNING_ROUND = 100
 EXECUTE_MAX_ROUNDS = 150
+SHARED_ASSETS = {
+    "base.css": TEMPLATES_DIR / "shared" / "base.css",
+    "components.js": TEMPLATES_DIR / "shared" / "components.js",
+}
 
 _PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 INSTRUCTION_TEMPLATE = (_PROMPTS / "execute.txt").read_text()
@@ -59,6 +65,77 @@ def _check_js_compilation(output_dir: str) -> bool:
             print(f"  [compile] FAILED: {js_file.name}: {result.stderr.strip()}")
             return False
     return True
+
+
+class _HtmlAssetParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.assets: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr = dict(attrs)
+        if tag == "script" and attr.get("src"):
+            self.assets.append(attr["src"] or "")
+        elif tag == "link" and attr.get("rel") == "stylesheet" and attr.get("href"):
+            self.assets.append(attr["href"] or "")
+
+
+def _ensure_shared_assets(output_dir: str) -> None:
+    """Place shared runtime files next to generated moment files."""
+    out = Path(output_dir)
+    for name, src in SHARED_ASSETS.items():
+        dst = out / name
+        if not dst.exists() or dst.read_bytes() != src.read_bytes():
+            shutil.copyfile(src, dst)
+
+
+def _normalize_shared_asset_refs(output_dir: str) -> None:
+    """Keep generated HTML using sibling shared assets in the result directory."""
+    index_path = Path(output_dir) / "index.html"
+    if not index_path.exists():
+        return
+    html = index_path.read_text()
+    normalized = (
+        html
+        .replace('href="../shared/base.css"', 'href="base.css"')
+        .replace("href='../shared/base.css'", "href='base.css'")
+        .replace('src="../shared/components.js"', 'src="components.js"')
+        .replace("src='../shared/components.js'", "src='components.js'")
+    )
+    if normalized != html:
+        index_path.write_text(normalized)
+
+
+def _prepare_shared_runtime(output_dir: str) -> None:
+    _ensure_shared_assets(output_dir)
+    _normalize_shared_asset_refs(output_dir)
+
+
+def _check_html_asset_refs(output_dir: str) -> bool:
+    """Verify local scripts and stylesheets referenced by index.html exist."""
+    out = Path(output_dir)
+    index_path = out / "index.html"
+    if not index_path.exists():
+        return False
+    parser = _HtmlAssetParser()
+    parser.feed(index_path.read_text())
+    ok = True
+    for ref in parser.assets:
+        parsed = urlparse(ref)
+        if parsed.scheme or ref.startswith(("//", "#", "data:")):
+            continue
+        asset_path = (out / unquote(parsed.path)).resolve()
+        if not asset_path.exists():
+            print(f"  [assets] MISSING: {ref}")
+            ok = False
+    return ok
+
+
+def _check_output(output_dir: str) -> bool:
+    if not (Path(output_dir) / "index.html").exists():
+        return False
+    _prepare_shared_runtime(output_dir)
+    return _check_html_asset_refs(output_dir) and _check_js_compilation(output_dir)
 
 
 def _restore_backup(backup_dir: str, output_dir: str) -> None:
@@ -106,6 +183,10 @@ def run(
             shutil.rmtree(backup_dir)
         Path(backup_dir).parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(output_dir, backup_dir)
+
+    # Make the shared runtime available before the agent writes app code, so
+    # generated interfaces can inspect and rely on these files directly.
+    _prepare_shared_runtime(output_dir)
 
     effective_cadence = cadence_override or fm.get("cadence", "")
     effective_schedule = schedule_override or fm.get("schedule", "")
@@ -184,8 +265,10 @@ def run(
             "schedule": effective_schedule,
         }, indent=2))
 
-    # Check if execute produced a valid output before running verify_and_refine
-    execute_ok = (Path(output_dir) / "index.html").exists() and _check_js_compilation(output_dir)
+    # Check if execute produced a valid output before running verify_and_refine.
+    # Syntax checks alone are insufficient: app.js can be valid JS while the
+    # HTML points at missing shared runtime files, causing runtime crashes.
+    execute_ok = _check_output(output_dir)
 
     if execute_ok:
         # Snapshot post-execute state so we can recover if verify_and_refine breaks it
@@ -198,7 +281,7 @@ def run(
         verify_and_refine(output_dir, logs_dir, model, api_key=api_key)
 
         # If verify_and_refine broke it, restore the post-execute snapshot
-        refine_ok = (Path(output_dir) / "index.html").exists() and _check_js_compilation(output_dir)
+        refine_ok = _check_output(output_dir)
         if not refine_ok:
             print("  [safety] verify_and_refine broke output, restoring post-execute version")
             _restore_backup(pre_refine_dir, output_dir)
