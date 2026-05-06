@@ -19,7 +19,7 @@ Focus on the "Specific Instructions for Agent" section below. Treat other sectio
 
 ## Templates
 
-Templates are at `{templates_dir}/`. Read `{templates_dir}/shared/README.md`, then read the README for the best template before copying files.
+Templates are at `{templates_dir}/`. The output directory already contains the shared source files `base.css` and `components.js`; reference them directly as sibling files and do not copy, replace, or modify them. Read `{templates_dir}/shared/README.md`, then read the README for the best template before copying the template-specific files you need.
 
 Available templates:
 - `dashboard`: metrics, tracking, status overviews.

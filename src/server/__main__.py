@@ -21,6 +21,9 @@ def _watch_parent():
         if os.getppid() != ppid:
             logging.getLogger(__name__).info("Parent process died, shutting down")
             os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(5)
+            logging.getLogger(__name__).warning("Parent process is gone; forcing server exit")
+            os._exit(143)
             break
 
 

@@ -33,11 +33,11 @@ class _DiscoveryBase:
 class MomentsDiscovery(_DiscoveryBase):
     """Discovers candidate moments from activity logs."""
 
-    def run(self, on_round=None) -> str:
+    def run(self) -> str:
         """Analyze logs and write task files. Blocking."""
         from apps.moments.steps.discover import run as moments_run
         return moments_run(
-            self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
+            self.logs_dir, model=self.model, api_key=self.api_key,
             subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
         )
 
@@ -45,11 +45,11 @@ class MomentsDiscovery(_DiscoveryBase):
 class TaskFilter(_DiscoveryBase):
     """Promotes discovered candidates into logs-tada/."""
 
-    def run(self, on_round=None) -> str:
+    def run(self) -> str:
         """Promote candidate moments through tada. Blocking."""
         from apps.moments.steps.promote import run as filter_run
         return filter_run(
-            self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
+            self.logs_dir, model=self.model, api_key=self.api_key,
             subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
         )
 
@@ -57,11 +57,11 @@ class TaskFilter(_DiscoveryBase):
 class TriggersCheck(_DiscoveryBase):
     """Evaluates trigger conditions on existing tada tasks and re-fires matches."""
 
-    def run(self, on_round=None) -> str:
+    def run(self) -> str:
         """Check triggers and mark fired tasks for re-execution. Blocking."""
         from apps.moments.steps.triggers import run as triggers_run
         return triggers_run(
-            self.logs_dir, model=self.model, api_key=self.api_key, on_round=on_round,
+            self.logs_dir, model=self.model, api_key=self.api_key,
             subagent_model=self.subagent_model, subagent_api_key=self.subagent_api_key,
         )
 
@@ -93,7 +93,7 @@ async def run_moments_discovery(state) -> None:
     tada_dir = str(Path(state.config.tada_dir).resolve())
     await _ensure_sandbox_async([logs_dir, tada_dir])
 
-    last_run_file = Path(state.config.log_dir).resolve() / ".discovery_last_run"
+    last_run_file = Path(state.config.log_dir).resolve() / "moments" / ".discovery_last_run"
 
     while True:
         try:
@@ -113,35 +113,26 @@ async def run_moments_discovery(state) -> None:
             subagent_api_key = cfg.resolve_api_key("subagent_api_key") if cfg.subagent_model else None
 
             try:
-                discover_msg = "Discovering Tadas…"
-                await state.broadcast_activity("moments_discovery", discover_msg)
-                discover_cb = state.make_round_callback("moments_discovery", discover_msg)
                 logger.info("Discovery: finding candidate moments")
+                await state.broadcast_activity("moments_discovery", "Discovering Tadas…")
                 try:
                     await asyncio.to_thread(
                         MomentsDiscovery(logs_dir, model, api_key, subagent_model, subagent_api_key).run,
-                        on_round=discover_cb,
                     )
                 except Exception:
                     logger.exception("Discovery failed; skipping promotion and triggers")
                     continue
 
-                filter_msg = "Promoting Tadas…"
-                await state.broadcast_activity("moments_discovery", filter_msg)
-                filter_cb = state.make_round_callback("moments_discovery", filter_msg)
                 logger.info("Discovery: promoting candidates")
+                await state.broadcast_activity("moments_discovery", "Promoting Tadas…")
                 await asyncio.to_thread(
                     TaskFilter(logs_dir, model, api_key, subagent_model, subagent_api_key).run,
-                    on_round=filter_cb,
                 )
 
-                triggers_msg = "Checking Triggers…"
-                await state.broadcast_activity("moments_discovery", triggers_msg)
-                triggers_cb = state.make_round_callback("moments_discovery", triggers_msg)
                 logger.info("Discovery: evaluating triggers")
+                await state.broadcast_activity("moments_discovery", "Checking Triggers…")
                 await asyncio.to_thread(
                     TriggersCheck(logs_dir, model, api_key, subagent_model, subagent_api_key).run,
-                    on_round=triggers_cb,
                 )
 
                 last_run_file.write_text(datetime.now().isoformat())

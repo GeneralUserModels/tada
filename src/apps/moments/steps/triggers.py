@@ -36,7 +36,6 @@ def run(
     logs_dir: str,
     model: str,
     api_key: str | None = None,
-    on_round=None,
     subagent_model: str | None = None,
     subagent_api_key: str | None = None,
 ) -> str:
@@ -76,7 +75,6 @@ def run(
         subagent_model=subagent_model, subagent_api_key=subagent_api_key,
     )
     agent.max_rounds = 50
-    agent.on_round = on_round
     result = agent.run([{"role": "user", "content": instruction}])
 
     fired_slugs = _parse_fired_slugs(result)

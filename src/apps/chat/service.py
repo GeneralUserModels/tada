@@ -37,6 +37,7 @@ from agent.tools import (
 )
 from agent.tools.compact import CompactTool
 from chat import ChatAgent
+from server.config import DEFAULT_AGENT_MODEL
 
 # Effort caps the agent's *output* tokens (its generated text + tool-call args).
 # This is a better proxy than turns for "how much agent work this response can
@@ -49,8 +50,12 @@ DEFAULT_EFFORT = "medium"
 # this just prevents pathological infinite-tool-call loops.
 SAFETY_MAX_ROUNDS = 40
 
-AVAILABLE_MODELS = ["anthropic/claude-sonnet-4-6", "gemini/gemini-3-flash-preview"]
-DEFAULT_MODEL = AVAILABLE_MODELS[0]
+AVAILABLE_MODELS = [
+    DEFAULT_AGENT_MODEL,
+    "anthropic/claude-sonnet-4-6",
+    "gemini/gemini-3.1-pro-preview",
+]
+DEFAULT_MODEL = DEFAULT_AGENT_MODEL
 
 _PROMPTS = Path(__file__).parent / "prompts"
 SYSTEM_PROMPT_TEMPLATE = (_PROMPTS / "system.txt").read_text()
@@ -85,6 +90,11 @@ def resolve_api_key(config) -> str | None:
     return config.agent_api_key or config.resolve_api_key("agent_api_key")
 
 
+def default_model(config) -> str:
+    configured = getattr(config, "agent_model", "") or DEFAULT_MODEL
+    return configured if configured in AVAILABLE_MODELS else DEFAULT_MODEL
+
+
 def list_sessions(state) -> list[dict]:
     cdir = chats_dir(state)
     if not cdir.exists():
@@ -104,7 +114,7 @@ def list_sessions(state) -> list[dict]:
 
 def create_session(state, model: str, effort: str, title: str | None = None) -> dict:
     if model not in AVAILABLE_MODELS:
-        model = DEFAULT_MODEL
+        model = default_model(state.config)
     if effort not in EFFORT_TO_MAX_TOKENS:
         effort = DEFAULT_EFFORT
     sid = new_session_id()

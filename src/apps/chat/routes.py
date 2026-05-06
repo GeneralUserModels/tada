@@ -40,11 +40,12 @@ class MessageBody(BaseModel):
 
 
 @router.get("/options")
-async def get_options():
+async def get_options(request: Request):
+    state = request.app.state.server
     return {
         "models": service.AVAILABLE_MODELS,
         "efforts": list(service.EFFORT_TO_MAX_TOKENS.keys()),
-        "default_model": service.DEFAULT_MODEL,
+        "default_model": service.default_model(state.config),
         "default_effort": service.DEFAULT_EFFORT,
         "effort_max_tokens": service.EFFORT_TO_MAX_TOKENS,
     }
@@ -62,7 +63,7 @@ async def create_session_endpoint(body: CreateSessionBody, request: Request):
     state = request.app.state.server
     return service.create_session(
         state,
-        model=body.model or service.DEFAULT_MODEL,
+        model=body.model or service.default_model(state.config),
         effort=body.effort or service.DEFAULT_EFFORT,
         title=body.title,
     )

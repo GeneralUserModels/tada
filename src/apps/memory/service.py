@@ -13,6 +13,7 @@ from server.feature_flags import is_enabled
 from agent.builder import _ensure_sandbox_async
 from apps.moments.runtime.scheduler import is_due
 from server.cost_tracker import init_cost_tracking
+from server.config import DEFAULT_AGENT_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run memory wiki pipeline")
     parser.add_argument("--logs-dir", default=os.getenv("TADA_LOG_DIR", "./logs"),
                         help="Path to logs directory (default: $TADA_LOG_DIR or ./logs)")
-    parser.add_argument("--model", default=os.getenv("TADA_AGENT_MODEL", "anthropic/claude-sonnet-4-20250514"),
+    parser.add_argument("--model", default=os.getenv("TADA_AGENT_MODEL", DEFAULT_AGENT_MODEL),
                         help="Model to use")
     parser.add_argument("--api-key", default=os.getenv("ANTHROPIC_API_KEY", ""),
                         help="API key (default: $ANTHROPIC_API_KEY)")

@@ -78,10 +78,7 @@ def _run_promotion_agent_for_valid_json(
     candidates: list[MomentCandidate],
     model: str,
     api_key: str | None,
-    on_round,
 ):
-    if on_round:
-        on_round(1, 1)
     try:
         result, payload = structured_completion(
             model=model,
@@ -103,7 +100,6 @@ def run(
     model: str,
     n: int = 8,
     api_key: str | None = None,
-    on_round=None,
     subagent_model: str | None = None,
     subagent_api_key: str | None = None,
 ) -> str:
@@ -139,7 +135,6 @@ def run(
         candidates=candidates,
         model=model,
         api_key=api_key,
-        on_round=on_round,
     )
     promoted = ranked[:n] if n > 0 else ranked
     for candidate in promoted:
