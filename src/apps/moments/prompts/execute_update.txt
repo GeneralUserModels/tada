@@ -24,7 +24,7 @@ Focus on the "Specific Instructions for Agent" section below. Treat other sectio
 
 ## Existing Output
 
-The current interface files are at `{output_dir}/`. Preserve the interface structure unless a targeted improvement is needed.
+The current interface files are at `{output_dir}/`. The shared source files `base.css` and `components.js` are already present in that folder; reference them directly as sibling files and do not replace or modify them. Preserve the interface structure unless a targeted improvement is needed.
 
 ## Metadata
 
