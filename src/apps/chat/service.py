@@ -113,8 +113,7 @@ def list_sessions(state) -> list[dict]:
 
 
 def create_session(state, model: str, effort: str, title: str | None = None) -> dict:
-    if model not in AVAILABLE_MODELS:
-        model = default_model(state.config)
+    model = default_model(state.config)
     if effort not in EFFORT_TO_MAX_TOKENS:
         effort = DEFAULT_EFFORT
     sid = new_session_id()
@@ -140,6 +139,10 @@ def load_session(state, session_id: str) -> dict | None:
     if not sdir.exists():
         return None
     meta = json.loads((sdir / "meta.json").read_text())
+    # The assistant chat follows the configured agent model globally. Older
+    # sessions may have a different model persisted from the former dropdown;
+    # normalize the returned metadata so UI/runtime state cannot drift.
+    meta = {**meta, "model": default_model(state.config)}
     msgs_path = sdir / "messages.json"
     messages = json.loads(msgs_path.read_text()) if msgs_path.exists() else []
     return {"meta": meta, "messages": messages}
@@ -148,7 +151,12 @@ def load_session(state, session_id: str) -> dict | None:
 def save_session(state, session_id: str, meta: dict, messages: list[dict]) -> None:
     sdir = _session_dir(state, session_id)
     sdir.mkdir(parents=True, exist_ok=True)
-    meta = {**meta, "updated_at": _now(), "message_count": len(messages)}
+    meta = {
+        **meta,
+        "model": default_model(state.config),
+        "updated_at": _now(),
+        "message_count": len(messages),
+    }
     (sdir / "meta.json").write_text(json.dumps(meta, indent=2))
     (sdir / "messages.json").write_text(json.dumps(messages, indent=2, default=str))
     (sdir / "conversation.md").write_text(_render_markdown(meta, messages))
@@ -392,7 +400,7 @@ async def build_chat_agent(
     should_stop: Callable[[], bool] | None = None,
 ) -> ChatAgent:
     config = state.config
-    model = meta.get("model", DEFAULT_MODEL)
+    model = default_model(config)
     effort = meta.get("effort", DEFAULT_EFFORT)
     max_output_tokens = EFFORT_TO_MAX_TOKENS.get(effort, EFFORT_TO_MAX_TOKENS[DEFAULT_EFFORT])
     api_key = resolve_api_key(config)

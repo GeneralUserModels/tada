@@ -1,6 +1,6 @@
 # Tada Moments — Shared Component Library
 
-React 18 component library for building moment interfaces. No JSX or build step required — uses `React.createElement` via the `h` shorthand.
+React 18 component library for building moment interfaces. No JSX or build step required.
 
 ## Setup
 
@@ -19,7 +19,13 @@ When copying to an output directory, place `base.css` and `components.js` as sib
 
 ## Component API
 
-All components are on the global `PN` object. Use with `const h = React.createElement`.
+All components and shared hooks are on the global `PN` object. In `app.js`, declare local React helpers as needed:
+
+```js
+const h = React.createElement;
+const { useState, useMemo, useEffect } = React;
+const { PageHeader, GlassCard } = PN;
+```
 
 ### `PN.PageHeader`
 Page title with optional subtitle, badges, and status indicator.

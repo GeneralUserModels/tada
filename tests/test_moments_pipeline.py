@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -151,6 +152,9 @@ class _FakeExecuteAgent:
         self.test_case.assertIn("template kit has been copied", prompt)
         self.test_case.assertIn("multiple views, tabs, filters", prompt)
         self.test_case.assertIn("copying and pasting directly", prompt)
+        self.test_case.assertIn("Every substantive research file needs a visible home", prompt)
+        self.test_case.assertIn("Do not invent a separate visual system", prompt)
+        self.test_case.assertIn("Do not introduce blue/purple fallback accents", prompt)
         shutil.copyfile(template_kit_dir / "feed" / "index.html", self.output_dir / "index.html")
         shutil.copyfile(template_kit_dir / "feed" / "styles.css", self.output_dir / "styles.css")
         shutil.copyfile(template_kit_dir / "feed" / "app.js", self.output_dir / "app.js")
@@ -243,6 +247,41 @@ class MomentsPipelineTests(unittest.TestCase):
         self.assertTrue(should_run("once", "once", "", {}))
         self.assertFalse(should_run("trigger", "trigger", "", {}))
         self.assertTrue(should_run("daily", "scheduled", "daily at 12:01am", {}))
+
+    def test_shared_components_only_export_pn_global(self):
+        components_js = (execute.TEMPLATES_DIR / "shared" / "components.js").read_text()
+
+        self.assertIn("(function() {", components_js)
+        self.assertIn("window.PN = {", components_js)
+        self.assertTrue(components_js.rstrip().endswith("})();"))
+
+    def test_template_apps_define_local_react_helpers(self):
+        for app_js in sorted(execute.TEMPLATES_DIR.glob("*/app.js")):
+            text = app_js.read_text()
+            self.assertIn("const h = React.createElement", text, f"{app_js} should define local h helper")
+
+    def test_shared_component_classes_have_base_styles(self):
+        components_js = (execute.TEMPLATES_DIR / "shared" / "components.js").read_text()
+        base_css = (execute.TEMPLATES_DIR / "shared" / "base.css").read_text()
+
+        class_tokens = set()
+        for match in re.finditer(r'className:\s*"([^"]+)"', components_js):
+            class_tokens.update(token for token in match.group(1).split() if token)
+
+        missing = sorted(token for token in class_tokens if f".{token}" not in base_css)
+        self.assertFalse(missing, f"Shared component classes missing base.css styles: {missing}")
+
+    def test_shared_interface_does_not_tell_builder_to_write_runtime_assets(self):
+        interface_text = (execute._PROMPTS / "shared" / "interface.txt").read_text()
+        generated_files = interface_text.split("Use the provided templates", 1)[0]
+
+        self.assertIn("Create or update these generated files:", generated_files)
+        self.assertIn("`index.html`", generated_files)
+        self.assertIn("`styles.css`", generated_files)
+        self.assertIn("`app.js`", generated_files)
+        self.assertIn("`meta.json`", generated_files)
+        self.assertNotIn("`base.css`", generated_files)
+        self.assertNotIn("`components.js`", generated_files)
 
     def test_execute_splits_research_and_template_bound_build(self):
         with tempfile.TemporaryDirectory() as d:

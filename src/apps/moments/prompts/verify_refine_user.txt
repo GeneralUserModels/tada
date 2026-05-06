@@ -14,7 +14,7 @@ Check the web app at `{output_dir}/` for errors and fix any you find. Do NOT mak
 
 1. **Syntax errors** — run `node --check` on every `.js` file. Fix anything that fails to parse.
 2. **Runtime-breaking references** — undefined variables, wrong property paths, JS reading `item.title` when DATA uses `item.name`, missing files referenced from `index.html`.
-3. **Global scope collisions** — `components.js` declares globals (`h`, `useState`, `useCallback`, `useMemo`, `useEffect`, plus component functions like `PageHeader`, `GlassCard`, `Badge`, etc.). If `app.js` redeclares any of these with `const`, `let`, or `var`, remove the redeclaration.
+3. **Shared runtime misuse** — `components.js` exposes `window.PN`; app code may safely declare local helpers like `const h = React.createElement` and `const {{ useState }} = React`. Only fix actual runtime collisions or missing references.
 4. **Broken loads** — `index.html` must correctly reference all required JS and CSS files in the right order.
 
 After any fix, re-run `node --check` on the changed files to confirm they parse.

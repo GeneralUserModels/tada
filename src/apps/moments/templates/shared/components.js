@@ -1,19 +1,23 @@
 /**
  * Tada Moments — Shared React Component Library
  *
- * All components are exposed on the global `PN` namespace.
- * Uses React.createElement (no JSX, no Babel needed).
+ * This file exposes only `window.PN`. App scripts may declare local helpers
+ * like `const h = React.createElement` and `const { useState } = React`.
  *
  * Usage in a template's app.js:
+ *   const h = React.createElement;
  *   const { PageHeader, GlassCard, Badge, StatRow } = PN;
- *   const App = () => h("div", { className: "container" },
- *     h(PageHeader, { title: DATA.title, subtitle: DATA.subtitle }),
- *     h(StatRow, { stats: DATA.stats }),
- *     h(GlassCard, null, h("p", null, "Hello world"))
- *   );
+ *   function App() {
+ *     return h("div", { className: "container" },
+ *       h(PageHeader, { title: DATA.title, subtitle: DATA.subtitle }),
+ *       h(StatRow, { stats: DATA.stats }),
+ *       h(GlassCard, null, h("p", null, "Hello world"))
+ *     );
+ *   }
  *   ReactDOM.createRoot(document.getElementById("root")).render(h(App));
  */
 
+(function() {
 const h = React.createElement;
 const { useState, useCallback, useMemo, useEffect } = React;
 
@@ -186,3 +190,4 @@ window.PN = {
   useFilter: useFilter,
   useSearch: useSearch,
 };
+})();
