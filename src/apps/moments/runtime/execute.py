@@ -19,22 +19,25 @@ from apps.moments.runtime.verify_refine import verify_and_refine
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
-OUTPUT_FILES = ["index.html", "styles.css", "app.js", "data.js", "base.css", "components.js", "meta.json"]
-EXECUTE_WARNING_ROUND = 100
-EXECUTE_MAX_ROUNDS = 150
+OUTPUT_FILES = [
+    "index.html", "styles.css", "app.js", "data.js", "base.css", "components.js",
+    "research", "templates", "meta.json",
+]
+RESEARCH_WARNING_ROUND = 60
+RESEARCH_MAX_ROUNDS = 90
+BUILD_WARNING_ROUND = 80
+BUILD_MAX_ROUNDS = 110
 SHARED_ASSETS = {
     "base.css": TEMPLATES_DIR / "shared" / "base.css",
     "components.js": TEMPLATES_DIR / "shared" / "components.js",
 }
 
 _PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
-INSTRUCTION_TEMPLATE = (_PROMPTS / "execute.txt").read_text()
-UPDATE_INSTRUCTION_TEMPLATE = (_PROMPTS / "execute_update.txt").read_text()
+RESEARCH_INSTRUCTION_TEMPLATE = (_PROMPTS / "execute_research.txt").read_text()
+BUILD_INSTRUCTION_TEMPLATE = (_PROMPTS / "execute_build.txt").read_text()
 SHARED_SOURCES = (_PROMPTS / "shared" / "sources.txt").read_text()
 SHARED_INTERFACE = (_PROMPTS / "shared" / "interface.txt").read_text()
 SHARED_EXECUTOR_CAPABILITIES = (_PROMPTS / "shared" / "executor_capabilities.txt").read_text()
-EXECUTE_RULES = (_PROMPTS / "rules" / "execute.txt").read_text()
-EXECUTE_UPDATE_RULES = (_PROMPTS / "rules" / "execute_update.txt").read_text()
 
 
 
@@ -111,6 +114,29 @@ def _prepare_shared_runtime(output_dir: str) -> None:
     _normalize_shared_asset_refs(output_dir)
 
 
+def _clear_generated_output(output_dir: str) -> None:
+    """Remove prior generated artifacts while preserving feedback files."""
+    out = Path(output_dir)
+    for name in OUTPUT_FILES:
+        path = out / name
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
+
+
+def _copy_template_kit(output_dir: str) -> Path:
+    """Copy all template examples into the result directory for build-time reference."""
+    kit_dir = Path(output_dir) / "templates"
+    if kit_dir.exists():
+        shutil.rmtree(kit_dir)
+    kit_dir.mkdir(parents=True)
+    for template_dir in sorted(TEMPLATES_DIR.iterdir()):
+        if template_dir.is_dir():
+            shutil.copytree(template_dir, kit_dir / template_dir.name)
+    return kit_dir
+
+
 def _check_html_asset_refs(output_dir: str) -> bool:
     """Verify local scripts and stylesheets referenced by index.html exist."""
     out = Path(output_dir)
@@ -157,6 +183,36 @@ def _cleanup_backup(backup_dir: str) -> None:
         shutil.rmtree(backup_dir)
 
 
+def _research_ready(research_dir: str) -> bool:
+    path = Path(research_dir)
+    if not path.is_dir():
+        return False
+    md_files = [p for p in path.glob("*.md") if p.is_file()]
+    return len(md_files) >= 2 and all(p.read_text().strip() for p in md_files)
+
+
+def _build_agent_for_stage(
+    model: str,
+    logs_dir: str,
+    output_dir: str,
+    api_key: str | None,
+    subagent_model: str | None,
+    subagent_api_key: str | None,
+    *,
+    max_rounds: int,
+    warning_round: int,
+    on_round=None,
+):
+    agent, _ = build_agent(
+        model, logs_dir, extra_write_dirs=[output_dir], api_key=api_key,
+        subagent_model=subagent_model, subagent_api_key=subagent_api_key,
+    )
+    agent.max_rounds = max_rounds
+    agent.warning_round = warning_round
+    agent.on_round = on_round
+    return agent
+
+
 def run(
     task_path: str,
     output_dir: str,
@@ -183,6 +239,7 @@ def run(
             shutil.rmtree(backup_dir)
         Path(backup_dir).parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(output_dir, backup_dir)
+    _clear_generated_output(output_dir)
 
     # Make the shared runtime available before the agent writes app code, so
     # generated interfaces can inspect and rely on these files directly.
@@ -216,43 +273,58 @@ def run(
         )
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    existing_index = Path(output_dir) / "index.html"
-    if existing_index.exists():
-        last_run_str = datetime.fromtimestamp(last_run_at).strftime("%Y-%m-%d %H:%M") if last_run_at else "unknown"
-        instruction = f"Current date and time: **{now}**\n\n" + UPDATE_INSTRUCTION_TEMPLATE.format(
-            task_content=task_content,
-            output_dir=output_dir,
-            logs_dir=logs_dir,
-            cadence=effective_cadence,
-            schedule=effective_schedule,
-            last_run_at=last_run_str,
-            shared_sources=SHARED_SOURCES.format(logs_dir=logs_dir),
-            shared_interface=SHARED_INTERFACE,
-            shared_executor_capabilities=SHARED_EXECUTOR_CAPABILITIES,
-            execute_update_rules=EXECUTE_UPDATE_RULES.format(output_dir=output_dir, logs_dir=logs_dir),
-        ) + feedback_section
-    else:
-        instruction = f"Current date and time: **{now}**\n\n" + INSTRUCTION_TEMPLATE.format(
-            task_content=task_content,
-            output_dir=output_dir,
-            logs_dir=logs_dir,
-            cadence=effective_cadence,
-            schedule=effective_schedule,
-            templates_dir=str(TEMPLATES_DIR),
-            shared_sources=SHARED_SOURCES.format(logs_dir=logs_dir),
-            shared_interface=SHARED_INTERFACE,
-            shared_executor_capabilities=SHARED_EXECUTOR_CAPABILITIES,
-            execute_rules=EXECUTE_RULES.format(output_dir=output_dir, logs_dir=logs_dir),
-        )
+    research_dir = str(Path(output_dir) / "research")
+    research_instruction = f"Current date and time: **{now}**\n\n" + RESEARCH_INSTRUCTION_TEMPLATE.format(
+        task_content=task_content,
+        cadence=effective_cadence,
+        schedule=effective_schedule,
+        research_dir=research_dir,
+        shared_sources=SHARED_SOURCES.format(logs_dir=logs_dir),
+        shared_executor_capabilities=SHARED_EXECUTOR_CAPABILITIES,
+    ) + feedback_section
 
-    agent, _ = build_agent(
-        model, logs_dir, extra_write_dirs=[output_dir], api_key=api_key,
-        subagent_model=subagent_model, subagent_api_key=subagent_api_key,
+    research_agent = _build_agent_for_stage(
+        model, logs_dir, output_dir, api_key, subagent_model, subagent_api_key,
+        max_rounds=RESEARCH_MAX_ROUNDS, warning_round=RESEARCH_WARNING_ROUND, on_round=on_round,
     )
-    agent.max_rounds = EXECUTE_MAX_ROUNDS
-    agent.warning_round = EXECUTE_WARNING_ROUND
-    agent.on_round = on_round
-    agent.run([{"role": "user", "content": instruction}])
+    research_agent.run([{"role": "user", "content": research_instruction}])
+
+    if not _research_ready(research_dir):
+        research_repair_instruction = research_instruction + (
+            "\n\n## Required Repair\n\n"
+            f"The required research folder is not ready at `{research_dir}`. Your previous attempt did not "
+            "write the required markdown files. Do not plan, do not only create directories, and do not build "
+            "the website. Use the `write_file` tool now to write at least two substantive non-empty markdown "
+            f"files inside `{research_dir}`, verify they exist, and then stop."
+        )
+        research_agent.run([{"role": "user", "content": research_repair_instruction}])
+
+    if not _research_ready(research_dir):
+        print("  [research] FAILED: research markdown files were not written")
+        if had_previous:
+            _restore_backup(backup_dir, output_dir)
+            return True
+        _clean_output(output_dir)
+        return False
+
+    template_kit_dir = _copy_template_kit(output_dir)
+    _prepare_shared_runtime(output_dir)
+
+    build_instruction = f"Current date and time: **{now}**\n\n" + BUILD_INSTRUCTION_TEMPLATE.format(
+        task_content=task_content,
+        output_dir=output_dir,
+        cadence=effective_cadence,
+        schedule=effective_schedule,
+        research_dir=research_dir,
+        template_kit_dir=str(template_kit_dir),
+        shared_interface=SHARED_INTERFACE,
+    ) + feedback_section
+
+    build_agent = _build_agent_for_stage(
+        model, logs_dir, output_dir, api_key, subagent_model, subagent_api_key,
+        max_rounds=BUILD_MAX_ROUNDS, warning_round=BUILD_WARNING_ROUND, on_round=on_round,
+    )
+    build_agent.run([{"role": "user", "content": build_instruction}])
 
     # Write meta.json as fallback if agent didn't
     meta_path = Path(output_dir) / "meta.json"

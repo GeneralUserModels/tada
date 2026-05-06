@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -27,6 +28,7 @@ from apps.moments.core.candidates import (
     write_candidates_jsonl,
 )
 from apps.moments.core.paths import migrate_moments_to_cadence
+from apps.moments.runtime import execute
 from apps.moments.runtime.scheduler import should_run
 from apps.moments.schemas.structured import DraftActionPayload
 
@@ -109,6 +111,71 @@ class _FakeToolAgent:
         return self.results.pop(0)
 
 
+class _FakeExecuteAgent:
+    def __init__(self, output_dir: Path, stage: str, test_case: unittest.TestCase):
+        self.output_dir = output_dir
+        self.stage = stage
+        self.test_case = test_case
+        self.max_rounds = None
+        self.warning_round = None
+        self.on_round = None
+        self.messages: list[list[dict]] = []
+
+    def run(self, messages, **kwargs):
+        self.messages.append(messages)
+        prompt = messages[0]["content"]
+        if self.stage == "research":
+            self.test_case.assertIn("/research", prompt)
+            research_dir = self.output_dir / "research"
+            research_dir.mkdir(parents=True)
+            (research_dir / "evidence.md").write_text("# Evidence\n\nA cited source.\n")
+            (research_dir / "synthesis.md").write_text("# Synthesis\n\nUseful researched findings.\n")
+            return "research complete"
+
+        research_dir = self.output_dir / "research"
+        self.test_case.assertGreaterEqual(len(list(research_dir.glob("*.md"))), 2)
+        self.test_case.assertFalse((self.output_dir / "index.html").exists())
+        self.test_case.assertFalse((self.output_dir / "styles.css").exists())
+        self.test_case.assertFalse((self.output_dir / "app.js").exists())
+        self.test_case.assertTrue((self.output_dir / "base.css").exists())
+        self.test_case.assertTrue((self.output_dir / "components.js").exists())
+        template_kit_dir = self.output_dir / "templates"
+        for template_name in ("blank", "dashboard", "feed", "report", "table", "shared"):
+            self.test_case.assertTrue((template_kit_dir / template_name).is_dir(), template_name)
+            self.test_case.assertTrue((template_kit_dir / template_name / "README.md").exists(), template_name)
+        self.test_case.assertTrue((template_kit_dir / "feed" / "app.js").exists())
+        self.test_case.assertTrue((template_kit_dir / "dashboard" / "index.html").exists())
+        self.test_case.assertIn(str(research_dir), prompt)
+        self.test_case.assertIn(str(template_kit_dir), prompt)
+        self.test_case.assertNotIn("{template_kit_dir}", prompt)
+        self.test_case.assertIn("template kit has been copied", prompt)
+        self.test_case.assertIn("multiple views, tabs, filters", prompt)
+        self.test_case.assertIn("copying and pasting directly", prompt)
+        shutil.copyfile(template_kit_dir / "feed" / "index.html", self.output_dir / "index.html")
+        shutil.copyfile(template_kit_dir / "feed" / "styles.css", self.output_dir / "styles.css")
+        shutil.copyfile(template_kit_dir / "feed" / "app.js", self.output_dir / "app.js")
+        (self.output_dir / "meta.json").write_text(json.dumps({
+            "title": "Strategy Brief",
+            "description": "Built from template kit.",
+            "completed_at": "2026-05-06T00:00:00Z",
+            "cadence": "once",
+            "schedule": "",
+        }))
+        return "build complete"
+
+
+class _FakeMissingResearchAgent:
+    def __init__(self):
+        self.max_rounds = None
+        self.warning_round = None
+        self.on_round = None
+        self.messages: list[list[dict]] = []
+
+    def run(self, messages, **kwargs):
+        self.messages.append(messages)
+        return "no file written"
+
+
 def _filtered_row(timestamp: datetime, source_name: str, text: str, **extra):
     row = {
         "timestamp": timestamp.timestamp(),
@@ -176,6 +243,78 @@ class MomentsPipelineTests(unittest.TestCase):
         self.assertTrue(should_run("once", "once", "", {}))
         self.assertFalse(should_run("trigger", "trigger", "", {}))
         self.assertTrue(should_run("daily", "scheduled", "daily at 12:01am", {}))
+
+    def test_execute_splits_research_and_template_bound_build(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            logs = root / "logs"
+            logs.mkdir()
+            tada = root / "logs-tada"
+            task_dir = tada / "research"
+            task_dir.mkdir(parents=True)
+            task_path = task_dir / "strategy-brief.md"
+            task_path.write_text(
+                "---\n"
+                "title: Strategy Brief\n"
+                "description: Prepare a concise interview briefing.\n"
+                "cadence: once\n"
+                "confidence: 0.80\n"
+                "usefulness: 8\n"
+                "---\n\n"
+                "## Specific Instructions for Agent\n\n"
+                "Create a brief report from the evidence.\n\n"
+                "## Desired Artifact\n\n"
+                "Structured report.\n\n"
+                "## Evidence\n\n"
+                "- memory/index.md mentions an interview thread\n"
+            )
+            output_dir = tada / "results" / "strategy-brief"
+            output_dir.mkdir(parents=True)
+            research_agent = _FakeExecuteAgent(output_dir, "research", self)
+            build_agent = _FakeExecuteAgent(output_dir, "build", self)
+
+            with patch.object(execute, "build_agent", side_effect=[(research_agent, None), (build_agent, None)]), \
+                 patch.object(execute, "verify_and_refine", return_value=True):
+                success = execute.run(str(task_path), str(output_dir), str(logs), model="fake")
+
+            self.assertTrue(success)
+            self.assertGreaterEqual(len(list((output_dir / "research").glob("*.md"))), 2)
+            self.assertEqual(len(research_agent.messages), 1)
+            self.assertEqual(len(build_agent.messages), 1)
+
+    def test_execute_fails_before_build_when_research_missing(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            logs = root / "logs"
+            logs.mkdir()
+            tada = root / "logs-tada"
+            task_dir = tada / "research"
+            task_dir.mkdir(parents=True)
+            task_path = task_dir / "strategy-brief.md"
+            task_path.write_text(
+                "---\n"
+                "title: Strategy Brief\n"
+                "description: Prepare a concise interview briefing.\n"
+                "cadence: once\n"
+                "confidence: 0.80\n"
+                "usefulness: 8\n"
+                "---\n\n"
+                "## Specific Instructions for Agent\n\n"
+                "Create a brief report from the evidence.\n"
+            )
+            output_dir = tada / "results" / "strategy-brief"
+            research_agent = _FakeMissingResearchAgent()
+            build_agent = _FakeMissingResearchAgent()
+
+            with patch.object(execute, "build_agent", side_effect=[(research_agent, None), (build_agent, None)]), \
+                 patch.object(execute, "verify_and_refine", return_value=True):
+                success = execute.run(str(task_path), str(output_dir), str(logs), model="fake")
+
+            self.assertFalse(success)
+            self.assertFalse(output_dir.exists())
+            self.assertEqual(len(research_agent.messages), 2)
+            self.assertIn("research folder is not ready", research_agent.messages[1][0]["content"])
+            self.assertEqual(len(build_agent.messages), 0)
 
     def test_discover_and_promote_with_fake_agents(self):
         with tempfile.TemporaryDirectory() as d:
