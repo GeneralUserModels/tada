@@ -13,6 +13,9 @@
     "dist": "npm run build && npx electron-builder --mac --publish never",
     "release": "npm run build && REQUIRE_NOTARIZATION=1 npx electron-builder --mac --publish never",
     "release:publish": "npm run build && REQUIRE_NOTARIZATION=1 npx electron-builder --mac --publish always",
+    "dev:force:memex": "node scripts/force-scheduled-service.cjs memex",
+    "dev:force:discovery": "node scripts/force-scheduled-service.cjs discovery",
+    "dev:force:scheduled": "node scripts/force-scheduled-service.cjs all",
     "reset": "rm -f tada-config.json ~/.config/tada/google-token.json ~/.config/tada/outlook-token.json"
   },
   "dependencies": {
