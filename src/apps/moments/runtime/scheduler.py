@@ -110,6 +110,15 @@ def save_run(results_dir: Path, slug: str, started_at: float, completed_at: floa
         f.write("\n")
 
 
+def _read_datetime(path: Path) -> datetime | None:
+    if not path.exists():
+        return None
+    try:
+        return datetime.fromisoformat(path.read_text().strip())
+    except (ValueError, OSError):
+        return None
+
+
 def is_due(schedule: str, cadence: str, last_run: datetime | None) -> bool:
     """True if the most recent scheduled occurrence hasn't been completed yet.
 
@@ -126,6 +135,20 @@ def is_due(schedule: str, cadence: str, last_run: datetime | None) -> bool:
     if last_run is None:
         return True
     return last_run < most_recent_target
+
+
+def scheduled_service_due(schedule: str, last_run_path: Path) -> bool:
+    """Return whether a background scheduled service should run on this poll.
+
+    A missing checkpoint means first install/startup, so seed it to now and wait
+    for the next scheduled occurrence. After that, normal catch-up applies.
+    """
+    last_run = _read_datetime(last_run_path)
+    if last_run is None:
+        last_run_path.parent.mkdir(parents=True, exist_ok=True)
+        last_run_path.write_text(datetime.now().isoformat())
+        return False
+    return is_due(schedule, "scheduled", last_run)
 
 
 def should_run(slug: str, cadence: str, schedule: str, run_history: dict[str, float]) -> bool:

@@ -30,7 +30,7 @@ from apps.moments.core.candidates import (
 )
 from apps.moments.core.paths import migrate_moments_to_cadence
 from apps.moments.runtime import execute
-from apps.moments.runtime.scheduler import should_run
+from apps.moments.runtime.scheduler import scheduled_service_due, should_run
 from apps.moments.schemas.structured import DraftActionPayload
 
 
@@ -192,6 +192,14 @@ def _filtered_row(timestamp: datetime, source_name: str, text: str, **extra):
 
 
 class MomentsPipelineTests(unittest.TestCase):
+    def test_scheduled_services_wait_on_first_launch_but_catch_up_after_schedule(self):
+        with tempfile.TemporaryDirectory() as d:
+            last_run = Path(d) / ".discovery_last_run"
+            self.assertFalse(scheduled_service_due("daily at 2am", last_run))
+            self.assertTrue(last_run.exists())
+            last_run.write_text(datetime(2000, 1, 1).isoformat())
+            self.assertTrue(scheduled_service_due("daily at 2am", last_run))
+
     def test_candidate_validation_for_cadences(self):
         self.assertEqual(validate_candidate(_candidate(cadence="once", schedule="daily at 8am")).schedule, "")
         self.assertEqual(validate_candidate(_candidate(cadence="trigger", schedule="", trigger="a deadline appears")).trigger, "a deadline appears")

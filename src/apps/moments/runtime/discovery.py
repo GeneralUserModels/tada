@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
 from pathlib import Path
 
 from server.feature_flags import is_enabled
@@ -66,16 +65,6 @@ class TriggersCheck(_DiscoveryBase):
         )
 
 
-def _read_last_run(p: Path) -> datetime | None:
-    """Read the last discovery run timestamp from disk."""
-    if not p.exists():
-        return None
-    try:
-        return datetime.fromisoformat(p.read_text().strip())
-    except (ValueError, OSError):
-        return None
-
-
 async def run_moments_discovery(state) -> None:
     """Background task: poll every SCAN_INTERVAL and run the discovery pipeline
     whenever the most recent scheduled occurrence hasn't completed yet.
@@ -83,7 +72,7 @@ async def run_moments_discovery(state) -> None:
     Polling (instead of one long sleep to the next target) catches up after
     laptop sleep/wake and avoids drift if the schedule is edited at runtime.
     """
-    from apps.moments.runtime.scheduler import is_due
+    from apps.moments.runtime.scheduler import scheduled_service_due
 
     logger.info("Moments discovery service started")
 
@@ -103,7 +92,7 @@ async def run_moments_discovery(state) -> None:
                 continue
 
             schedule = getattr(state.config, "moments_discovery_schedule", "daily at 2am")
-            if not is_due(schedule, "scheduled", _read_last_run(last_run_file)):
+            if not scheduled_service_due(schedule, last_run_file):
                 continue
 
             cfg = state.config
