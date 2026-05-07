@@ -14,6 +14,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from apps.memory import ingest
+from apps.memory.service import _memory_ingest_due
 
 
 def _write_checkpoint(path: Path, value: str = "2025-01-01T00:00:00") -> None:
@@ -22,6 +23,9 @@ def _write_checkpoint(path: Path, value: str = "2025-01-01T00:00:00") -> None:
 
 
 class MemoryIngestTests(unittest.TestCase):
+    def test_memory_service_treats_missing_run_checkpoint_as_due(self):
+        self.assertTrue(_memory_ingest_due("daily at 3am", None))
+
     def test_collect_inputs_classifies_first_incremental_and_no_new_data(self):
         with tempfile.TemporaryDirectory() as d:
             logs = Path(d) / "logs"

@@ -81,6 +81,11 @@ def _read_last_run(p: Path) -> datetime | None:
         return None
 
 
+def _memory_ingest_due(schedule: str, last_run: datetime | None) -> bool:
+    """Return whether the scheduled Memex ingest should run now."""
+    return is_due(schedule, "scheduled", last_run)
+
+
 async def run_memory_service(state) -> None:
     """Background task: poll every SCAN_INTERVAL and run ingest whenever the
     most recent scheduled occurrence hasn't completed yet. Lint runs alongside
@@ -105,7 +110,7 @@ async def run_memory_service(state) -> None:
                 continue
 
             schedule = getattr(state.config, "memory_schedule", "daily at 3am")
-            if not is_due(schedule, "daily", _read_last_run(last_run_file)):
+            if not _memory_ingest_due(schedule, _read_last_run(last_run_file)):
                 continue
 
             cfg = state.config

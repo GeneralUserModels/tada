@@ -35,7 +35,6 @@ export function ConnectorsStep(props: Props) {
   const canContinue = !(
     !props.screenGranted
     || !props.accessibilityGranted
-    || (props.flag("permission_browser_cookies") && !props.browserCookiesGranted)
   );
 
   const [showOptional, setShowOptional] = useState(false);
@@ -102,8 +101,8 @@ export function ConnectorsStep(props: Props) {
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M2 8h12M8 2c-2 2-2 10 0 12M8 2c2 2 2 10 0 12" stroke="currentColor" strokeWidth="1.3"/></svg>
               </div>
               <div className="connector-info">
-                <div className="connector-name">Browser Cookies <span className="required-tag">Required</span></div>
-                <div className="connector-desc">Let the agent browse the internet</div>
+                <div className="connector-name">Browser Cookies <span className="optional-tag">Optional</span></div>
+                <div className="connector-desc">Use your Chrome sessions for authenticated browsing</div>
               </div>
               <div className="connector-action">
                 {props.browserCookiesGranted
